@@ -1,0 +1,404 @@
+@import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;500;600;700;800;900&family=Space+Grotesk:wght@300;400;500;600;700&family=Share+Tech+Mono&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ═══════════════════════════════════════════════════
+   CYBERPUNK DESIGN TOKENS
+═══════════════════════════════════════════════════ */
+:root {
+  --cp-black:    #050508;
+  --cp-dark:     #0a0a0f;
+  --cp-surface:  #0f0f1a;
+  --cp-border:   rgba(255, 255, 255, 0.06);
+  --cp-red:      #ff2d3b;
+  --cp-red-dim:  #E84142;
+  --cp-cyan:     #00f5ff;
+  --cp-magenta:  #f700ff;
+  --cp-glow-r:   rgba(255, 45, 59, 0.4);
+  --cp-glow-c:   rgba(0, 245, 255, 0.3);
+  --cp-glow-m:   rgba(247, 0, 255, 0.25);
+  --cp-font-d:   'Orbitron', monospace;
+  --cp-font-m:   'Share Tech Mono', monospace;
+}
+
+/* ═══════════════════════════════════════════════════
+   BASE RESET
+═══════════════════════════════════════════════════ */
+*,*::before,*::after { box-sizing: border-box; margin: 0; padding: 0; }
+html, body {
+  max-width: 100vw;
+  overflow-x: hidden;
+  scroll-behavior: smooth;
+  background-color: var(--cp-black);
+  color: #e4e4f0;
+}
+body {
+  font-family: 'Space Grotesk', system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+a { color: inherit; text-decoration: none; }
+
+/* ═══════════════════════════════════════════════════
+   SCROLLBAR
+═══════════════════════════════════════════════════ */
+::-webkit-scrollbar { width: 4px; }
+::-webkit-scrollbar-track { background: var(--cp-black); }
+::-webkit-scrollbar-thumb { background: var(--cp-red); border-radius: 2px; }
+
+/* ═══════════════════════════════════════════════════
+   CYBERPUNK GRID OVERLAY
+═══════════════════════════════════════════════════ */
+.cp-grid {
+  background-image:
+    linear-gradient(rgba(0, 245, 255, 0.04) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(0, 245, 255, 0.04) 1px, transparent 1px),
+    linear-gradient(rgba(255, 45, 59, 0.025) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 45, 59, 0.025) 1px, transparent 1px);
+  background-size: 48px 48px, 48px 48px, 240px 240px, 240px 240px;
+}
+
+/* ═══════════════════════════════════════════════════
+   SCANLINES OVERLAY
+═══════════════════════════════════════════════════ */
+.cp-scanlines {
+  background-image: repeating-linear-gradient(
+    0deg,
+    transparent,
+    transparent 2px,
+    rgba(0, 0, 0, 0.15) 2px,
+    rgba(0, 0, 0, 0.15) 3px
+  );
+}
+.np-cards-grid:hover .np-role-card {
+  flex: 0 0 30%;
+}
+
+.np-cards-grid:hover .np-role-card:hover {
+  flex: 0 0 70%;
+}
+
+.np-marquee-track {
+  animation: marquee 20s linear infinite;
+}
+/* ═══════════════════════════════════════════════════
+   GLASSMORPHISM SURFACES
+═══════════════════════════════════════════════════ */
+.glass-surface {
+  background: rgba(10, 10, 20, 0.6);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.glass-surface-heavy {
+  background: rgba(5, 5, 10, 0.85);
+  backdrop-filter: blur(32px);
+  -webkit-backdrop-filter: blur(32px);
+  border: 1px solid rgba(255, 45, 59, 0.15);
+}
+
+/* ═══════════════════════════════════════════════════
+   CORNER-CUT CARD
+═══════════════════════════════════════════════════ */
+.cp-card {
+  clip-path: polygon(0 0, calc(100% - 18px) 0, 100% 18px, 100% 100%, 18px 100%, 0 calc(100% - 18px));
+  position: relative;
+}
+.cp-card::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: 0;
+  height: 0;
+  border: 18px solid transparent;
+  border-top-color: var(--cp-red);
+  border-right-color: var(--cp-red);
+  pointer-events: none;
+  z-index: 10;
+}
+
+.cp-card-sm {
+  clip-path: polygon(0 0, calc(100% - 10px) 0, 100% 10px, 100% 100%, 10px 100%, 0 calc(100% - 10px));
+}
+
+/* ═══════════════════════════════════════════════════
+   BUTTON CLIPS
+═══════════════════════════════════════════════════ */
+.cp-btn-clip { clip-path: polygon(10px 0%, 100% 0%, calc(100% - 10px) 100%, 0% 100%); }
+.cp-btn-clip-sm { clip-path: polygon(6px 0%, 100% 0%, calc(100% - 6px) 100%, 0% 100%); }
+
+/* ═══════════════════════════════════════════════════
+   NEON GLOW SHADOWS
+═══════════════════════════════════════════════════ */
+.neon-glow-red {
+  box-shadow: 0 0 8px var(--cp-glow-r), 0 0 20px var(--cp-glow-r), 0 0 40px rgba(255, 45, 59, 0.15);
+}
+.neon-glow-red-sm {
+  box-shadow: 0 0 4px var(--cp-glow-r), 0 0 12px var(--cp-glow-r);
+}
+.neon-glow-cyan {
+  box-shadow: 0 0 8px var(--cp-glow-c), 0 0 20px var(--cp-glow-c), 0 0 40px rgba(0, 245, 255, 0.1);
+}
+.neon-glow-cyan-sm {
+  box-shadow: 0 0 4px var(--cp-glow-c), 0 0 12px var(--cp-glow-c);
+}
+.neon-glow-magenta {
+  box-shadow: 0 0 8px var(--cp-glow-m), 0 0 20px var(--cp-glow-m);
+}
+
+/* ═══════════════════════════════════════════════════
+   GRADIENT TEXT
+═══════════════════════════════════════════════════ */
+.text-gradient-claw {
+  background: linear-gradient(135deg, #ff2d3b 0%, #ff6b6b 40%, #ffffff 65%, #00f5ff 100%);
+  background-size: 250% auto;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  animation: grad-sweep 6s ease infinite;
+}
+
+.text-gradient-cyber {
+  background: linear-gradient(90deg, var(--cp-red) 0%, var(--cp-cyan) 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+.text-gradient-neon {
+  background: linear-gradient(135deg, var(--cp-cyan) 0%, #ffffff 50%, var(--cp-magenta) 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+@keyframes grad-sweep {
+  0%, 100% { background-position: 0% center; }
+  50%       { background-position: 100% center; }
+}
+
+/* ═══════════════════════════════════════════════════
+   GLITCH EFFECTS
+═══════════════════════════════════════════════════ */
+@keyframes glitch-clip {
+  0%   { clip-path: inset(0 0 98% 0); transform: translate(-3px, 0); }
+  10%  { clip-path: inset(40% 0 50% 0); transform: translate(2px, 0); }
+  20%  { clip-path: inset(70% 0 20% 0); transform: translate(-2px, 0); }
+  30%  { clip-path: inset(20% 0 70% 0); transform: translate(3px, 0); }
+  40%  { clip-path: inset(80% 0 5% 0);  transform: translate(-1px, 0); }
+  50%  { clip-path: inset(10% 0 85% 0); transform: translate(2px, 0); }
+  60%  { clip-path: inset(60% 0 30% 0); transform: translate(-3px, 0); }
+  70%  { clip-path: inset(30% 0 60% 0); transform: translate(1px, 0); }
+  80%  { clip-path: inset(90% 0 2% 0);  transform: translate(-2px, 0); }
+  90%  { clip-path: inset(5% 0 90% 0);  transform: translate(3px, 0); }
+  100% { clip-path: inset(0 0 98% 0);   transform: translate(0); }
+}
+
+@keyframes glitch {
+  0%, 100% { transform: translate(0); }
+  20% { transform: translate(-2px, 1px); }
+  40% { transform: translate(2px, -1px); }
+  60% { transform: translate(-1px, 2px); }
+  80% { transform: translate(1px, -2px); }
+}
+
+/* ═══════════════════════════════════════════════════
+   MARQUEE
+═══════════════════════════════════════════════════ */
+@keyframes marquee { from { transform: translateX(0); } to { transform: translateX(-50%); } }
+.cp-marquee { display: flex; width: max-content; animation: marquee 28s linear infinite; }
+.cp-marquee:hover { animation-play-state: paused; }
+
+/* ═══════════════════════════════════════════════════
+   PULSING DOT
+═══════════════════════════════════════════════════ */
+@keyframes dot-pulse {
+  0%, 100% { opacity: 1; box-shadow: 0 0 4px var(--cp-red); }
+  50%       { opacity: 0.5; box-shadow: 0 0 12px var(--cp-red); }
+}
+.cp-dot-pulse { animation: dot-pulse 2s ease-in-out infinite; }
+
+@keyframes dot-pulse-cyan {
+  0%, 100% { opacity: 1; box-shadow: 0 0 4px var(--cp-cyan); }
+  50%       { opacity: 0.5; box-shadow: 0 0 12px var(--cp-cyan); }
+}
+.cp-dot-pulse-cyan { animation: dot-pulse-cyan 2s ease-in-out infinite; }
+
+/* ═══════════════════════════════════════════════════
+   NEON FLICKER
+═══════════════════════════════════════════════════ */
+@keyframes neon-flicker {
+  0%, 19%, 21%, 23%, 25%, 54%, 56%, 100% { opacity: 1; }
+  20%, 24%, 55% { opacity: 0.4; }
+}
+
+/* ═══════════════════════════════════════════════════
+   DATA STREAM (scrolling binary background)
+═══════════════════════════════════════════════════ */
+@keyframes data-stream {
+  from { transform: translateY(-100%); }
+  to   { transform: translateY(100%); }
+}
+
+/* ═══════════════════════════════════════════════════
+   HOLO SHIMMER
+═══════════════════════════════════════════════════ */
+@keyframes holo-shimmer {
+  0%   { background-position: -200% center; }
+  100% { background-position:  200% center; }
+}
+.holo-shimmer {
+  background: linear-gradient(90deg, transparent 0%, rgba(0, 245, 255, 0.15) 50%, transparent 100%);
+  background-size: 200% auto;
+  animation: holo-shimmer 3s linear infinite;
+}
+
+/* ═══════════════════════════════════════════════════
+   FADE UP / STAGGER
+═══════════════════════════════════════════════════ */
+@keyframes fade-up {
+  from { opacity: 0; transform: translateY(30px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.animate-fade-up { animation: fade-up 0.75s ease-out both; }
+.delay-100  { animation-delay: 100ms; }
+.delay-200  { animation-delay: 200ms; }
+.delay-300  { animation-delay: 300ms; }
+.delay-400  { animation-delay: 400ms; }
+.delay-500  { animation-delay: 500ms; }
+.delay-600  { animation-delay: 600ms; }
+.delay-700  { animation-delay: 700ms; }
+
+/* ═══════════════════════════════════════════════════
+   TIMELINE LINE
+═══════════════════════════════════════════════════ */
+.tl-line {
+  position: absolute;
+  left: 50%;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  background: linear-gradient(180deg, var(--cp-cyan), rgba(0, 245, 255, 0.05));
+  transform: translateX(-50%);
+  transform-origin: top center;
+}
+
+/* ═══════════════════════════════════════════════════
+   GSAP INITIAL STATES
+═══════════════════════════════════════════════════ */
+.gsap-card     { opacity: 0; transform: translateY(60px); }
+.gsap-tl-item  { opacity: 0; }
+.gsap-tl-item.tl-left  { transform: translateX(-60px); }
+.gsap-tl-item.tl-right { transform: translateX(60px); }
+.gsap-tl-dot   { opacity: 0; transform: scale(0); }
+
+/* ═══════════════════════════════════════════════════
+   NAVIGATION
+═══════════════════════════════════════════════════ */
+.nav-link-active {
+  color: var(--cp-cyan);
+  text-shadow: 0 0 8px var(--cp-glow-c);
+}
+
+/* ═══════════════════════════════════════════════════
+   PARTICLE CANVAS
+═══════════════════════════════════════════════════ */
+.hero-canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  z-index: 0;
+}
+
+/* ═══════════════════════════════════════════════════
+   SKELETON LOADER
+═══════════════════════════════════════════════════ */
+@keyframes skeleton-wave {
+  0%   { background-position: -200% 0; }
+  100% { background-position:  200% 0; }
+}
+.skeleton {
+  background: linear-gradient(90deg,
+    rgba(255, 255, 255, 0.03) 25%,
+    rgba(255, 255, 255, 0.08) 50%,
+    rgba(255, 255, 255, 0.03) 75%
+  );
+  background-size: 200% 100%;
+  animation: skeleton-wave 1.5s ease-in-out infinite;
+}
+
+/* ═══════════════════════════════════════════════════
+   LANDING GRID BG (Radial fade)
+═══════════════════════════════════════════════════ */
+.landing-grid-bg {
+  background-image:
+    linear-gradient(rgba(0, 245, 255, 0.05) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(0, 245, 255, 0.05) 1px, transparent 1px);
+  background-size: 64px 64px;
+  mask-image: radial-gradient(ellipse 80% 60% at 50% 0%, black 20%, transparent 70%);
+}
+
+/* ═══════════════════════════════════════════════════
+   CORNER MARKS (decorative)
+═══════════════════════════════════════════════════ */
+.corner-tl { position: absolute; top: 1.5rem; left: 1.5rem; width: 2rem; height: 2rem; border-top: 2px solid var(--cp-cyan); border-left: 2px solid var(--cp-cyan); opacity: 0.5; }
+.corner-tr { position: absolute; top: 1.5rem; right: 1.5rem; width: 2rem; height: 2rem; border-top: 2px solid var(--cp-cyan); border-right: 2px solid var(--cp-cyan); opacity: 0.5; }
+.corner-bl { position: absolute; bottom: 1.5rem; left: 1.5rem; width: 2rem; height: 2rem; border-bottom: 2px solid var(--cp-cyan); border-left: 2px solid var(--cp-cyan); opacity: 0.5; }
+.corner-br { position: absolute; bottom: 1.5rem; right: 1.5rem; width: 2rem; height: 2rem; border-bottom: 2px solid var(--cp-cyan); border-right: 2px solid var(--cp-cyan); opacity: 0.5; }
+
+/* ═══════════════════════════════════════════════════
+   NEON BORDER ANIMATION
+═══════════════════════════════════════════════════ */
+@keyframes border-flow {
+  0%   { background-position: 0% 50%; }
+  50%  { background-position: 100% 50%; }
+  100% { background-position: 0% 50%; }
+}
+.neon-border-anim {
+  background: linear-gradient(90deg, var(--cp-red), var(--cp-cyan), var(--cp-magenta), var(--cp-red));
+  background-size: 300% 100%;
+  animation: border-flow 4s ease infinite;
+}
+
+/* ═══════════════════════════════════════════════════
+   ADDITIONAL UTILITIES
+═══════════════════════════════════════════════════ */
+
+/* Cyan pulse dot */
+@keyframes dot-pulse-cyan {
+  0%, 100% { opacity: 1; box-shadow: 0 0 4px var(--cp-cyan); }
+  50%       { opacity: 0.4; box-shadow: 0 0 8px var(--cp-cyan); }
+}
+.cp-dot-pulse-cyan { animation: dot-pulse-cyan 1.8s ease-in-out infinite; }
+
+/* Glass shadow */
+.shadow-glass { box-shadow: 0 8px 40px rgba(0, 0, 0, 0.6), inset 0 1px 0 rgba(255,255,255,0.04); }
+
+/* Small clip button */
+.cp-btn-clip-sm { clip-path: polygon(4px 0, 100% 0, calc(100% - 4px) 100%, 0 100%); }
+
+/* Gradient hero text */
+.text-gradient-claw {
+  background: linear-gradient(135deg, var(--cp-red) 0%, var(--cp-cyan) 60%, var(--cp-magenta) 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+/* Marquee animation */
+@keyframes marquee-scroll {
+  0%   { transform: translateX(0); }
+  100% { transform: translateX(-50%); }
+}
+.cp-marquee {
+  display: flex;
+  width: max-content;
+  animation: marquee-scroll 28s linear infinite;
+}
+.cp-marquee:hover { animation-play-state: paused; }

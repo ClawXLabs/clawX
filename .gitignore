@@ -1,0 +1,20 @@
+# Dependencies
+node_modules/
+
+# Env and secrets
+.env
+.env.local
+.env.*.local
+
+# Next
+.next/
+out/
+
+# Local runtime data (single-server; may contain delegation signatures)
+data/faucet-claims.json
+data/agent-enrollments.json
+data/agent-feed.json
+
+# OS
+.DS_Store
+Thumbs.db

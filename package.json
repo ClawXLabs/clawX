@@ -1,0 +1,45 @@
+{
+  "name": "avax-prediction-market",
+  "version": "1.0.0",
+  "description": "Short-term prediction market on Avalanche Fuji testnet",
+  "main": "index.js",
+  "scripts": {
+    "compile": "hardhat compile",
+    "deploy": "hardhat run scripts/deploy.js --network fuji",
+    "deploy:tusdc": "hardhat run scripts/deploy-tusdc.js --network fuji",
+    "deploy:tusdc-market": "hardhat run scripts/deploy-tusdc-market.js --network fuji",
+    "deploy:relay-stack": "hardhat run scripts/deploy-relay-stack.js --network fuji",
+    "test": "hardhat test",
+    "test-price-feeds": "hardhat run scripts/test-price-feeds.js --network fuji",
+    "keeper": "node scripts/keeper.js",
+    "agent-runner": "node scripts/agent-runner.js",
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start"
+  },
+  "devDependencies": {
+    "@nomicfoundation/hardhat-toolbox": "^4.0.0",
+    "@types/node": "^20.0.0",
+    "@types/react": "^18.2.0",
+    "autoprefixer": "^10.4.0",
+    "hardhat": "^2.19.0",
+    "next": "^14.0.0",
+    "postcss": "^8.4.0",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
+    "tailwindcss": "^3.3.0",
+    "typescript": "^5.0.0"
+  },
+  "dependencies": {
+    "@chainlink/contracts": "^0.8.0",
+    "@openzeppelin/contracts": "^5.6.1",
+    "clsx": "^2.0.0",
+    "dotenv": "^17.4.2",
+    "ethers": "^6.8.0",
+    "framer-motion": "^12.39.0",
+    "gsap": "^3.15.0",
+    "lucide-react": "^0.294.0",
+    "recharts": "^2.8.0",
+    "web3": "^4.0.0"
+  }
+}

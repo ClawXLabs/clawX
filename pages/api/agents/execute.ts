@@ -1,0 +1,151 @@
+import { ethers } from 'ethers';
+import { getAgentById } from '../../../utils/agents/config';
+import { verifyAgentDelegate } from '../../../utils/agents/delegate';
+import { appendFeedMessage, appendTradeLog, getEnrollment, setEnrollment } from '../../../utils/agents/store';
+import { agentChatterText } from '../../../utils/agents/strategy';
+import { recordTradePlanned } from '../../../utils/agents/brain';
+import { AGENTS } from '../../../utils/agents/config';
+import { isRunnerAuthorized } from '../../../utils/agents/runnerAuth';
+
+const MARKET_ABI = [
+  'function owner() view returns (address)',
+  'function settlementOperator() view returns (address)',
+  'function buyPositionFor(address buyer,uint256 roundId,bool isUp,uint256 amountIn) returns (uint256)',
+  'function collateralToken() view returns (address)',
+];
+
+const ERC20_ABI = ['function allowance(address owner,address spender) view returns (uint256)'];
+
+export default async function handler(req, res) {
+  if (req.method !== 'POST') {
+    res.setHeader('Allow', 'POST');
+    return res.status(405).json({ error: 'Method not allowed' });
+  }
+  if (!isRunnerAuthorized(req)) {
+    return res.status(401).json({ error: 'Unauthorized runner' });
+  }
+
+  const body = req.body || {};
+  const wallet = body.wallet;
+  const roundId = body.roundId;
+  const isUp = Boolean(body.isUp);
+  const symbol = body.symbol || '';
+  const thought = body.thought || '';
+
+  if (!wallet || !ethers.isAddress(wallet)) {
+    return res.status(400).json({ error: 'Invalid wallet' });
+  }
+  if (!Number.isFinite(Number(roundId))) {
+    return res.status(400).json({ error: 'Invalid roundId' });
+  }
+
+  const user = ethers.getAddress(wallet);
+  const enrollment = getEnrollment(user);
+  if (!enrollment || enrollment.status !== 'active') {
+    return res.status(404).json({ error: 'No active enrollment' });
+  }
+
+  const contractAddress = process.env.NEXT_PUBLIC_CONTRACT_ADDRESS;
+  const rpcUrl = process.env.FUJI_RPC_URL || 'https://api.avax-test.network/ext/bc/C/rpc';
+  const privateKey = (process.env.SETTLEMENT_PRIVATE_KEY || process.env.PRIVATE_KEY || '').trim();
+  const normalizedKey = privateKey.startsWith('0x') ? privateKey : privateKey ? `0x${privateKey}` : '';
+
+  if (!contractAddress) {
+    return res.status(500).json({ error: 'Market contract not configured' });
+  }
+  if (!/^0x[0-9a-fA-F]{64}$/.test(normalizedKey)) {
+    return res.status(503).json({ error: 'SETTLEMENT_PRIVATE_KEY required for agent trades' });
+  }
+
+  const provider = new ethers.JsonRpcProvider(rpcUrl);
+  const network = await provider.getNetwork();
+  const chainId = Number(network.chainId);
+
+  const delegateCheck = verifyAgentDelegate({
+    chainId,
+    contractAddress,
+    trader: user,
+    deadline: Number(enrollment.delegateDeadline),
+    maxAmountRaw: enrollment.delegateMaxRaw,
+    signature: enrollment.delegateSignature,
+  });
+  if (!delegateCheck.ok) {
+    return res.status(400).json({ error: delegateCheck.error });
+  }
+
+  const amountIn = BigInt(enrollment.tradeSizeRaw || '0');
+  const spent = BigInt(enrollment.delegateSpentRaw || '0');
+  const max = BigInt(enrollment.delegateMaxRaw || '0');
+  if (amountIn <= 0n || spent + amountIn > max) {
+    return res.status(400).json({ error: 'Delegation spend cap reached' });
+  }
+
+  const relayer = new ethers.Wallet(normalizedKey, provider);
+  const market = new ethers.Contract(contractAddress, MARKET_ABI, relayer);
+  const collateralAddr = await market.collateralToken();
+  const token = new ethers.Contract(collateralAddr, ERC20_ABI, provider);
+
+  const allowance = await token.allowance(user, contractAddress);
+  if (allowance < amountIn) {
+    return res.status(400).json({
+      error: 'Insufficient TUSDC allowance. Approve the market contract or re-enroll with permit.',
+    });
+  }
+
+  try {
+    await market.buyPositionFor.staticCall(user, BigInt(roundId), isUp, amountIn);
+    const tx = await market.buyPositionFor(user, BigInt(roundId), isUp, amountIn);
+    const receipt = await tx.wait();
+
+    const agent = getAgentById(enrollment.agentId);
+    const peer = AGENTS.find((a) => a.id !== enrollment.agentId);
+    appendTradeLog(user, {
+      at: Math.floor(Date.now() / 1000),
+      action: 'BUY',
+      side: isUp ? 'UP' : 'DOWN',
+      symbol,
+      amountTusdc: enrollment.tradeSizeTusdc,
+      hash: tx.hash,
+      roundId: Number(roundId),
+    });
+
+    const memory = recordTradePlanned(enrollment.agentMemory || {}, symbol);
+    setEnrollment(user, {
+      ...enrollment,
+      agentMemory: memory,
+      delegateSpentRaw: (spent + amountIn).toString(),
+      lastTradeAt: Math.floor(Date.now() / 1000),
+    });
+
+    if (agent) {
+      const feedText = thought || agentChatterText(agent, peer, symbol, isUp, thought);
+      appendFeedMessage({
+        agentId: agent.id,
+        agentName: agent.name,
+        handle: agent.handle,
+        emoji: agent.emoji,
+        color: agent.color,
+        text: feedText,
+      });
+      if (peer && Math.random() > 0.55) {
+        appendFeedMessage({
+          agentId: peer.id,
+          agentName: peer.name,
+          handle: peer.handle,
+          emoji: peer.emoji,
+          color: peer.color,
+          text: `${peer.name}: Saw ${agent.name}'s ${isUp ? 'UP' : 'DOWN'} on ${symbol} — watching fill.`,
+        });
+      }
+    }
+
+    return res.status(200).json({
+      ok: true,
+      hash: tx.hash,
+      blockNumber: receipt.blockNumber,
+    });
+  } catch (error) {
+    console.error('Agent execute failed:', error);
+    return res.status(500).json({ error: error?.shortMessage || error?.message || 'Trade failed' });
+  }
+}
