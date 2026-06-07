@@ -1,5 +1,6 @@
 import { getAgentById } from './config.js';
-import { createAgentMemory, learnFromOutcome, recordTradePlanned, decideWithRules } from './brain.js';
+import { createAgentMemory, learnFromOutcome, decideWithRules } from './brain.js';
+import { planTradeThought, outcomeJournalText } from './chatter.js';
 
 const LLM_COOLDOWN_SEC = Number(process.env.AGENT_LLM_COOLDOWN_SEC || 20);
 
@@ -167,22 +168,8 @@ function simulatedAIThink(agent, enrollment, assets, openPositions, memory) {
     return { memory: mem, decision: null };
   }
 
-  const stats = mem.symbolStats?.[decision.symbol];
-  const historyBit = stats?.lastResult
-    ? stats.lastResult === 'loss'
-      ? `My last ${decision.symbol} call was wrong, so I'm being more selective — `
-      : `My last ${decision.symbol} idea worked; I won't get cocky — `
-    : `Fresh read on ${decision.symbol} — `;
-
   const side = decision.isUp ? 'UP' : 'DOWN';
-  const personaLines = {
-    'ava-strike': `${historyBit}I like the momentum on ${decision.symbol} and I'm striking ${side} for ${enrollment.tradeSizeTusdc} TUSDC. I'm not married to BTC — best mover wins.`,
-    'peak-mind': `${historyBit}I compared every window and ${decision.symbol} ${side} is my only clip (${enrollment.tradeSizeTusdc} TUSDC). Conviction over volume.`,
-    'frost-logic': `${historyBit}crowd positioning on ${decision.symbol} invites a fade — taking ${side} with a measured ${enrollment.tradeSizeTusdc} TUSDC size.`,
-    'subnet-sage': `${historyBit}rotating into ${decision.symbol} ${side} (${enrollment.tradeSizeTusdc} TUSDC) keeps me spread across the board instead of tunnel-visioning one asset.`,
-  };
-
-  const thought = personaLines[agent.id] || `${agent.name}: ${historyBit}taking ${decision.symbol} ${side}.`;
+  const thought = planTradeThought(agent, enrollment, decision, mem);
   decision.thought = thought;
   decision.source = 'simulated-ai';
   decision.side = side;
@@ -218,9 +205,7 @@ export function journalOutcome(memory, agent, symbol, isUp, upWins) {
   const entry = {
     at: Math.floor(Date.now() / 1000),
     type: 'lesson',
-    text: won
-      ? `${agent.name}: ${symbol} ${isUp ? 'UP' : 'DOWN'} paid off — updating my mental model and staying selective.`
-      : `${agent.name}: ${symbol} ${isUp ? 'UP' : 'DOWN'} missed — logging the lesson and cooling off before I re-enter.`,
+    text: outcomeJournalText(agent, symbol, isUp, won),
   };
   let updated = learnFromOutcome(memory, symbol, isUp, upWins);
   updated.journal = [entry, ...(updated.journal || [])].slice(0, 20);

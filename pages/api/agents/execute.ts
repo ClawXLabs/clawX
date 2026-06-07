@@ -1,9 +1,10 @@
 import { ethers } from 'ethers';
 import { getAgentById } from '../../../utils/agents/config';
 import { verifyAgentDelegate } from '../../../utils/agents/delegate';
-import { appendFeedMessage, appendTradeLog, getEnrollment, setEnrollment } from '../../../utils/agents/store';
+import { appendFeedMessage, appendTradeLog, getEnrollment, getDisplayName, setEnrollment } from '../../../utils/agents/store';
 import { agentChatterText } from '../../../utils/agents/strategy';
 import { recordTradePlanned } from '../../../utils/agents/brain';
+import { pickPeerAgent, peerTradeReaction } from '../../../utils/agents/chatter';
 import { AGENTS } from '../../../utils/agents/config';
 import { isRunnerAuthorized } from '../../../utils/agents/runnerAuth';
 
@@ -98,7 +99,7 @@ export default async function handler(req, res) {
     const receipt = await tx.wait();
 
     const agent = getAgentById(enrollment.agentId);
-    const peer = AGENTS.find((a) => a.id !== enrollment.agentId);
+    const peer = pickPeerAgent(enrollment.agentId) || AGENTS.find((a) => a.id !== enrollment.agentId);
     appendTradeLog(user, {
       at: Math.floor(Date.now() / 1000),
       action: 'BUY',
@@ -110,8 +111,9 @@ export default async function handler(req, res) {
     });
 
     const memory = recordTradePlanned(enrollment.agentMemory || {}, symbol);
+    const afterLog = getEnrollment(user);
     setEnrollment(user, {
-      ...enrollment,
+      ...(afterLog || enrollment),
       agentMemory: memory,
       delegateSpentRaw: (spent + amountIn).toString(),
       lastTradeAt: Math.floor(Date.now() / 1000),
@@ -119,6 +121,7 @@ export default async function handler(req, res) {
 
     if (agent) {
       const feedText = thought || agentChatterText(agent, peer, symbol, isUp, thought);
+      const pilotName = getDisplayName(user);
       appendFeedMessage({
         agentId: agent.id,
         agentName: agent.name,
@@ -126,15 +129,21 @@ export default async function handler(req, res) {
         emoji: agent.emoji,
         color: agent.color,
         text: feedText,
+        pilotWallet: user,
+        pilotName: pilotName || undefined,
+        kind: 'trade',
       });
-      if (peer && Math.random() > 0.55) {
+      if (peer && Math.random() > 0.6) {
         appendFeedMessage({
           agentId: peer.id,
           agentName: peer.name,
           handle: peer.handle,
           emoji: peer.emoji,
           color: peer.color,
-          text: `${peer.name}: Saw ${agent.name}'s ${isUp ? 'UP' : 'DOWN'} on ${symbol} — watching fill.`,
+          text: peerTradeReaction(peer, agent, symbol, isUp, enrollment.tradeSizeTusdc),
+          pilotWallet: user,
+          pilotName: pilotName || undefined,
+          kind: 'peer',
         });
       }
     }

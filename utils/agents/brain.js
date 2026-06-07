@@ -1,6 +1,6 @@
 import { getAgentById } from './config.js';
 
-const WATCH_GAP_SEC = 8;
+const WATCH_GAP_SEC = 2;
 
 export function createAgentMemory(agentId) {
   return {
@@ -61,7 +61,7 @@ function scoreAsset(asset) {
   const skew = poolSkew(asset.round);
   const imbalance = Math.abs(skew.upPct - 0.5);
   const timeLeft = Number(asset.round.endTime || 0) - Math.floor(Date.now() / 1000);
-  if (timeLeft < 50) return -1;
+  if (timeLeft < 35) return -1;
   return drift * 2 + imbalance * 15;
 }
 
@@ -110,20 +110,33 @@ export function decideWithRules(enrollment, assets, openPositions) {
       break;
     }
     case 'peak-mind': {
-      const best = candidates.reduce((top, a) => {
-        const conf = Math.abs(driftPct(a.round)) * (1 - Math.abs(poolSkew(a.round).upPct - 0.5));
-        return !top || conf > top.conf ? { ...a, conf } : top;
-      }, null);
-      const floor = memory.symbolStats && Object.values(memory.symbolStats).some((s) => s.lastResult === 'loss')
-        ? 0.45
-        : 0.22;
-      if (!best || best.conf < floor) {
-        thought = `${agent.name}: Low conviction across five markets — still thinking.`;
+      const ranked = candidates
+        .map((a) => ({
+          ...a,
+          conf: Math.abs(driftPct(a.round)) * (1 - Math.abs(poolSkew(a.round).upPct - 0.5)),
+        }))
+        .sort((a, b) => b.conf - a.conf);
+      const floor = Object.values(memory.symbolStats || {}).some((s) => s.lastResult === 'loss') ? 0.12 : 0.06;
+      const pool = ranked.filter((a) => a.conf >= floor);
+      if (!pool.length) {
+        thought = `${agent.name}: Scanning BTC · ETH · AVAX · BNB · NEAR — no clip clears my bar yet.`;
         break;
       }
-      pick = best;
-      isUp = driftPct(pick.round) >= 0;
-      thought = `${agent.name}: Highest conviction ${pick.symbol} (${best.conf.toFixed(2)}) — ${isUp ? 'UP' : 'DOWN'} clip.`;
+      const idx = (memory.rotateIndex || 0) % pool.length;
+      pick = pool[idx];
+      memory.rotateIndex = idx + 1;
+      const drift = driftPct(pick.round);
+      const skew = poolSkew(pick.round);
+      if (Math.abs(drift) >= 0.06) {
+        isUp = drift > 0;
+      } else if (skew.upPct >= 0.55) {
+        isUp = false;
+      } else if (skew.upPct <= 0.45) {
+        isUp = true;
+      } else {
+        isUp = (memory.rotateIndex + idx) % 2 === 0;
+      }
+      thought = `${agent.name}: Clip ${idx + 1}/${pool.length} — ${pick.symbol} ${isUp ? 'UP' : 'DOWN'} (${enrollment.tradeSizeTusdc} TUSDC) while I keep scanning every market.`;
       break;
     }
     case 'frost-logic': {

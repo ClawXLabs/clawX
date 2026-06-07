@@ -331,3 +331,13 @@ export function useMarketHistory(assetId: number | null): PriceTick[] {
   if (assetId === null) return [];
   return history[assetId] ?? [];
 }
+
+/** Force chain refresh (used after settlement). */
+export async function refreshMarketData(): Promise<void> {
+  await fetchChain();
+}
+
+/** True if any live round has passed endTime but is not resolved. */
+export function hasExpiredMarkets(nowSec = Math.floor(Date.now() / 1000)): boolean {
+  return Object.values(snapshot.markets).some((m) => !m.resolved && m.endTime <= nowSec);
+}

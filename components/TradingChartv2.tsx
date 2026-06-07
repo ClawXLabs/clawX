@@ -1348,7 +1348,7 @@ export default function TradingChartv2({
               letterSpacing: '0.12em', textTransform: 'uppercase', cursor: 'pointer',
             }}
           >
-            SETTLE ROUND →
+            FINALIZING ROUND…
           </button>
         ) : (
           <button

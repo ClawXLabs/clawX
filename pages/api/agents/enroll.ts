@@ -2,7 +2,7 @@ import { ethers } from 'ethers';
 import { getAgentById, DEFAULT_TRADE_SIZE_TUSDC } from '../../../utils/agents/config';
 import { verifyAgentDelegate } from '../../../utils/agents/delegate';
 import { createAgentMemory } from '../../../utils/agents/brain';
-import { getEnrollment, setEnrollment, appendFeedMessage } from '../../../utils/agents/store';
+import { getEnrollment, setEnrollment, appendFeedMessage, getDisplayName } from '../../../utils/agents/store';
 import { readWalletAum } from '../../../utils/agents/stats';
 import { FUJI_RPC_PUBLIC } from '../../../utils/contract';
 
@@ -62,6 +62,7 @@ export default async function handler(req, res) {
 
   const user = ethers.getAddress(wallet);
   const existing = getEnrollment(user);
+  const preservedTradeLog = existing?.tradeLog || [];
   if (existing?.status === 'active') {
     return res.status(200).json({ ok: true, enrollment: existing, alreadyActive: true });
   }
@@ -120,7 +121,7 @@ export default async function handler(req, res) {
     status: 'active',
     startedAt: Math.floor(Date.now() / 1000),
     initialAumRaw,
-    tradeLog: [],
+    tradeLog: preservedTradeLog,
     pendingOutcomes: [],
     agentMemory: createAgentMemory(agent.id),
     delegateSignature,
@@ -136,6 +137,9 @@ export default async function handler(req, res) {
     emoji: agent.emoji,
     color: agent.color,
     text: `${agent.name}: New pilot joined — automating ${size} TUSDC clips on Fuji.`,
+    pilotWallet: user,
+    pilotName: getDisplayName(user) || undefined,
+    kind: 'enroll',
   });
 
   return res.status(200).json({ ok: true, enrollment });

@@ -3,6 +3,7 @@ import { useEffect, useState, useCallback } from 'react';
 import { ethers } from 'ethers';
 import { useWallet } from '../contexts/WalletContext';
 import { CONTRACT_ABI, CONTRACT_ADDRESS, ERC20_ABI, TUSDC_ADDRESS } from '../utils/contract';
+import { relayClaimWinnings } from '../utils/relayClaim';
 
 /* ─── Helpers ────────────────────────────────────────────────────── */
 
@@ -50,6 +51,10 @@ export default function ProfileTerminal() {
   const [loadingTrades, setLoadingTrades] = useState(false);
   const [claimingRound, setClaimingRound] = useState<number | null>(null);
   const [claimMsg, setClaimMsg] = useState('');
+  const [displayName, setDisplayName] = useState('');
+  const [nameInput, setNameInput] = useState('');
+  const [savingName, setSavingName] = useState(false);
+  const [nameMsg, setNameMsg] = useState('');
 
   const loadBalances = useCallback(async () => {
     if (!account || !provider) return;
@@ -118,18 +123,48 @@ export default function ProfileTerminal() {
     } finally { setLoadingTrades(false); }
   }, [account, contract]);
 
-  useEffect(() => { loadBalances(); loadTrades(); }, [loadBalances, loadTrades]);
+  const loadDisplayName = useCallback(async () => {
+    if (!account) return;
+    try {
+      const res = await fetch(`/api/agents/profile?wallet=${account}`);
+      const json = await res.json();
+      setDisplayName(json.displayName || '');
+      setNameInput(json.displayName || '');
+    } catch {
+      setDisplayName('');
+    }
+  }, [account]);
+
+  const saveDisplayName = async () => {
+    if (!account) return;
+    setSavingName(true);
+    setNameMsg('');
+    try {
+      const res = await fetch('/api/agents/profile', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ wallet: account, displayName: nameInput }),
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error || 'Could not save');
+      setDisplayName(json.displayName);
+      setNameMsg('Saved — visible on the leaderboard.');
+    } catch (e: any) {
+      setNameMsg(e.message || 'Save failed');
+    } finally {
+      setSavingName(false);
+    }
+  };
+
+  useEffect(() => { loadBalances(); loadTrades(); loadDisplayName(); }, [loadBalances, loadTrades, loadDisplayName]);
 
   const claimWinnings = async (roundId: number) => {
-    if (!contract || !provider) return;
+    if (!contract || !provider || !account) return;
     setClaimingRound(roundId); setClaimMsg('');
     try {
-      const signer = await provider.getSigner();
-      const contractWithSigner = contract.connect(signer) as typeof contract;
-      const tx = await contractWithSigner.claimWinnings(roundId);
-      setClaimMsg('Transaction submitted, waiting…');
-      await tx.wait();
-      setClaimMsg('Winnings claimed!');
+      setClaimMsg('Confirm the signature in MetaMask (no AVAX gas — relayer pays).');
+      await relayClaimWinnings({ provider, account, contract, roundId });
+      setClaimMsg('Winnings sent to your wallet!');
       await Promise.all([loadBalances(), loadTrades()]);
     } catch (e: any) {
       setClaimMsg(e.shortMessage || e.message || 'Claim failed');
@@ -189,6 +224,36 @@ export default function ProfileTerminal() {
                 </span>
               </Link>
             </div>
+          </section>
+
+          {/* Display name */}
+          <section style={{ ...S.section, marginBottom: 24 }}>
+            <p style={S.label}>{displayName ? 'Display name' : 'Set up your pilot name'}</p>
+            <p style={{ ...S.mono, fontSize: 11, color: '#5A554E', marginTop: 6, marginBottom: 12 }}>
+              Saved to your wallet — shown on the leaderboard.
+            </p>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+              <input
+                type="text"
+                value={nameInput}
+                onChange={(e) => setNameInput(e.target.value)}
+                placeholder="e.g. Bruceeee"
+                maxLength={32}
+                style={{
+                  flex: '1 1 180px', border: '1px solid #0D0B08', background: '#FAF8F3',
+                  padding: '10px 14px', ...S.mono, fontSize: 13, color: '#0D0B08',
+                }}
+              />
+              <button type="button" onClick={saveDisplayName} disabled={savingName} style={{
+                background: '#0D0B08', color: '#FAF8F3', border: 'none',
+                padding: '10px 20px', ...S.mono, fontSize: 10, fontWeight: 700,
+                letterSpacing: '0.14em', textTransform: 'uppercase', cursor: 'pointer',
+                opacity: savingName ? 0.5 : 1,
+              }}>
+                {savingName ? 'Saving…' : 'Save name'}
+              </button>
+            </div>
+            {nameMsg ? <p style={{ ...S.mono, fontSize: 11, color: '#27AE60', marginTop: 8 }}>{nameMsg}</p> : null}
           </section>
 
           {/* Claim message */}

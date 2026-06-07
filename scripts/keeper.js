@@ -11,7 +11,7 @@ const CONTRACT_ABI = [
   "function getRoundInfo(uint256 roundId) external view returns (uint256 assetId, string memory asset, uint256 roundNumber, uint256 startTime, uint256 endTime, uint256 startPrice, uint256 endPrice, bool resolved, bool upWins, uint256 upPool, uint256 downPool, uint256 upShares, uint256 downShares, uint256 collateralPool, uint256 currentPrice, address priceFeed)",
 ];
 
-const POLL_MS = Number(process.env.KEEPER_POLL_MS || 5000);
+const POLL_MS = Number(process.env.KEEPER_POLL_MS || 1000);
 const RPC_URL = process.env.FUJI_RPC_URL || "https://api.avax-test.network/ext/bc/C/rpc";
 const CONTRACT_ADDRESS = process.env.NEXT_PUBLIC_CONTRACT_ADDRESS;
 const PRIVATE_KEY = process.env.SETTLEMENT_PRIVATE_KEY || process.env.PRIVATE_KEY;
@@ -73,16 +73,28 @@ async function settleExpired(contract) {
   );
 
   const fastPrices = await fetchFastPrices(expired.map((market) => market.symbol), {
-    requestTimeoutMs: 1200,
+    requestTimeoutMs: 3000,
+    settleQuick: true,
   });
   for (const market of expired) {
     if (!fastPrices[market.symbol]) {
       throw new Error(`Missing fast price for ${market.symbol}`);
     }
   }
+  const feeData = await contract.runner.provider.getFeeData();
+  const gasOverrides = {};
+  if (feeData.maxFeePerGas) {
+    gasOverrides.maxFeePerGas = (feeData.maxFeePerGas * 300n) / 100n;
+    if (feeData.maxPriorityFeePerGas) {
+      gasOverrides.maxPriorityFeePerGas = (feeData.maxPriorityFeePerGas * 300n) / 100n;
+    }
+  } else if (feeData.gasPrice) {
+    gasOverrides.gasPrice = (feeData.gasPrice * 300n) / 100n;
+  }
   const tx = await contract.resolveExpiredRoundsWithPrices(
     expired.map((market) => market.assetId),
-    expired.map((market) => fastPrices[market.symbol].price8)
+    expired.map((market) => fastPrices[market.symbol].price8),
+    gasOverrides
   );
   console.log(`[keeper] Submitted ${tx.hash}`);
   const receipt = await tx.wait();
@@ -115,7 +127,12 @@ async function main() {
         await settleExpired(contract);
       }
     } catch (error) {
-      console.error("[keeper] Settlement check failed:", error.shortMessage || error.message || error);
+      const msg = error.shortMessage || error.message || String(error);
+      if (msg.includes("No expired rounds")) {
+        /* UI or a prior keeper pass already settled */
+      } else {
+        console.error("[keeper] Settlement check failed:", msg);
+      }
     }
 
     await sleep(POLL_MS);

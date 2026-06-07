@@ -8,7 +8,8 @@ export const AGENTS = [
     style: 'Momentum hunter',
     color: '#E84142',
     emoji: '⚡',
-    maxOpenMarkets: 2,
+    maxOpenMarkets: 3,
+    maxTradesPerTick: 3,
     envAddressKey: 'NEXT_PUBLIC_AGENT_AVA_STRIKE_ADDRESS',
   },
   {
@@ -19,7 +20,8 @@ export const AGENTS = [
     style: 'Analyst',
     color: '#3b82f6',
     emoji: '🧠',
-    maxOpenMarkets: 1,
+    maxOpenMarkets: 5,
+    maxTradesPerTick: 4,
     envAddressKey: 'NEXT_PUBLIC_AGENT_PEAK_MIND_ADDRESS',
   },
   {
@@ -30,7 +32,8 @@ export const AGENTS = [
     style: 'Contrarian',
     color: '#38bdf8',
     emoji: '❄️',
-    maxOpenMarkets: 2,
+    maxOpenMarkets: 3,
+    maxTradesPerTick: 2,
     envAddressKey: 'NEXT_PUBLIC_AGENT_FROST_LOGIC_ADDRESS',
   },
   {
@@ -41,7 +44,8 @@ export const AGENTS = [
     style: 'Rotator',
     color: '#22c55e',
     emoji: '🌐',
-    maxOpenMarkets: 3,
+    maxOpenMarkets: 5,
+    maxTradesPerTick: 4,
     envAddressKey: 'NEXT_PUBLIC_AGENT_SUBNET_SAGE_ADDRESS',
   },
 ];
@@ -64,6 +68,11 @@ export function resolveAgentId(agentId) {
 export function getAgentById(agentId) {
   const id = resolveAgentId(agentId);
   return AGENTS.find((a) => a.id === id) || null;
+}
+
+export function getTradesPerTick(agent) {
+  if (!agent) return 1;
+  return Math.max(1, Math.min(4, Number(agent.maxTradesPerTick) || 1));
 }
 
 export function getAgentAddress(agent) {

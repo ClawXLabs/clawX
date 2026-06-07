@@ -12,13 +12,12 @@ const CONTRACT_ABI = [
 ];
 
 async function getExpiredMarkets(contract: ethers.Contract, blockTimestamp: number) {
-  const assetCount = Number(await contract.getAssetCount());
   const assets = await Promise.all(
-    Array.from({ length: assetCount }, (_, assetId) => contract.getAsset(assetId))
+    Array.from({ length: 5 }, (_, assetId) => contract.getAsset(assetId))
   );
 
   const rounds = await Promise.all(
-    assets.map(async (asset: any, assetId: number) => {
+    assets.map(async (asset: ethers.Result, assetId: number) => {
       const currentRoundId = Number(asset.currentRoundId);
       if (currentRoundId === 0) return null;
       const round = await contract.getRoundInfo(currentRoundId);
@@ -37,7 +36,15 @@ async function getExpiredMarkets(contract: ethers.Contract, blockTimestamp: numb
     })
   );
 
-  return rounds.filter(Boolean) as any[];
+  return rounds.filter(Boolean) as Array<{
+    assetId: number;
+    symbol: string;
+    priceFeed: string;
+    roundId: number;
+    roundNumber: number;
+    startPrice: string;
+    oraclePriceBeforeSettlement: string;
+  }>;
 }
 
 function normalizePrivateKey(value?: string): string {
@@ -77,11 +84,26 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const provider = new ethers.JsonRpcProvider(rpcUrl);
     const wallet = new ethers.Wallet(privateKey, provider);
     const contract = new ethers.Contract(contractAddress, CONTRACT_ABI, wallet);
-    const block = await provider.getBlock('latest');
-    
-    if (!block) throw new Error("Could not fetch latest block");
-    
-    const expired = await getExpiredMarkets(contract, block.timestamp);
+    let block = await provider.getBlock('latest');
+    if (!block) throw new Error('Could not fetch latest block');
+
+    let expired = await getExpiredMarkets(contract, block.timestamp);
+
+    if (expired.length === 0) {
+      const deadline = Date.now() + 2000;
+      while (Date.now() < deadline && expired.length === 0) {
+        await new Promise((r) => setTimeout(r, 400));
+        try {
+          const next = await provider.getBlock('latest');
+          if (next && next.number > block.number) {
+            block = next;
+            expired = await getExpiredMarkets(contract, block.timestamp);
+          }
+        } catch {
+          /* keep trying */
+        }
+      }
+    }
 
     if (expired.length === 0) {
       return res.status(200).json({
@@ -95,10 +117,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     const symbols = [...new Set(expired.map((market) => market.symbol))];
     const fastPrices = await fetchFastPrices(symbols, {
-      requestTimeoutMs: 500,
+      requestTimeoutMs: 3000,
       settleQuick: true,
     });
-    
     for (const market of expired) {
       if (!fastPrices[market.symbol]) {
         return res.status(500).json({
@@ -106,7 +127,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         });
       }
     }
-    
     const settlements = expired.map((market) => {
       const fastPrice = fastPrices[market.symbol];
       return {
@@ -118,18 +138,60 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     });
 
     const fee = await provider.getFeeData();
-    const gasPrice = fee.gasPrice ? (fee.gasPrice * 150n) / 100n : undefined;
+    const gasOverrides: Record<string, bigint> = {};
+    if (fee.maxFeePerGas) {
+      gasOverrides.maxFeePerGas = (fee.maxFeePerGas * 300n) / 100n;
+      if (fee.maxPriorityFeePerGas) {
+        gasOverrides.maxPriorityFeePerGas = (fee.maxPriorityFeePerGas * 300n) / 100n;
+      }
+    } else if (fee.gasPrice) {
+      gasOverrides.gasPrice = (fee.gasPrice * 300n) / 100n;
+    }
     const tx = await contract.resolveExpiredRoundsWithPrices(
       settlements.map((market) => market.assetId),
       settlements.map((market) => fastPrices[market.symbol].price8),
-      gasPrice ? { gasPrice } : {}
+      gasOverrides
     );
 
+    let receipt = null;
+    try {
+      receipt = await tx.wait(1, 3000);
+    } catch (waitError: any) {
+      if (waitError?.code === 'CALL_EXCEPTION') {
+        return res.status(200).json({
+          settled: true,
+          submitted: true,
+          hash: tx.hash,
+          blockNumber: block.number,
+          blockTimestamp: block.timestamp,
+          expired: settlements,
+          settledBy: wallet.address,
+        });
+      }
+      try {
+        const lateReceipt = await provider.getTransactionReceipt(tx.hash);
+        if (lateReceipt && Number(lateReceipt.status) === 1) {
+          return res.status(200).json({
+            settled: true,
+            submitted: true,
+            hash: tx.hash,
+            blockNumber: lateReceipt.blockNumber,
+            blockTimestamp: block.timestamp,
+            expired: settlements,
+            settledBy: wallet.address,
+          });
+        }
+      } catch {
+        /* client will poll */
+      }
+      console.warn('Settlement tx wait timeout, returning hash for client polling');
+    }
+
     return res.status(200).json({
-      settled: false,
+      settled: Boolean(receipt),
       submitted: true,
       hash: tx.hash,
-      blockNumber: block.number,
+      blockNumber: receipt?.blockNumber ?? block.number,
       blockTimestamp: block.timestamp,
       expired: settlements,
       settledBy: wallet.address,

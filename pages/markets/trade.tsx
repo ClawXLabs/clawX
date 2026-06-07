@@ -7,6 +7,7 @@ import { useMarket, useMarketHistory, useMarketData } from '../../contexts/Marke
 import { useWallet } from '../../contexts/WalletContext';
 import { signErc2612Permit } from '../../utils/tradePermit';
 import { buildTradeAuthMessage } from '../../utils/tradeAuth';
+import { relayClaimWinnings } from '../../utils/relayClaim';
 import { CONTRACT_ADDRESS, TUSDC_ADDRESS, ERC20_ABI } from '../../utils/contract';
 import { ethers } from 'ethers';
 import TradingChart from '../../components/TradingChart';
@@ -49,7 +50,7 @@ async function ensureFujiNetwork(): Promise<boolean> {
 export default function MarketsTradePage() {
   const router = useRouter();
   const { ready, error } = useMarketData();
-  const { account, connectWallet } = useWallet();
+  const { account, provider, contract, connectWallet } = useWallet();
 
   const raw = router.isReady ? router.query.asset : undefined;
   const parsed = raw !== undefined ? Number(Array.isArray(raw) ? raw[0] : raw) : NaN;
@@ -258,7 +259,7 @@ export default function MarketsTradePage() {
     }
   };
 
-  const handleClaimWinnings = async (id: number) => {
+  const handleClaimWinnings = async (_assetId: number) => {
     let activeAccount = account;
     if (!activeAccount) {
       activeAccount = await connectWallet();
@@ -274,57 +275,21 @@ export default function MarketsTradePage() {
       return;
     }
 
-    if (!market) {
+    if (!market || !provider || !contract) {
       alert("Market info is not loaded.");
       return;
     }
 
+    const roundId = selectedHistoryRound?.roundId ?? market.roundId;
+
     try {
-      const eth = (window as any).ethereum;
-      if (!eth) throw new Error("No web3 provider detected");
-      const activeProvider = new ethers.BrowserProvider(eth);
-      const signer = await activeProvider.getSigner();
-      const nonce = ethers.hexlify(ethers.randomBytes(32));
-      const deadline = Math.floor(Date.now() / 1000) + 300; // 5 mins
-      
-      const network = await activeProvider.getNetwork();
-      const chainId = Number(network.chainId);
-
-      const authMessage = buildTradeAuthMessage({
-        chainId,
-        contractAddress: CONTRACT_ADDRESS,
-        trader: activeAccount,
-        action: 'claim',
-        roundId: market.roundId,
-        isUp: false,
-        amount: '0',
-        nonce,
-        deadline,
+      const { hash } = await relayClaimWinnings({
+        provider,
+        account: activeAccount,
+        contract,
+        roundId,
       });
-
-      const signature = await signer.signMessage(authMessage);
-
-      const res = await fetch('/api/trade', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          action: 'claim',
-          trader: activeAccount,
-          roundId: market.roundId,
-          isUp: false,
-          amountRaw: '0',
-          deadline,
-          nonce,
-          signature,
-        }),
-      });
-
-      const data = await res.json();
-      if (!res.ok) {
-        throw new Error(data.error || 'Claim failed');
-      }
-
-      alert(`Claim submitted successfully! Transaction hash: ${data.hash}`);
+      alert(`Claim submitted successfully! Transaction hash: ${hash}`);
     } catch (e: any) {
       console.error(e);
       alert(`Claim failed: ${e.message || e}`);

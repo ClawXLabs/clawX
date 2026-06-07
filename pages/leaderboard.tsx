@@ -7,7 +7,7 @@ export default function LeaderboardPage() {
     <>
       <Head>
         <title>Leaderboard · ClawX</title>
-        <meta name="description" content="Live pools ranked by collateral on Fuji." />
+        <meta name="description" content="Agent pilots ranked by on-chain trades on Fuji." />
       </Head>
       <AppShell>
         <LeaderboardTerminal />

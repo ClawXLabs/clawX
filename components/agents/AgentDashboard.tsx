@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import AgentFeed from './AgentFeed';
 import MyAgentBar from './MyAgentBar';
 import { useWallet } from '../../contexts/WalletContext';
+import { useAgentFeedBroadcast } from '../../hooks/useAgentFeedBroadcast';
 
 const SNOWTRACE = 'https://testnet.snowtrace.io/tx/';
 
@@ -21,7 +22,18 @@ interface AgentStatus {
     agentMemory?: {
       aiMode?: string;
       recentThoughts?: Array<{ at: string; text: string }>;
+      journal?: Array<{ at: number; type: string; text: string }>;
     };
+  };
+  trackRecord?: {
+    wins: number;
+    losses: number;
+    settled: number;
+    winRate: number | null;
+    totalTrades: number;
+    pendingOutcomes: number;
+    summary: string;
+    bySymbol: Array<{ symbol: string; wins: number; losses: number; lastResult: string | null; lastSide: string | null }>;
   };
 }
 
@@ -43,22 +55,19 @@ export default function AgentDashboard() {
   const router = useRouter();
   const { account, connectWallet } = useWallet();
   const [status, setStatus] = useState<AgentStatus | null>(null);
-  const [feed, setFeed] = useState<unknown[]>([]);
   const [error, setError] = useState('');
+  const { messages: feed, connected: feedLive, error: feedError } = useAgentFeedBroadcast({ limit: 60 });
 
   useEffect(() => {
     if (!account) return;
     let cancelled = false;
     const load = async () => {
       try {
-        const [statusRes, feedRes] = await Promise.all([
-          fetch(`/api/agents/status?wallet=${account}`), fetch('/api/agents/feed'),
-        ]);
+        const statusRes = await fetch(`/api/agents/status?wallet=${account}`);
         const statusJson = await statusRes.json() as AgentStatus;
-        const feedJson = await feedRes.json() as { messages?: unknown[] };
         if (!cancelled) {
           if (!statusJson.enrolled) { router.replace('/agents/new'); return; }
-          setStatus(statusJson); setFeed(feedJson.messages || []);
+          setStatus(statusJson);
         }
       } catch (e: unknown) {
         const err = e as { message?: string };
@@ -86,6 +95,7 @@ export default function AgentDashboard() {
 
   const agent = status?.agent;
   const up = (status?.returnPct ?? 0) >= 0;
+  const tr = status?.trackRecord;
 
   return (
     <>
@@ -119,21 +129,48 @@ export default function AgentDashboard() {
             </div>
 
             {/* Stats row */}
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 0, marginTop: 20, borderTop: '1px solid #0D0B08' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 0, marginTop: 20, borderTop: '1px solid #0D0B08' }}>
               {[
                 { label: 'Your AUM', value: `$${status?.aum?.toLocaleString() ?? '—'}` },
                 { label: 'Return', value: `${up ? '+' : ''}${status?.returnPct ?? 0}%`, color: up ? '#27AE60' : '#C0392B' },
                 { label: 'Open Positions', value: String(status?.openPositions?.length ?? 0) },
+                { label: 'Wins', value: String(tr?.wins ?? 0), color: '#27AE60' },
+                { label: 'Losses', value: String(tr?.losses ?? 0), color: '#C0392B' },
+                { label: 'Win Rate', value: tr?.winRate != null ? `${tr.winRate}%` : '—' },
               ].map((stat, i) => (
                 <div key={stat.label} style={{
                   padding: '16px 14px',
-                  borderRight: i < 2 ? '1px solid #0D0B08' : 'none',
+                  borderRight: (i + 1) % 3 !== 0 ? '1px solid #0D0B08' : 'none',
+                  borderBottom: i < 3 ? '1px solid #0D0B08' : 'none',
                 }}>
                   <p style={S.label}>{stat.label}</p>
-                  <p style={{ ...S.serif, fontSize: 24, fontWeight: 900, color: stat.color || '#0D0B08', margin: '4px 0 0' }}>{stat.value}</p>
+                  <p style={{ ...S.serif, fontSize: 22, fontWeight: 900, color: stat.color || '#0D0B08', margin: '4px 0 0' }}>{stat.value}</p>
                 </div>
               ))}
             </div>
+
+            {tr ? (
+              <div style={{ marginTop: 16, padding: '14px 16px', border: '1px solid rgba(13,11,8,0.15)', background: 'rgba(13,11,8,0.02)' }}>
+                <p style={S.label}>Track record</p>
+                <p style={{ ...S.serif, fontSize: 14, color: '#0D0B08', margin: '6px 0 0' }}>{tr.summary}</p>
+                <p style={{ ...S.mono, fontSize: 10, color: '#888', marginTop: 6 }}>
+                  {tr.totalTrades} on-chain trades · {tr.pendingOutcomes} awaiting settlement
+                </p>
+                {tr.bySymbol.length > 0 ? (
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 10 }}>
+                    {tr.bySymbol.map((row) => (
+                      <span key={row.symbol} style={{
+                        ...S.mono, fontSize: 9, padding: '4px 8px',
+                        border: '1px solid rgba(13,11,8,0.15)',
+                        color: row.lastResult === 'win' ? '#27AE60' : row.lastResult === 'loss' ? '#C0392B' : '#888',
+                      }}>
+                        {row.symbol} {row.wins}W/{row.losses}L
+                      </span>
+                    ))}
+                  </div>
+                ) : null}
+              </div>
+            ) : null}
 
             <p style={{ ...S.serif, fontSize: 13, color: '#888', marginTop: 16 }}>
               Your agent scans every market with small clips. Keep <code style={{ ...S.mono, fontSize: 11, background: 'rgba(13,11,8,0.06)', padding: '2px 6px' }}>npm run agent-runner</code> running.
@@ -208,7 +245,7 @@ export default function AgentDashboard() {
 
         {/* Right: feed */}
         <div>
-          <AgentFeed messages={feed as any[]} title="Agent Comms" />
+          <AgentFeed messages={feed} title="Agent Comms" connected={feedLive} error={feedError} />
         </div>
       </div>
     </>

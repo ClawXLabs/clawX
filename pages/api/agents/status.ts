@@ -1,6 +1,7 @@
 import { ethers } from 'ethers';
 import { getAgentById } from '../../../utils/agents/config';
 import { getEnrollment } from '../../../utils/agents/store';
+import { buildTrackRecord } from '../../../utils/agents/trackRecord';
 import { readOpenPositions, readWalletAum } from '../../../utils/agents/stats';
 import { CONTRACT_ADDRESS, FUJI_RPC_PUBLIC } from '../../../utils/contract';
 
@@ -17,8 +18,13 @@ export default async function handler(req, res) {
 
   const user = ethers.getAddress(String(wallet));
   const enrollment = getEnrollment(user);
-  if (!enrollment) {
-    return res.status(200).json({ enrolled: false });
+  if (!enrollment || enrollment.status !== 'active') {
+    const trades = (enrollment?.tradeLog || []).filter((t) => t.action === 'BUY');
+    return res.status(200).json({
+      enrolled: false,
+      retired: enrollment?.status === 'retired',
+      historicalTxCount: trades.length,
+    });
   }
 
   const agent = getAgentById(enrollment.agentId);
@@ -58,6 +64,7 @@ export default async function handler(req, res) {
     decimals,
     openPositions: positions,
     tradeLog: enrollment.tradeLog || [],
+    trackRecord: buildTrackRecord(enrollment),
     updatedAt: Math.floor(Date.now() / 1000),
   });
 }

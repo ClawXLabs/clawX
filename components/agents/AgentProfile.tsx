@@ -4,6 +4,7 @@ import { useRouter } from 'next/router';
 import AgentCard, { AgentData } from './AgentCard';
 import AgentFeed from './AgentFeed';
 import { getAgentById } from '../../utils/agents/config';
+import { useAgentFeedBroadcast } from '../../hooks/useAgentFeedBroadcast';
 
 /* ─── Styles ────────────────────────────────────────────────────── */
 
@@ -22,24 +23,22 @@ export default function AgentProfile() {
   const router = useRouter();
   const { id } = router.query;
   const [agent, setAgent] = useState<AgentData | null>(null);
-  const [feed, setFeed] = useState<unknown[]>([]);
   const [loading, setLoading] = useState(true);
+  const agentId = typeof id === 'string' ? id : undefined;
+  const { messages: feed, connected, error: feedError } = useAgentFeedBroadcast({
+    agentId,
+    limit: 30,
+  });
 
   useEffect(() => {
     if (!id) return;
     let cancelled = false;
     const load = async () => {
       try {
-        const [catalogRes, feedRes] = await Promise.all([
-          fetch('/api/agents/catalog'), fetch('/api/agents/feed'),
-        ]);
+        const catalogRes = await fetch('/api/agents/catalog');
         const catalog = await catalogRes.json() as { agents?: AgentData[] };
-        const feedJson = await feedRes.json() as { messages?: unknown[] };
         const found = (catalog.agents || []).find((row) => row.id === id) || getAgentById(id as string);
-        if (!cancelled) {
-          setAgent((found as AgentData) || null);
-          setFeed((feedJson.messages || []).filter((msg: any) => msg.agentId === id).slice(0, 20));
-        }
+        if (!cancelled) setAgent((found as AgentData) || null);
       } catch {
         if (!cancelled) setAgent((getAgentById(id as string) as unknown as AgentData) || null);
       } finally {
@@ -47,8 +46,7 @@ export default function AgentProfile() {
       }
     };
     load();
-    const timer = setInterval(load, 8000);
-    return () => { cancelled = true; clearInterval(timer); };
+    return () => { cancelled = true; };
   }, [id]);
 
   const staticAgent = getAgentById(id as string) as unknown as AgentData | undefined;
@@ -88,7 +86,7 @@ export default function AgentProfile() {
             </Link>
           </div>
           <div>
-            <AgentFeed messages={feed as any[]} title={`${displayAgent.name} comms`} />
+            <AgentFeed messages={feed} title={`${displayAgent.name} comms`} connected={connected} error={feedError} />
           </div>
         </div>
       )}

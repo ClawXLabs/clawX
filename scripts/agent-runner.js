@@ -1,7 +1,7 @@
 const { ethers } = require('ethers');
 require('dotenv').config();
 
-const POLL_MS = Number(process.env.AGENT_RUNNER_POLL_MS || 8000);
+const POLL_MS = Number(process.env.AGENT_RUNNER_POLL_MS || 4000);
 const APP_URL = (process.env.APP_URL || 'http://localhost:3000').replace(/\/$/, '');
 const RUNNER_SECRET = process.env.AGENT_RUNNER_SECRET || 'dev-agent-runner';
 
@@ -34,7 +34,7 @@ async function loadAssets(contract) {
       const round = await contract.getRoundInfo(roundId);
       const now = Math.floor(Date.now() / 1000);
       const endTime = Number(round.endTime);
-      if (round.resolved || endTime <= now + 40) return null;
+      if (round.resolved || endTime <= now + 25) return null;
       return {
         assetId,
         symbol: String(asset.symbol).trim(),
@@ -56,7 +56,6 @@ async function loadAssets(contract) {
 }
 
 async function syncLessons(contract, enrollment, libs) {
-  const log = enrollment.tradeLog || [];
   const pending = enrollment.pendingOutcomes || [];
   if (!pending.length) return enrollment;
 
@@ -72,8 +71,37 @@ async function syncLessons(contract, enrollment, libs) {
       }
       const { getAgentById } = await import('../utils/agents/config.js');
       const agent = getAgentById(enrollment.agentId);
+      const won = (item.isUp && round.upWins) || (!item.isUp && !round.upWins);
       if (agent) {
         memory = libs.ai.journalOutcome(memory, agent, item.symbol, item.isUp, round.upWins);
+        const { outcomeJournalText, pickPeerAgent, peerOutcomeReaction } = await import('../utils/agents/chatter.js');
+        const { appendFeedMessage, getDisplayName } = libs.store;
+        const pilotName = getDisplayName(enrollment.wallet);
+        appendFeedMessage({
+          agentId: agent.id,
+          agentName: agent.name,
+          handle: agent.handle,
+          emoji: agent.emoji,
+          color: agent.color,
+          text: outcomeJournalText(agent, item.symbol, item.isUp, won),
+          pilotWallet: enrollment.wallet,
+          pilotName: pilotName || undefined,
+          kind: won ? 'win' : 'loss',
+        });
+        const peer = pickPeerAgent(agent.id);
+        if (peer) {
+          appendFeedMessage({
+            agentId: peer.id,
+            agentName: peer.name,
+            handle: peer.handle,
+            emoji: peer.emoji,
+            color: peer.color,
+            text: peerOutcomeReaction(peer, agent, item.symbol, item.isUp, won),
+            pilotWallet: enrollment.wallet,
+            pilotName: pilotName || undefined,
+            kind: 'peer',
+          });
+        }
       } else {
         memory = libs.brain.learnFromOutcome(memory, item.symbol, item.isUp, round.upWins);
       }
@@ -102,9 +130,10 @@ async function executeTrade(wallet, roundId, isUp, symbol, thought) {
 }
 
 async function tick(contract, contractAddress, provider, libs) {
-  const { readEnrollments, setEnrollment } = libs.store;
+  const { setEnrollment, getEnrollment } = libs.store;
   const { decideNextTrade, recordTradePlanned, createAgentMemory } = libs.brain;
   const { readOpenPositions } = libs.stats;
+  const { readEnrollments } = libs.store;
 
   const enrollments = readEnrollments();
   const active = Object.values(enrollments).filter((row) => row.status === 'active');
@@ -123,36 +152,54 @@ async function tick(contract, contractAddress, provider, libs) {
     const wallet = enrollment.wallet;
     try {
       enrollment = await syncLessons(contract, enrollment, libs);
-      const open = await readOpenPositions(provider, wallet, contractAddress);
-      const memory = enrollment.agentMemory || createAgentMemory(enrollment.agentId);
-      const { memory: nextMemory, decision } = await decideNextTrade(
-        { ...enrollment, agentMemory: memory },
-        assets,
-        open
-      );
+      const { getAgentById, getTradesPerTick } = await import('../utils/agents/config.js');
+      const agent = getAgentById(enrollment.agentId);
+      const maxTrades = getTradesPerTick(agent);
 
-      let row = { ...enrollment, agentMemory: nextMemory };
-      if (!decision) {
-        setEnrollment(wallet, row);
-        continue;
+      let row = { ...enrollment };
+      let tradesDone = 0;
+
+      for (let attempt = 0; attempt < maxTrades; attempt += 1) {
+        const open = await readOpenPositions(provider, wallet, contractAddress);
+        const memory = row.agentMemory || createAgentMemory(enrollment.agentId);
+        const { memory: nextMemory, decision } = await decideNextTrade(
+          { ...row, agentMemory: memory },
+          assets,
+          open
+        );
+
+        row = { ...row, agentMemory: nextMemory };
+        if (!decision) break;
+
+        console.log(
+          `[agent-runner] ${wallet.slice(0, 8)}… ${enrollment.agentId} → ${decision.symbol} ${decision.isUp ? 'UP' : 'DOWN'}`
+        );
+        const result = await executeTrade(wallet, decision.roundId, decision.isUp, decision.symbol, decision.thought);
+        row.agentMemory = recordTradePlanned(nextMemory, decision.symbol);
+        row.pendingOutcomes = [
+          ...(row.pendingOutcomes || []),
+          {
+            roundId: decision.roundId,
+            symbol: decision.symbol,
+            isUp: decision.isUp,
+            at: Math.floor(Date.now() / 1000),
+            hash: result.hash || '',
+          },
+        ].slice(-20);
+        const fresh = getEnrollment(wallet);
+        setEnrollment(wallet, {
+          ...(fresh || row),
+          agentMemory: row.agentMemory,
+          pendingOutcomes: row.pendingOutcomes,
+          lastTradeAt: Math.floor(Date.now() / 1000),
+        });
+        tradesDone += 1;
+        console.log(`[agent-runner] Tx ${result.hash}`);
       }
 
-      console.log(
-        `[agent-runner] ${wallet.slice(0, 8)}… ${enrollment.agentId} → ${decision.symbol} ${decision.isUp ? 'UP' : 'DOWN'}`
-      );
-      const result = await executeTrade(wallet, decision.roundId, decision.isUp, decision.symbol, decision.thought);
-      row.agentMemory = recordTradePlanned(nextMemory, decision.symbol);
-      row.pendingOutcomes = [
-        ...(row.pendingOutcomes || []),
-        {
-          roundId: decision.roundId,
-          symbol: decision.symbol,
-          isUp: decision.isUp,
-          at: Math.floor(Date.now() / 1000),
-        },
-      ].slice(-20);
-      setEnrollment(wallet, row);
-      console.log(`[agent-runner] Tx ${result.hash}`);
+      if (tradesDone === 0) {
+        setEnrollment(wallet, row);
+      }
     } catch (error) {
       console.error(`[agent-runner] ${wallet}:`, error.message || error);
     }

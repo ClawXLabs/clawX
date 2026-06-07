@@ -4,6 +4,7 @@ import AgentCard, { AgentData } from './AgentCard';
 import AgentFeed from './AgentFeed';
 import MyAgentBar from './MyAgentBar';
 import { useAgentEnrollment } from '../../hooks/useAgentEnrollment';
+import { useAgentFeedBroadcast } from '../../hooks/useAgentFeedBroadcast';
 
 /* ─── Styles ────────────────────────────────────────────────────── */
 
@@ -21,27 +22,24 @@ const S = {
 export default function AgentsLobby() {
   const { enrolled } = useAgentEnrollment();
   const [agents, setAgents] = useState<AgentData[]>([]);
-  const [feed, setFeed] = useState<unknown[]>([]);
   const [loading, setLoading] = useState(true);
+  const { messages: feed, connected, error: feedError } = useAgentFeedBroadcast({ limit: 50 });
 
   useEffect(() => {
     let cancelled = false;
     const load = async () => {
       try {
-        const [catalogRes, feedRes] = await Promise.all([
-          fetch('/api/agents/catalog'), fetch('/api/agents/feed'),
-        ]);
+        const catalogRes = await fetch('/api/agents/catalog');
         const catalog = await catalogRes.json() as { agents?: AgentData[] };
-        const feedJson = await feedRes.json() as { messages?: unknown[] };
-        if (!cancelled) { setAgents(catalog.agents || []); setFeed(feedJson.messages || []); }
+        if (!cancelled) setAgents(catalog.agents || []);
       } catch {
-        if (!cancelled) { setAgents([]); setFeed([]); }
+        if (!cancelled) setAgents([]);
       } finally {
         if (!cancelled) setLoading(false);
       }
     };
     load();
-    const timer = setInterval(load, 8000);
+    const timer = setInterval(load, 30000);
     return () => { cancelled = true; clearInterval(timer); };
   }, []);
 
@@ -112,7 +110,7 @@ export default function AgentsLobby() {
 
           {/* Right: feed */}
           <div>
-            <AgentFeed messages={feed as any[]} />
+            <AgentFeed messages={feed} connected={connected} error={feedError} />
           </div>
         </div>
       </div>
