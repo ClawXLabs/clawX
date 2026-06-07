@@ -1,10 +1,21 @@
+import { useState } from 'react';
 import type { AppProps } from 'next/app';
 import Head from 'next/head';
 import { WalletProvider } from '../contexts/WalletContext';
 import { MarketDataProvider } from '../contexts/MarketDataContext';
+import Loading from '../components/Loading';
 import '../styles/globals.css';
 
+let initialLoadPlayed = false;
+
 export default function App({ Component, pageProps }: AppProps) {
+  const [showLoading, setShowLoading] = useState(!initialLoadPlayed);
+
+  const handleLoadingComplete = () => {
+    initialLoadPlayed = true;
+    setShowLoading(false);
+  };
+
   return (
     <WalletProvider>
       <MarketDataProvider>
@@ -16,8 +27,8 @@ export default function App({ Component, pageProps }: AppProps) {
           />
         </Head>
         <Component {...pageProps} />
+        {showLoading && <Loading onComplete={handleLoadingComplete} />}
       </MarketDataProvider>
     </WalletProvider>
   );
 }
-

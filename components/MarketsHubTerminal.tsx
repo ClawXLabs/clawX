@@ -55,8 +55,8 @@ const S = {
   mono:  { fontFamily: '"Courier New", Courier, monospace' } as React.CSSProperties,
   serif: { fontFamily: 'Georgia, "Times New Roman", serif' } as React.CSSProperties,
   label: {
-    fontFamily: '"Courier New", monospace', fontSize: 9, fontWeight: 700,
-    letterSpacing: '0.18em', textTransform: 'uppercase' as const, color: '#888',
+    fontFamily: '"Courier New", monospace', fontSize: 10, fontWeight: 700,
+    letterSpacing: '0.14em', textTransform: 'uppercase' as const, color: '#888',
   } as React.CSSProperties,
 };
 
@@ -186,8 +186,8 @@ function PoolBar({ upOdds }: { upOdds: number }) {
     <div style={{ width: '100%' }}>
       {/* Labels */}
       <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
-        <span style={{ ...S.mono, fontSize: 9, fontWeight: 700, color: '#27AE60' }}>▲ UP {upOdds}%</span>
-        <span style={{ ...S.mono, fontSize: 9, fontWeight: 700, color: '#C0392B' }}>DOWN {downOdds}% ▼</span>
+        <span style={{ ...S.mono, fontSize: 11, fontWeight: 700, color: '#27AE60' }}>▲ UP {upOdds}%</span>
+        <span style={{ ...S.mono, fontSize: 11, fontWeight: 700, color: '#C0392B' }}>DOWN {downOdds}% ▼</span>
       </div>
       {/* Bar */}
       <div style={{ display: 'flex', height: 6, width: '100%', overflow: 'hidden' }}>
@@ -216,7 +216,7 @@ function Countdown({ remaining }: { remaining: number }) {
       <div style={{ flex: 1, height: 3, background: 'rgba(13,11,8,0.1)' }}>
         <div style={{ height: 3, width: `${pct}%`, background: color, transition: 'width 1s linear, background 0.4s' }} />
       </div>
-      <span style={{ ...S.mono, fontSize: 11, fontWeight: 700, color, minWidth: 36, textAlign: 'right' }}>
+      <span style={{ ...S.mono, fontSize: 13, fontWeight: 700, color, minWidth: 36, textAlign: 'right' }}>
         {secs > 0 ? formatCountdown(secs) : 'Settling'}
       </span>
     </div>
@@ -268,16 +268,16 @@ function MarketCard({
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
           <div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <AssetIconImg symbol={row.symbol} size={24} />
-              <p style={{ ...S.serif, fontSize: 18, fontWeight: 900, color: '#0D0B08', margin: 0 }}>{row.name}</p>
+              <AssetIconImg symbol={row.symbol} size={28} />
+              <p style={{ ...S.serif, fontSize: 22, fontWeight: 900, color: '#0D0B08', margin: 0 }}>{row.name}</p>
             </div>
-            <p style={{ ...S.mono, fontSize: 9, color: '#888', marginTop: 3, marginLeft: 32 }}>
+            <p style={{ ...S.mono, fontSize: 11, color: '#888', marginTop: 3, marginLeft: 36 }}>
               {row.symbol} · Round #{row.roundNumber}
             </p>
           </div>
           <span style={{
-            ...S.mono, fontSize: 8, fontWeight: 700, letterSpacing: '0.14em',
-            textTransform: 'uppercase', padding: '3px 8px', flexShrink: 0,
+            ...S.mono, fontSize: 10, fontWeight: 700, letterSpacing: '0.14em',
+            textTransform: 'uppercase', padding: '4px 10px', flexShrink: 0,
             background: open ? '#27AE60' : expired ? '#F69D39' : '#888',
             color: '#FAF8F3',
           }}>
@@ -289,19 +289,19 @@ function MarketCard({
         <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between' }}>
           <div>
             <p style={S.label}>Current Price</p>
-            <p style={{ ...S.serif, fontSize: 22, fontWeight: 900, color: '#0D0B08', margin: '3px 0 0', lineHeight: 1 }}>
+            <p style={{ ...S.serif, fontSize: 28, fontWeight: 900, color: '#0D0B08', margin: '3px 0 0', lineHeight: 1 }}>
               {fmtUsd(row.currentPrice)}
             </p>
           </div>
           <div style={{ textAlign: 'right' }}>
             <p style={S.label}>vs Open</p>
             <p style={{
-              ...S.mono, fontSize: 13, fontWeight: 700, margin: '3px 0 0',
+              ...S.mono, fontSize: 15, fontWeight: 700, margin: '3px 0 0',
               color: isUp ? '#27AE60' : '#C0392B',
             }}>
               {isUp ? '▲' : '▼'} {Math.abs(diffPct).toFixed(3)}%
             </p>
-            <p style={{ ...S.mono, fontSize: 9, color: '#aaa', marginTop: 1 }}>
+            <p style={{ ...S.mono, fontSize: 11, color: '#aaa', marginTop: 1 }}>
               Open: {fmtUsd(row.startPrice)}
             </p>
           </div>
@@ -319,17 +319,17 @@ function MarketCard({
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8, paddingTop: 10, borderTop: '1px solid rgba(13,11,8,0.12)' }}>
           <div>
             <p style={S.label}>Payout</p>
-            <p style={{ ...S.mono, fontSize: 13, fontWeight: 700, color: '#0D0B08', marginTop: 3 }}>{mult}×</p>
+            <p style={{ ...S.mono, fontSize: 15, fontWeight: 700, color: '#0D0B08', marginTop: 3 }}>{mult}×</p>
           </div>
           <div>
             <p style={S.label}>Volume</p>
-            <p style={{ ...S.mono, fontSize: 11, fontWeight: 700, color: '#5A554E', marginTop: 3 }}>
+            <p style={{ ...S.mono, fontSize: 13, fontWeight: 700, color: '#5A554E', marginTop: 3 }}>
               {row.collateralPool.toLocaleString(undefined, { maximumFractionDigits: 2 })} TUSDC
             </p>
           </div>
           <div style={{ textAlign: 'right' }}>
             <p style={S.label}>Time Left</p>
-            <p style={{ ...S.mono, fontSize: 11, fontWeight: 700, color: '#0D0B08', marginTop: 3 }}>
+            <p style={{ ...S.mono, fontSize: 13, fontWeight: 700, color: '#0D0B08', marginTop: 3 }}>
               {open ? formatCountdown(row.remaining) : '—'}
             </p>
           </div>
@@ -340,8 +340,8 @@ function MarketCard({
           {open && <Countdown remaining={row.remaining} />}
           <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
             <span style={{
-              ...S.mono, fontSize: 9, fontWeight: 700, letterSpacing: '0.12em',
-              textTransform: 'uppercase', padding: '5px 14px',
+              ...S.mono, fontSize: 11, fontWeight: 700, letterSpacing: '0.12em',
+              textTransform: 'uppercase', padding: '7px 18px',
               background: '#0D0B08', color: '#FAF8F3',
             }}>
               TRADE →
@@ -413,12 +413,12 @@ export default function MarketsHubTerminal() {
 
       {/* ── Page header ── */}
       <div style={{ borderBottom: '3px double #0D0B08', paddingBottom: 20, marginBottom: 32 }}>
-        <p style={{ ...S.label, color: '#27AE60', marginBottom: 10 }}>◆ LIVE MARKETS</p>
+        <p style={{ ...S.label, color: '#27AE60', marginBottom: 12 }}>◆ LIVE MARKETS</p>
         <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12 }}>
-          <h1 style={{ ...S.serif, fontSize: 'clamp(2rem, 4vw, 2.8rem)', fontWeight: 900, lineHeight: 1.1, letterSpacing: '-0.02em', color: '#0D0B08', margin: 0 }}>
+          <h1 style={{ ...S.serif, fontSize: 'clamp(2.4rem, 5vw, 3.2rem)', fontWeight: 900, lineHeight: 1.1, letterSpacing: '-0.02em', color: '#0D0B08', margin: 0 }}>
             5-Minute Prediction Rounds
           </h1>
-          <span style={{ ...S.mono, fontSize: 9, color: '#888', letterSpacing: '0.14em' }}>
+          <span style={{ ...S.mono, fontSize: 11, color: '#888', letterSpacing: '0.14em' }}>
             UPDATES EVERY 3S · ORACLE-SETTLED
           </span>
         </div>

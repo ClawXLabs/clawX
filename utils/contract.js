@@ -32,7 +32,7 @@ export const CONTRACT_ABI = [
   "function performUpkeep(bytes calldata) external",
   "function claimWinnings(uint256 roundId) external returns (uint256 winnings)",
   "function claimWinningsFor(address claimer,uint256 roundId) external returns (uint256 winnings)"
-] as const;
+];
 
 export const ERC20_ABI = [
   "function name() external view returns (string)",
@@ -42,11 +42,11 @@ export const ERC20_ABI = [
   "function allowance(address owner, address spender) external view returns (uint256)",
   "function approve(address spender, uint256 amount) external returns (bool)",
   "function nonces(address owner) external view returns (uint256)"
-] as const;
+];
 
 // Fuji testnet Chainlink Price Feed addresses
 // Verified working addresses on Fuji testnet
-export const PRICE_FEEDS: Record<string, string> = {
+export const PRICE_FEEDS = {
   BTC: "0x31CF013A08c6Ac228C94551d535d5BAfE19c602a", // BTC/USD - ✅ Working on Fuji
   ETH: "0x86d67c3D38D2bCeE722E601025C25a575021c6EA", // ETH/USD - Fuji testnet
   AVAX: "0x5498BB86BC934c8D34FDA08E81D444153d0D06aD", // AVAX/USD - Fuji testnet

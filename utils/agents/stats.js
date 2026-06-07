@@ -1,5 +1,5 @@
 import { ethers } from 'ethers';
-import { CONTRACT_ABI, CONTRACT_ADDRESS, ERC20_ABI, FUJI_RPC_PUBLIC } from '../contract.ts';
+import { CONTRACT_ABI, CONTRACT_ADDRESS, ERC20_ABI, FUJI_RPC_PUBLIC } from '../contract.js';
 import { AGENTS, getAgentAddress } from './config.js';
 
 const SEED_AUM = {

@@ -11,7 +11,7 @@ const NP = {
   serif: { fontFamily: 'Georgia, "Times New Roman", serif' } as React.CSSProperties,
   label: {
     fontFamily: '"Courier New", Courier, monospace',
-    fontSize: 9,
+    fontSize: 10,
     fontWeight: 700,
     letterSpacing: '0.14em',
     textTransform: 'uppercase' as const,
@@ -114,7 +114,7 @@ export function ActiveMarketsPanel({ currentAssetId }: ActiveMarketsPanelProps) 
 
       <div className="markets-header-block" style={{ borderBottom: NP.border, paddingBottom: 10, marginBottom: 15 }}>
         <p style={NP.label}>◆ Switch Market</p>
-        <h3 style={{ ...NP.serif, fontSize: 18, fontWeight: 900, margin: '4px 0 0', color: NP.ink }}>
+        <h3 style={{ ...NP.serif, fontSize: 20, fontWeight: 900, margin: '4px 0 0', color: NP.ink }}>
           Active Markets
         </h3>
       </div>
@@ -146,20 +146,20 @@ export function ActiveMarketsPanel({ currentAssetId }: ActiveMarketsPanelProps) 
                 <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                   <AssetIconImg symbol={m.symbol} size={24} />
                   <div>
-                    <span style={{ ...NP.serif, fontSize: 15, fontWeight: 900, color: NP.ink }}>
+                    <span style={{ ...NP.serif, fontSize: 17, fontWeight: 900, color: NP.ink }}>
                       {m.symbol}/USD
                     </span>
-                    <span style={{ ...NP.mono, fontSize: 8, color: '#888', marginLeft: 6 }}>
+                    <span style={{ ...NP.mono, fontSize: 10, color: '#888', marginLeft: 6 }}>
                       #{m.roundNumber}
                     </span>
                   </div>
                 </div>
 
                 <div style={{ textAlign: 'right' }}>
-                  <div style={{ ...NP.mono, fontSize: 12, fontWeight: 900, color: NP.ink }}>
+                  <div style={{ ...NP.mono, fontSize: 14, fontWeight: 900, color: NP.ink }}>
                     {fmtUsd(m.currentPrice)}
                   </div>
-                  <div style={{ ...NP.mono, fontSize: 9, fontWeight: 900, color: isUp ? NP.green : NP.red, marginTop: 2 }}>
+                  <div style={{ ...NP.mono, fontSize: 11, fontWeight: 900, color: isUp ? NP.green : NP.red, marginTop: 2 }}>
                     {isUp ? '▲' : '▼'} {Math.abs(diffPct).toFixed(2)}%
                   </div>
                 </div>
@@ -300,7 +300,7 @@ export function RoundHistoryPanel({
     <div style={{ border: NP.border, background: NP.bg, padding: '20px' }}>
       <div style={{ borderBottom: NP.border, paddingBottom: 10, marginBottom: 15 }}>
         <p style={NP.label}>◆ Market Archive</p>
-        <h3 style={{ ...NP.serif, fontSize: 18, fontWeight: 900, margin: '4px 0 0', color: NP.ink, display: 'flex', alignItems: 'center', gap: 8 }}>
+        <h3 style={{ ...NP.serif, fontSize: 20, fontWeight: 900, margin: '4px 0 0', color: NP.ink, display: 'flex', alignItems: 'center', gap: 8 }}>
           <History size={18} strokeWidth={2.5} style={{ color: '#555' }} />
           Round History
         </h3>
@@ -355,14 +355,14 @@ export function RoundHistoryPanel({
               >
                 {/* Round Header */}
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <span style={{ ...NP.mono, fontSize: 10, fontWeight: 900, color: NP.ink }}>
+                  <span style={{ ...NP.mono, fontSize: 12, fontWeight: 900, color: NP.ink }}>
                     ROUND #{r.roundNumber}
                   </span>
                   {r.resolved ? (
                     <span
                       style={{
                         ...NP.mono,
-                        fontSize: 8,
+                        fontSize: 10,
                         fontWeight: 900,
                         padding: '2px 6px',
                         background: r.upWins ? NP.green : NP.red,
@@ -375,7 +375,7 @@ export function RoundHistoryPanel({
                     <span
                       style={{
                         ...NP.mono,
-                        fontSize: 8,
+                        fontSize: 10,
                         fontWeight: 900,
                         padding: '2px 6px',
                         background: '#888',
@@ -390,14 +390,14 @@ export function RoundHistoryPanel({
                 {/* Price Details */}
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginTop: 2 }}>
                   <div>
-                    <span style={{ ...NP.mono, fontSize: 8, color: '#666', display: 'block' }}>OPEN PRICE</span>
-                    <span style={{ ...NP.mono, fontSize: 11, fontWeight: 'bold', color: NP.ink }}>
+                    <span style={{ ...NP.mono, fontSize: 9.5, color: '#666', display: 'block' }}>OPEN PRICE</span>
+                    <span style={{ ...NP.mono, fontSize: 13, fontWeight: 'bold', color: NP.ink }}>
                       {fmtUsd(r.startPrice)}
                     </span>
                   </div>
                   <div style={{ textAlign: 'right' }}>
-                    <span style={{ ...NP.mono, fontSize: 8, color: '#666', display: 'block' }}>SETTLE PRICE</span>
-                    <span style={{ ...NP.mono, fontSize: 11, fontWeight: 'bold', color: isUp ? NP.green : NP.red }}>
+                    <span style={{ ...NP.mono, fontSize: 9.5, color: '#666', display: 'block' }}>SETTLE PRICE</span>
+                    <span style={{ ...NP.mono, fontSize: 13, fontWeight: 'bold', color: isUp ? NP.green : NP.red }}>
                       {fmtUsd(r.endPrice)}
                     </span>
                   </div>
@@ -414,10 +414,10 @@ export function RoundHistoryPanel({
                     marginTop: 2,
                   }}
                 >
-                  <span style={{ ...NP.mono, fontSize: 9, color: '#666' }}>
+                  <span style={{ ...NP.mono, fontSize: 10.5, color: '#666' }}>
                     Pool: {r.collateralPool.toFixed(2)} TUSDC
                   </span>
-                  <span style={{ ...NP.mono, fontSize: 9, fontWeight: 900, color: isUp ? NP.green : NP.red }}>
+                  <span style={{ ...NP.mono, fontSize: 10.5, fontWeight: 900, color: isUp ? NP.green : NP.red }}>
                     {isUp ? '▲' : '▼'} {Math.abs(diffPct).toFixed(3)}%
                   </span>
                 </div>

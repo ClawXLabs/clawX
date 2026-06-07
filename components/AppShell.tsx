@@ -33,7 +33,7 @@ export default function AppShell({ children }: AppShellProps) {
       <Navbar account={account} onConnect={connectWallet} />
 
       {/* Page content — padded below the two fixed nav bars */}
-      <main style={{ paddingTop: 86 }}>
+      <main style={{ paddingTop: 56 }}>
         {children}
       </main>
     </div>

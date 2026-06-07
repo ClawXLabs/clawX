@@ -402,3 +402,9 @@ a { color: inherit; text-decoration: none; }
   animation: marquee-scroll 28s linear infinite;
 }
 .cp-marquee:hover { animation-play-state: paused; }
+
+@media (max-width: 768px) {
+  .np-stat-cell {
+    padding: 24px 16px !important;
+  }
+}

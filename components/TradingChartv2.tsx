@@ -26,7 +26,7 @@ const NP = {
   mono:  { fontFamily: '"Courier New", Courier, monospace' } as React.CSSProperties,
   serif: { fontFamily: 'Georgia, "Times New Roman", serif' } as React.CSSProperties,
   label: {
-    fontFamily: '"Courier New", Courier, monospace', fontSize: 10, fontWeight: 700,
+    fontFamily: '"Courier New", Courier, monospace', fontSize: 11, fontWeight: 700,
     letterSpacing: '0.14em', textTransform: 'uppercase' as const, color: '#555',
   } as React.CSSProperties,
   bg:    '#FAF8F3',
@@ -85,7 +85,7 @@ function CircularTimer({ msLeft, totalMs = 300_000 }: { msLeft: number; totalMs?
       minWidth: 0,
       height: '100px',
     }}>
-      <span style={{ ...NP.label, fontSize: 8, marginBottom: 6, display: 'block', display: 'flex', alignItems: 'center', gap: 4 }}>
+      <span style={{ ...NP.label, fontSize: 10, marginBottom: 6, display: 'block', display: 'flex', alignItems: 'center', gap: 4 }}>
         <Clock size={10} />
         TIMER
       </span>
@@ -144,7 +144,7 @@ function SentimentDial({ upPool, downPool }: { upPool: number; downPool: number 
       minWidth: 0,
       height: '100px',
     }}>
-      <span style={{ ...NP.label, fontSize: 8, marginBottom: 2, display: 'block' }}>SENTIMENT DIAL</span>
+      <span style={{ ...NP.label, fontSize: 10, marginBottom: 2, display: 'block' }}>SENTIMENT DIAL</span>
       
       <div style={{ position: 'relative', width: 70, height: 36, overflow: 'hidden', marginTop: 4 }}>
         <svg width={70} height={35}>
@@ -186,7 +186,7 @@ function SentimentDial({ upPool, downPool }: { upPool: number; downPool: number 
         </svg>
       </div>
 
-      <div style={{ display: 'flex', justifyContent: 'space-between', width: '100%', ...NP.mono, fontSize: 8.5, fontWeight: 900, marginTop: 2 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', width: '100%', ...NP.mono, fontSize: 10.5, fontWeight: 900, marginTop: 2 }}>
         <span style={{ color: NP.red }}>▲{100 - upPct}% DN</span>
         <span style={{ color: NP.green }}>▲{upPct}% UP</span>
       </div>
@@ -787,16 +787,16 @@ export default function TradingChartv2({
           </span>
         )}
         <AssetIconImg symbol={market.symbol} size={28} />
-        <span style={{ ...NP.serif, fontSize: 24, fontWeight: 900, color: NP.ink }}>
+        <span style={{ ...NP.serif, fontSize: 28, fontWeight: 900, color: NP.ink }}>
           {market.symbol}/USD
         </span>
-        <span style={{ ...NP.mono, fontSize: 10, color: '#444', fontWeight: 'bold', letterSpacing: '0.08em' }}>
+        <span style={{ ...NP.mono, fontSize: 12, color: '#444', fontWeight: 'bold', letterSpacing: '0.08em' }}>
           ROUND #{market.roundNumber}
         </span>
       </div>
       <div style={{ display: 'flex', alignItems: 'center', gap: 20 }}>
         <div style={{ textAlign: 'right' }}>
-          <div style={{ ...NP.serif, fontSize: 26, fontWeight: 900, color: NP.ink, lineHeight: 1 }}>
+          <div style={{ ...NP.serif, fontSize: 32, fontWeight: 900, color: NP.ink, lineHeight: 1 }}>
             {fmtUsd(market.currentPrice)}
           </div>
           <div style={{ ...NP.mono, fontSize: 11, fontWeight: 900, marginTop: 4,
