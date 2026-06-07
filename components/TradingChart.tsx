@@ -343,7 +343,7 @@ export default function TradingChart({ market, history, onTakePosition, onResolv
         <div style={{ textAlign: 'center', padding: '16px 0' }}>
           <div style={{ marginBottom: 16 }}>
             <span style={{ ...NP.serif, fontSize: 18, fontWeight: 900, color: '#0D0B08' }}>
-              Market Resolved: {market.upWins ? 'UP Wins!' : 'DOWN Wins!'}
+              Market Resolved: {(market as any).upWins ? 'UP Wins!' : 'DOWN Wins!'}
             </span>
           </div>
           <button

@@ -85,7 +85,7 @@ function CircularTimer({ msLeft, totalMs = 300_000 }: { msLeft: number; totalMs?
       minWidth: 0,
       height: '100px',
     }}>
-      <span style={{ ...NP.label, fontSize: 10, marginBottom: 6, display: 'block', display: 'flex', alignItems: 'center', gap: 4 }}>
+      <span style={{ ...NP.label, fontSize: 10, marginBottom: 6, display: 'flex', alignItems: 'center', gap: 4 }}>
         <Clock size={10} />
         TIMER
       </span>
@@ -194,6 +194,45 @@ function SentimentDial({ upPool, downPool }: { upPool: number; downPool: number 
   );
 }
 
+/* ─── Historical price walk generator ────────────────────────────── */
+
+/**
+ * Generates a deterministic but realistic-looking price walk
+ * from startPrice to endPrice using a seeded LCG random number generator.
+ * This gives the archive chart a consistent, believable appearance.
+ */
+function buildHistoricalTicks(startPrice: number, endPrice: number, seed: number): PriceTick[] {
+  const POINTS = 60;
+  // Simple LCG seeded PRNG so the chart looks the same every render
+  let s = seed >>> 0;
+  const rand = () => {
+    s = (Math.imul(1664525, s) + 1013904223) >>> 0;
+    return s / 4294967296;
+  };
+
+  const totalMove = endPrice - startPrice;
+  const volatility = Math.abs(totalMove) * 0.35 + startPrice * 0.0008;
+  const ticks: PriceTick[] = [];
+
+  let price = startPrice;
+  for (let i = 0; i < POINTS; i++) {
+    const t = (i / (POINTS - 1)) * 300_000; // spread across 5 minutes
+    const progressBias = (totalMove / POINTS) * 1.0; // trend toward endPrice
+    const noise = (rand() - 0.5) * 2 * volatility;
+    price = price + progressBias + noise;
+    // Clamp so we don't fly wildly off
+    const lo = Math.min(startPrice, endPrice) - Math.abs(totalMove) * 0.5;
+    const hi = Math.max(startPrice, endPrice) + Math.abs(totalMove) * 0.5;
+    price = Math.max(lo, Math.min(hi, price));
+    ticks.push({ t, price });
+  }
+
+  // Force first and last to match exactly
+  ticks[0].price = startPrice;
+  ticks[POINTS - 1].price = endPrice;
+  return ticks;
+}
+
 /* ─── Smooth Area + Line Chart ───────────────────────────────────── */
 
 function LineChart({
@@ -204,6 +243,7 @@ function LineChart({
   width,
   height,
   isHistorical = false,
+  historicalSeed = 42,
 }: {
   history: PriceTick[];
   startPrice: number;
@@ -212,6 +252,7 @@ function LineChart({
   width: number;
   height: number;
   isHistorical?: boolean;
+  historicalSeed?: number;
 }) {
   const PAD_L = 64;
   const PAD_R = 72;  // space for live price tag
@@ -228,15 +269,16 @@ function LineChart({
   const [hoverX, setHoverX] = useState<number | null>(null);
   const svgRef = useRef<SVGSVGElement>(null);
 
-  // If historical, construct a nice editorial zig-zag price line representing the resolved movement
+  // Pan/zoom state
+  const [viewOffset, setViewOffset] = useState(0);   // how many points from the left we've panned
+  const [viewWindow, setViewWindow] = useState<number | null>(null); // visible points count (null = show all)
+  const isDragging = useRef(false);
+  const dragStartX = useRef(0);
+  const dragStartOffset = useRef(0);
+
+  // If historical, build a realistic seeded random walk from startPrice → endPrice
   const effectiveHistory = isHistorical
-    ? [
-        { t: 0, price: startPrice },
-        { t: 25000, price: startPrice + (currentPrice - startPrice) * 0.45 + (startPrice * (isUp ? 0.0015 : -0.0015)) },
-        { t: 50000, price: startPrice + (currentPrice - startPrice) * 0.25 - (startPrice * (isUp ? 0.001 : -0.001)) },
-        { t: 75000, price: startPrice + (currentPrice - startPrice) * 0.8 + (startPrice * (isUp ? 0.0025 : -0.0025)) },
-        { t: 100000, price: currentPrice }
-      ]
+    ? buildHistoricalTicks(startPrice, currentPrice, historicalSeed)
     : history;
 
   // ── Build price range ──
@@ -253,6 +295,12 @@ function LineChart({
   const priceMax = mid + effectiveRange / 2 + padded;
   const priceRange = priceMax - priceMin || 1;
 
+  // Apply pan/zoom windowing
+  const totalPoints = effectiveHistory.length;
+  const winSize = viewWindow !== null ? Math.max(5, Math.min(totalPoints, viewWindow)) : totalPoints;
+  const winOffset = Math.max(0, Math.min(totalPoints - winSize, Math.round(viewOffset)));
+  const visibleHistory = effectiveHistory.slice(winOffset, winOffset + winSize);
+
   const toX = (i: number, total: number) =>
     PAD_L + (total <= 1 ? chartW : (i / (total - 1)) * chartW);
   const toY = (p: number) =>
@@ -268,87 +316,157 @@ function LineChart({
     return { v, y: toY(v) };
   });
 
-  // ── Build SVG paths ──
+  // ── Build SVG paths (using visible window) ──
   let linePath = '';
   let areaPath = '';
-  if (effectiveHistory.length >= 2) {
-    linePath = buildSmoothPath(effectiveHistory, toX, toY);
-    areaPath = `${linePath} L ${toX(effectiveHistory.length - 1, effectiveHistory.length).toFixed(1)},${(PAD_T + chartH).toFixed(1)} L ${toX(0, effectiveHistory.length).toFixed(1)},${(PAD_T + chartH).toFixed(1)} Z`;
+  if (visibleHistory.length >= 2) {
+    linePath = buildSmoothPath(visibleHistory, toX, toY);
+    areaPath = `${linePath} L ${toX(visibleHistory.length - 1, visibleHistory.length).toFixed(1)},${(PAD_T + chartH).toFixed(1)} L ${toX(0, visibleHistory.length).toFixed(1)},${(PAD_T + chartH).toFixed(1)} Z`;
   }
 
   // ── X-axis time labels ──
   const timeLabels: { x: number; label: string }[] = [];
-  if (!isHistorical && effectiveHistory.length >= 2) {
-    const step = Math.max(1, Math.floor(effectiveHistory.length / 5));
-    for (let i = 0; i < effectiveHistory.length; i += step) {
+  if (!isHistorical && visibleHistory.length >= 2) {
+    const step = Math.max(1, Math.floor(visibleHistory.length / 5));
+    for (let i = 0; i < visibleHistory.length; i += step) {
       timeLabels.push({
-        x: toX(i, effectiveHistory.length),
-        label: fmtTime(effectiveHistory[i].t),
+        x: toX(i, visibleHistory.length),
+        label: fmtTime(visibleHistory[i].t),
       });
     }
   } else if (isHistorical) {
-    timeLabels.push({ x: PAD_L, label: 'START' });
-    timeLabels.push({ x: PAD_L + chartW, label: 'SETTLED' });
+    // Show time labels as minutes into the round (0m → 5m)
+    const step = Math.max(1, Math.floor(visibleHistory.length / 5));
+    for (let i = 0; i < visibleHistory.length; i += step) {
+      const minSec = Math.round(visibleHistory[i].t / 1000);
+      const m = Math.floor(minSec / 60);
+      const s = minSec % 60;
+      timeLabels.push({
+        x: toX(i, visibleHistory.length),
+        label: `${m}:${s.toString().padStart(2, '0')}`,
+      });
+    }
   }
 
-  // ── Live dot position ──
-  const lastX = effectiveHistory.length >= 1 ? toX(effectiveHistory.length - 1, effectiveHistory.length) : PAD_L + chartW;
-  const lastY = effectiveHistory.length >= 1 ? toY(effectiveHistory[effectiveHistory.length - 1].price) : liveY;
+  // ── Live dot position (uses visible window) ──
+  const lastX = visibleHistory.length >= 1 ? toX(visibleHistory.length - 1, visibleHistory.length) : PAD_L + chartW;
+  const lastY = visibleHistory.length >= 1 ? toY(visibleHistory[visibleHistory.length - 1].price) : liveY;
 
-  // ── Mouse movements ──
+  // ── Mouse/touch interaction: hover crosshair + pan + zoom ──
   const handleMouseMove = (e: React.MouseEvent<SVGSVGElement, MouseEvent>) => {
-    if (!svgRef.current || effectiveHistory.length < 2) return;
+    if (!svgRef.current || visibleHistory.length < 2) return;
+
+    if (isDragging.current) {
+      const rect = svgRef.current.getBoundingClientRect();
+      const dx = e.clientX - dragStartX.current;
+      const scaleX = width / rect.width;
+      const svgDx = dx * scaleX;
+      // Each pixel of drag = how many data points?
+      const pointsPerPx = (visibleHistory.length - 1) / chartW;
+      const newOffset = dragStartOffset.current - svgDx * pointsPerPx;
+      setViewOffset(Math.max(0, Math.min(totalPoints - winSize, newOffset)));
+      return;
+    }
+
     const rect = svgRef.current.getBoundingClientRect();
     const mouseX = e.clientX - rect.left;
-    
-    // Scale to viewBox coordinates
     const scaleX = width / rect.width;
     const svgX = mouseX * scaleX;
-    
+
     if (svgX < PAD_L || svgX > PAD_L + chartW) {
       setHoveredPoint(null);
       setHoverX(null);
       return;
     }
-    
+
     const ratio = (svgX - PAD_L) / chartW;
     const idx = Math.min(
-      effectiveHistory.length - 1,
-      Math.max(0, Math.round(ratio * (effectiveHistory.length - 1)))
+      visibleHistory.length - 1,
+      Math.max(0, Math.round(ratio * (visibleHistory.length - 1)))
     );
-    
-    setHoveredPoint(effectiveHistory[idx]);
-    setHoverX(toX(idx, effectiveHistory.length));
+
+    setHoveredPoint(visibleHistory[idx]);
+    setHoverX(toX(idx, visibleHistory.length));
+  };
+
+  const handleMouseDown = (e: React.MouseEvent<SVGSVGElement>) => {
+    if (!svgRef.current) return;
+    const rect = svgRef.current.getBoundingClientRect();
+    const svgX = (e.clientX - rect.left) * (width / rect.width);
+    if (svgX < PAD_L || svgX > PAD_L + chartW) return;
+    isDragging.current = true;
+    dragStartX.current = e.clientX;
+    dragStartOffset.current = winOffset;
+    setHoveredPoint(null);
+    setHoverX(null);
+  };
+
+  const handleMouseUp = () => {
+    isDragging.current = false;
+  };
+
+  const handleWheel = (e: React.WheelEvent<SVGSVGElement>) => {
+    if (!svgRef.current) return;
+    e.preventDefault();
+    const factor = e.deltaY > 0 ? 1.15 : 0.87; // zoom out / in
+    const newWin = Math.round((viewWindow ?? totalPoints) * factor);
+    const clamped = Math.max(5, Math.min(totalPoints, newWin));
+    setViewWindow(clamped);
+    // Adjust offset so zoom centres around mouse position
+    const rect = svgRef.current.getBoundingClientRect();
+    const svgX = (e.clientX - rect.left) * (width / rect.width);
+    const ratio = Math.max(0, Math.min(1, (svgX - PAD_L) / chartW));
+    const mousePoint = winOffset + ratio * winSize;
+    const newOffset = mousePoint - ratio * clamped;
+    setViewOffset(Math.max(0, Math.min(totalPoints - clamped, newOffset)));
   };
 
   const handleMouseLeave = () => {
+    isDragging.current = false;
     setHoveredPoint(null);
     setHoverX(null);
   };
 
   if (width <= 0 || height <= 0) return null;
 
+  // Zoom reset double-click
+  const handleDoubleClick = () => {
+    setViewWindow(null);
+    setViewOffset(0);
+  };
+
   // Hovered coordinates
   const hoverY = hoveredPoint ? toY(hoveredPoint.price) : 0;
-  
+
+  // Show zoom/pan hint when zoomed in
+  const isZoomed = viewWindow !== null && viewWindow < totalPoints;
+
   // Tooltip position & bounds safety
-  const tooltipW = 120;
-  const tooltipH = 42;
+  const tooltipW = 130;
+  const tooltipH = 46;
   let tooltipX = hoverX ? hoverX - tooltipW / 2 : 0;
   let tooltipY = hoverY - tooltipH - 10;
   if (hoverX) {
     if (tooltipX < PAD_L + 4) tooltipX = PAD_L + 4;
     if (tooltipX + tooltipW > PAD_L + chartW - 4) tooltipX = PAD_L + chartW - 4 - tooltipW;
-    if (tooltipY < PAD_T + 4) tooltipY = hoverY + 12; // flip below if at top
+    if (tooltipY < PAD_T + 4) tooltipY = hoverY + 12;
   }
 
   return (
     <svg
       ref={svgRef}
       viewBox={`0 0 ${width} ${height}`}
-      style={{ width: '100%', height, display: 'block', cursor: effectiveHistory.length >= 2 ? 'crosshair' : 'default' }}
+      style={{
+        width: '100%', height, display: 'block',
+        cursor: isDragging.current ? 'grabbing' : (visibleHistory.length >= 2 ? 'crosshair' : 'default'),
+        userSelect: 'none',
+      }}
       onMouseMove={handleMouseMove}
+      onMouseDown={handleMouseDown}
+      onMouseUp={handleMouseUp}
       onMouseLeave={handleMouseLeave}
+      onDoubleClick={handleDoubleClick}
+      onWheel={handleWheel}
       aria-hidden
     >
       <defs>
@@ -421,15 +539,15 @@ function LineChart({
         )}
 
         {/* Data point dots — sampled for performance */}
-        {!isHistorical && effectiveHistory.length >= 2 && (() => {
-          const step = Math.max(1, Math.floor(effectiveHistory.length / 20));
+        {visibleHistory.length >= 2 && (() => {
+          const step = Math.max(1, Math.floor(visibleHistory.length / 20));
           const dots = [];
-          for (let i = 0; i < effectiveHistory.length; i += step) {
+          for (let i = 0; i < visibleHistory.length; i += step) {
             dots.push(
               <circle
                 key={i}
-                cx={toX(i, effectiveHistory.length).toFixed(1)}
-                cy={toY(effectiveHistory[i].price).toFixed(1)}
+                cx={toX(i, visibleHistory.length).toFixed(1)}
+                cy={toY(visibleHistory[i].price).toFixed(1)}
                 r="2.5"
                 fill={NP.bg}
                 stroke={lineColor}
@@ -493,6 +611,25 @@ function LineChart({
           <circle cx={lastX.toFixed(1)} cy={lastY.toFixed(1)} r="4" fill="#0D0B08" />
           <circle cx={lastX.toFixed(1)} cy={lastY.toFixed(1)} r="2" fill={lineColor} />
         </>
+      )}
+
+      {/* ── Zoom hint / reset indicator ── */}
+      {isZoomed && (
+        <g style={{ pointerEvents: 'none' }}>
+          <rect
+            x={PAD_L + chartW - 110} y={PAD_T + 4}
+            width={106} height={18}
+            fill="rgba(13,11,8,0.72)" rx={2}
+          />
+          <text
+            x={PAD_L + chartW - 57} y={PAD_T + 14}
+            textAnchor="middle" dominantBaseline="middle"
+            fill="#FAF8F3" fontSize="8" fontFamily="Courier New, monospace" fontWeight="900"
+            letterSpacing="0.08em"
+          >
+            ZOOMED · DBL-CLICK RESET
+          </text>
+        </g>
       )}
 
       {/* ── X-axis frame ── */}
@@ -571,11 +708,19 @@ function LineChart({
             </text>
             {/* Time text */}
             <text
-              x={tooltipW / 2} y="29"
+              x={tooltipW / 2} y="31"
               textAnchor="middle" dominantBaseline="middle"
               fill="#555" fontSize="7.5" fontFamily="Courier New, monospace" fontWeight="bold"
             >
-              {!isHistorical ? fmtTime(hoveredPoint.t) : (hoveredPoint.t === 0 ? 'Start' : hoveredPoint.t === 100000 ? 'Settle' : 'Mid')}
+              {!isHistorical
+                ? fmtTime(hoveredPoint.t)
+                : (() => {
+                    const s = Math.round(hoveredPoint.t / 1000);
+                    const m = Math.floor(s / 60);
+                    const sec = s % 60;
+                    return `T+${m}:${sec.toString().padStart(2, '0')}`;
+                  })()
+              }
             </text>
           </g>
         </g>
@@ -819,22 +964,56 @@ export default function TradingChartv2({
   /* ── STATS GRID ── */
   const statsGrid = (
     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', borderTop: NP.border }}>
-      {[
-        { label: 'Open Price',  value: fmtUsd(market.startPrice) },
-        { label: 'UP Pool',     value: `${market.upPool.toFixed(2)} ${tokenSymbol}`,   color: NP.green },
-        { label: 'DOWN Pool',   value: `${market.downPool.toFixed(2)} ${tokenSymbol}`, color: NP.red },
-        { label: isHistorical ? 'Final Result' : 'Est. Payout', value: isHistorical ? (priceIsUp ? '▲ UP WINS' : '▼ DOWN WINS') : `${mult}×`, color: isHistorical ? (priceIsUp ? NP.green : NP.red) : NP.ink },
-      ].map((s, i) => (
-        <div key={s.label} style={{
-          padding: '14px 16px',
-          borderRight: i < 3 ? NP.border : 'none',
-        }}>
-          <div style={NP.label}>{s.label}</div>
-          <div style={{ ...NP.mono, fontSize: 13, fontWeight: 900, color: s.color ?? NP.ink, marginTop: 6 }}>
-            {s.value}
-          </div>
+      {/* 1. Price To Beat */}
+      <div style={{ padding: '14px 16px', borderRight: NP.border }}>
+        <div style={NP.label}>Price To Beat</div>
+        <div style={{ ...NP.mono, fontSize: 14, fontWeight: 900, color: NP.ink, marginTop: 6 }}>
+          {fmtUsd(market.startPrice)}
         </div>
-      ))}
+      </div>
+
+      {/* 2. Current Price */}
+      <div style={{ padding: '14px 16px', borderRight: NP.border }}>
+        <div style={NP.label}>Current Price</div>
+        <div style={{ ...NP.mono, fontSize: 14, fontWeight: 900, color: priceIsUp ? NP.green : NP.red, marginTop: 6 }}>
+          {fmtUsd(market.currentPrice)}
+        </div>
+      </div>
+
+      {/* 3. Direction */}
+      <div style={{
+        borderRight: NP.border,
+        display: 'flex',
+        flexDirection: 'column',
+        justifyContent: 'center',
+        alignItems: 'center',
+        background: priceIsUp ? 'rgba(34, 197, 94, 0.08)' : 'rgba(239, 68, 68, 0.08)',
+        minHeight: '62px',
+        padding: '6px 10px'
+      }}>
+        <div style={{ ...NP.mono, fontSize: 8, fontWeight: 900, color: '#666', letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: 2 }}>
+          Direction
+        </div>
+        <div style={{
+          ...NP.mono,
+          fontSize: 22,
+          fontWeight: 900,
+          color: priceIsUp ? NP.green : NP.red,
+          textAlign: 'center',
+          letterSpacing: '0.06em',
+          lineHeight: '1'
+        }}>
+          {priceIsUp ? 'UP' : 'DOWN'}
+        </div>
+      </div>
+
+      {/* 4. Pool */}
+      <div style={{ padding: '14px 16px' }}>
+        <div style={NP.label}>Pool</div>
+        <div style={{ ...NP.mono, fontSize: 14, fontWeight: 900, color: NP.ink, marginTop: 6 }}>
+          {totalPool.toFixed(2)} {tokenSymbol}
+        </div>
+      </div>
     </div>
   );
 
@@ -1229,6 +1408,7 @@ export default function TradingChartv2({
         width={isDesktop ? chartWidth - 360 - 44 : chartWidth - 40}
         height={isDesktop ? 300 : 200}
         isHistorical={isHistorical}
+        historicalSeed={market.roundId}
       />
     </div>
   );

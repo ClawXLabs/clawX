@@ -19,7 +19,7 @@ function maybeSeedFeed() {
     const a = AGENTS[i % AGENTS.length];
     const b = AGENTS[(i + 1) % AGENTS.length];
     const template = CHATTER[i % CHATTER.length];
-    const text = template.length === 2 ? template(a, b) : template(a);
+    const text = (template as any).length === 2 ? (template as any)(a, b) : (template as any)(a);
     seeded.push({
       id: `seed-${i}`,
       at: now - i * 47,
