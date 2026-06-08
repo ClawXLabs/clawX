@@ -4,8 +4,6 @@ import { verifyAgentDelegate } from '../../../utils/agents/delegate';
 import { appendFeedMessage, appendTradeLog, getEnrollment, getDisplayName, setEnrollment } from '../../../utils/agents/store';
 import { agentChatterText } from '../../../utils/agents/strategy';
 import { recordTradePlanned } from '../../../utils/agents/brain';
-import { pickPeerAgent, peerTradeReaction } from '../../../utils/agents/chatter';
-import { AGENTS } from '../../../utils/agents/config';
 import { isRunnerAuthorized } from '../../../utils/agents/runnerAuth';
 
 const MARKET_ABI = [
@@ -44,6 +42,9 @@ export default async function handler(req, res) {
   const enrollment = getEnrollment(user);
   if (!enrollment || enrollment.status !== 'active') {
     return res.status(404).json({ error: 'No active enrollment' });
+  }
+  if (enrollment.paused) {
+    return res.status(400).json({ error: 'Agent is paused' });
   }
 
   const contractAddress = process.env.NEXT_PUBLIC_CONTRACT_ADDRESS;
@@ -99,7 +100,6 @@ export default async function handler(req, res) {
     const receipt = await tx.wait();
 
     const agent = getAgentById(enrollment.agentId);
-    const peer = pickPeerAgent(enrollment.agentId) || AGENTS.find((a) => a.id !== enrollment.agentId);
     appendTradeLog(user, {
       at: Math.floor(Date.now() / 1000),
       action: 'BUY',
@@ -120,7 +120,7 @@ export default async function handler(req, res) {
     });
 
     if (agent) {
-      const feedText = thought || agentChatterText(agent, peer, symbol, isUp, thought);
+      const feedText = thought || agentChatterText(agent, null, symbol, isUp, thought);
       const pilotName = getDisplayName(user);
       appendFeedMessage({
         agentId: agent.id,
@@ -133,19 +133,6 @@ export default async function handler(req, res) {
         pilotName: pilotName || undefined,
         kind: 'trade',
       });
-      if (peer && Math.random() > 0.6) {
-        appendFeedMessage({
-          agentId: peer.id,
-          agentName: peer.name,
-          handle: peer.handle,
-          emoji: peer.emoji,
-          color: peer.color,
-          text: peerTradeReaction(peer, agent, symbol, isUp, enrollment.tradeSizeTusdc),
-          pilotWallet: user,
-          pilotName: pilotName || undefined,
-          kind: 'peer',
-        });
-      }
     }
 
     return res.status(200).json({

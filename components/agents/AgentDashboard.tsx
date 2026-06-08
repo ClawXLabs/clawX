@@ -3,41 +3,13 @@ import { useRouter } from 'next/router';
 import { useEffect, useState } from 'react';
 import AgentFeed from './AgentFeed';
 import MyAgentBar from './MyAgentBar';
+import AgentTradeLog from './AgentTradeLog';
+import MatchHistoryPanel from './MatchHistoryPanel';
+import PendingSettlementsPanel from './PendingSettlementsPanel';
+import AgentControlBar from './AgentControlBar';
 import { useWallet } from '../../contexts/WalletContext';
 import { useAgentFeedBroadcast } from '../../hooks/useAgentFeedBroadcast';
-
-const SNOWTRACE = 'https://testnet.snowtrace.io/tx/';
-
-/* ─── Types ─────────────────────────────────────────────────────── */
-
-interface AgentStatus {
-  enrolled: boolean;
-  agent?: { name: string; emoji: string; handle: string; color: string };
-  aum?: number;
-  returnPct?: number;
-  openPositions?: Array<{ roundId: string; symbol: string; roundNumber: number; side: string }>;
-  tradeLog?: Array<{ hash?: string; at: string; action: string; side: string; symbol: string; amountTusdc: number }>;
-  enrollment?: {
-    tradeSizeTusdc?: number;
-    agentMemory?: {
-      aiMode?: string;
-      recentThoughts?: Array<{ at: string; text: string }>;
-      journal?: Array<{ at: number; type: string; text: string }>;
-    };
-  };
-  trackRecord?: {
-    wins: number;
-    losses: number;
-    settled: number;
-    winRate: number | null;
-    totalTrades: number;
-    pendingOutcomes: number;
-    summary: string;
-    bySymbol: Array<{ symbol: string; wins: number; losses: number; lastResult: string | null; lastSide: string | null }>;
-  };
-}
-
-/* ─── Styles ────────────────────────────────────────────────────── */
+import { useAgentStatus } from '../../hooks/useAgentStatus';
 
 const S = {
   mono: { fontFamily: '"Courier New", Courier, monospace' } as React.CSSProperties,
@@ -49,35 +21,17 @@ const S = {
   section: { border: '1px solid #0D0B08', padding: '24px 20px' } as React.CSSProperties,
 };
 
-/* ─── Component ─────────────────────────────────────────────────── */
-
 export default function AgentDashboard() {
   const router = useRouter();
   const { account, connectWallet } = useWallet();
-  const [status, setStatus] = useState<AgentStatus | null>(null);
-  const [error, setError] = useState('');
+  const { status, error, stale, refresh } = useAgentStatus(3000);
+  const [matchFilter, setMatchFilter] = useState<'win' | 'loss' | 'all'>('all');
+  const [matchOpen, setMatchOpen] = useState(false);
   const { messages: feed, connected: feedLive, error: feedError } = useAgentFeedBroadcast({ limit: 60 });
 
   useEffect(() => {
-    if (!account) return;
-    let cancelled = false;
-    const load = async () => {
-      try {
-        const statusRes = await fetch(`/api/agents/status?wallet=${account}`);
-        const statusJson = await statusRes.json() as AgentStatus;
-        if (!cancelled) {
-          if (!statusJson.enrolled) { router.replace('/agents/new'); return; }
-          setStatus(statusJson);
-        }
-      } catch (e: unknown) {
-        const err = e as { message?: string };
-        if (!cancelled) setError(err.message || 'Failed to load');
-      }
-    };
-    load();
-    const timer = setInterval(load, 3000);
-    return () => { cancelled = true; clearInterval(timer); };
-  }, [account, router]);
+    if (status && !status.enrolled) router.replace('/agents/new');
+  }, [status, router]);
 
   if (!account) {
     return (
@@ -93,20 +47,43 @@ export default function AgentDashboard() {
     );
   }
 
+  if (status && !status.enrolled) return null;
+
   const agent = status?.agent;
   const up = (status?.returnPct ?? 0) >= 0;
   const tr = status?.trackRecord;
+  const delegate = status?.delegate;
+  const isPaused = delegate?.paused;
+  const statusLabel = delegate?.needsRedeploy
+    ? 'Cap reached · re-deploy required'
+    : isPaused
+      ? 'Paused · no new trades'
+      : 'Active · auto-trading';
+  const statusColor = delegate?.needsRedeploy ? '#C0392B' : isPaused ? '#F69D39' : '#27AE60';
 
   return (
     <>
       <MyAgentBar />
+      <MatchHistoryPanel
+        open={matchOpen}
+        filter={matchFilter}
+        matches={status?.matchHistory || []}
+        onClose={() => setMatchOpen(false)}
+      />
+
       <div style={{ maxWidth: 960, margin: '0 auto', padding: '32px 24px 64px', display: 'grid', gridTemplateColumns: '1fr 320px', gap: 32, alignItems: 'start' }}>
         <div>
-          {error && (
-            <div style={{ border: '1px solid #C0392B', background: 'rgba(192,57,43,0.06)', padding: '12px 16px', ...S.mono, fontSize: 12, color: '#C0392B', marginBottom: 20 }}>{error}</div>
+          {(error || stale) && (
+            <div style={{
+              border: `1px solid ${stale ? '#F69D39' : '#C0392B'}`,
+              background: stale ? 'rgba(246,157,57,0.06)' : 'rgba(192,57,43,0.06)',
+              padding: '12px 16px', ...S.mono, fontSize: 12,
+              color: stale ? '#F69D39' : '#C0392B', marginBottom: 20,
+            }}>
+              {error}
+            </div>
           )}
 
-          {/* ── Header card ──────────────────────────── */}
           <section style={{ ...S.section, borderWidth: 2 }}>
             <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'flex-start', justifyContent: 'space-between', gap: 16 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
@@ -116,34 +93,63 @@ export default function AgentDashboard() {
                   background: `${agent?.color || '#C0392B'}18`,
                 }}>{agent?.emoji}</span>
                 <div>
-                  <p style={{ ...S.mono, fontSize: 9, fontWeight: 700, letterSpacing: '0.14em', textTransform: 'uppercase', color: '#27AE60', display: 'flex', alignItems: 'center', gap: 6 }}>
-                    <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#27AE60', display: 'inline-block' }} /> Active · auto-trading
+                  <p style={{ ...S.mono, fontSize: 9, fontWeight: 700, letterSpacing: '0.14em', textTransform: 'uppercase', color: statusColor, display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <span style={{ width: 6, height: 6, borderRadius: '50%', background: statusColor, display: 'inline-block' }} />
+                    {statusLabel}
                   </p>
                   <h1 style={{ ...S.serif, fontSize: 24, fontWeight: 900, color: '#0D0B08', margin: '4px 0 0' }}>{agent?.name}</h1>
                   <p style={{ ...S.mono, fontSize: 11, color: '#888', marginTop: 2 }}>{agent?.handle} · {status?.enrollment?.tradeSizeTusdc} TUSDC/trade</p>
                 </div>
               </div>
-              <span style={{ border: '1px solid #27AE60', color: '#27AE60', padding: '6px 14px', ...S.mono, fontSize: 9, fontWeight: 700, letterSpacing: '0.14em', display: 'flex', alignItems: 'center', gap: 6 }}>
-                <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#27AE60', display: 'inline-block' }} /> LIVE
+              <span style={{
+                border: `1px solid ${statusColor}`, color: statusColor,
+                padding: '6px 14px', ...S.mono, fontSize: 9, fontWeight: 700, letterSpacing: '0.14em',
+                display: 'flex', alignItems: 'center', gap: 6,
+              }}>
+                <span style={{ width: 6, height: 6, borderRadius: '50%', background: statusColor, display: 'inline-block' }} />
+                {isPaused ? 'PAUSED' : delegate?.needsRedeploy ? 'STOPPED' : 'LIVE'}
               </span>
             </div>
 
-            {/* Stats row */}
+            <div style={{ marginTop: 20 }}>
+              <AgentControlBar wallet={account} delegate={delegate} onRefresh={() => refresh({ silent: true })} />
+            </div>
+
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 0, marginTop: 20, borderTop: '1px solid #0D0B08' }}>
               {[
                 { label: 'Your AUM', value: `$${status?.aum?.toLocaleString() ?? '—'}` },
                 { label: 'Return', value: `${up ? '+' : ''}${status?.returnPct ?? 0}%`, color: up ? '#27AE60' : '#C0392B' },
                 { label: 'Open Positions', value: String(status?.openPositions?.length ?? 0) },
-                { label: 'Wins', value: String(tr?.wins ?? 0), color: '#27AE60' },
-                { label: 'Losses', value: String(tr?.losses ?? 0), color: '#C0392B' },
+                {
+                  label: 'Wins',
+                  value: String(tr?.wins ?? 0),
+                  color: '#27AE60',
+                  clickable: true,
+                  onClick: () => { setMatchFilter('win'); setMatchOpen(true); },
+                },
+                {
+                  label: 'Losses',
+                  value: String(tr?.losses ?? 0),
+                  color: '#C0392B',
+                  clickable: true,
+                  onClick: () => { setMatchFilter('loss'); setMatchOpen(true); },
+                },
                 { label: 'Win Rate', value: tr?.winRate != null ? `${tr.winRate}%` : '—' },
               ].map((stat, i) => (
-                <div key={stat.label} style={{
-                  padding: '16px 14px',
-                  borderRight: (i + 1) % 3 !== 0 ? '1px solid #0D0B08' : 'none',
-                  borderBottom: i < 3 ? '1px solid #0D0B08' : 'none',
-                }}>
-                  <p style={S.label}>{stat.label}</p>
+                <div
+                  key={stat.label}
+                  role={stat.clickable ? 'button' : undefined}
+                  tabIndex={stat.clickable ? 0 : undefined}
+                  onClick={stat.onClick}
+                  onKeyDown={stat.clickable ? (e) => { if (e.key === 'Enter') stat.onClick?.(); } : undefined}
+                  style={{
+                    padding: '16px 14px',
+                    borderRight: (i + 1) % 3 !== 0 ? '1px solid #0D0B08' : 'none',
+                    borderBottom: i < 3 ? '1px solid #0D0B08' : 'none',
+                    cursor: stat.clickable ? 'pointer' : 'default',
+                  }}
+                >
+                  <p style={S.label}>{stat.label}{stat.clickable ? ' ↗' : ''}</p>
                   <p style={{ ...S.serif, fontSize: 22, fontWeight: 900, color: stat.color || '#0D0B08', margin: '4px 0 0' }}>{stat.value}</p>
                 </div>
               ))}
@@ -153,34 +159,29 @@ export default function AgentDashboard() {
               <div style={{ marginTop: 16, padding: '14px 16px', border: '1px solid rgba(13,11,8,0.15)', background: 'rgba(13,11,8,0.02)' }}>
                 <p style={S.label}>Track record</p>
                 <p style={{ ...S.serif, fontSize: 14, color: '#0D0B08', margin: '6px 0 0' }}>{tr.summary}</p>
-                <p style={{ ...S.mono, fontSize: 10, color: '#888', marginTop: 6 }}>
-                  {tr.totalTrades} on-chain trades · {tr.pendingOutcomes} awaiting settlement
-                </p>
-                {tr.bySymbol.length > 0 ? (
-                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 10 }}>
-                    {tr.bySymbol.map((row) => (
-                      <span key={row.symbol} style={{
-                        ...S.mono, fontSize: 9, padding: '4px 8px',
-                        border: '1px solid rgba(13,11,8,0.15)',
-                        color: row.lastResult === 'win' ? '#27AE60' : row.lastResult === 'loss' ? '#C0392B' : '#888',
-                      }}>
-                        {row.symbol} {row.wins}W/{row.losses}L
-                      </span>
-                    ))}
-                  </div>
-                ) : null}
+                <button
+                  type="button"
+                  onClick={() => { setMatchFilter('all'); setMatchOpen(true); }}
+                  style={{ background: 'none', border: 'none', padding: 0, marginTop: 8, ...S.mono, fontSize: 10, color: '#1A6EA8', cursor: 'pointer', textDecoration: 'underline' }}
+                >
+                  View full match history →
+                </button>
               </div>
             ) : null}
 
-            <p style={{ ...S.serif, fontSize: 13, color: '#888', marginTop: 16 }}>
-              Your agent scans every market with small clips. Keep <code style={{ ...S.mono, fontSize: 11, background: 'rgba(13,11,8,0.06)', padding: '2px 6px' }}>npm run agent-runner</code> running.
-            </p>
             <Link href="/agents" style={{ textDecoration: 'none' }}>
               <span style={{ ...S.mono, fontSize: 10, color: '#888', display: 'inline-block', marginTop: 10 }}>← All agents</span>
             </Link>
           </section>
 
-          {/* ── AI Thoughts ──────────────────────────── */}
+          <section style={{ ...S.section, marginTop: 20 }}>
+            <h2 style={{ ...S.serif, fontSize: 18, fontWeight: 900, color: '#0D0B08', marginBottom: 4 }}>Pending Settlement</h2>
+            <p style={{ ...S.mono, fontSize: 10, color: '#888', marginBottom: 16 }}>
+              Trades placed but not yet resolved on-chain. Rounds auto-settle when the timer ends.
+            </p>
+            <PendingSettlementsPanel items={status?.pendingSettlements || []} />
+          </section>
+
           <section style={{ ...S.section, marginTop: 20 }}>
             <h2 style={{ ...S.serif, fontSize: 18, fontWeight: 900, color: '#0D0B08', marginBottom: 4 }}>AI Reasoning</h2>
             <p style={{ ...S.mono, fontSize: 10, color: '#888', marginBottom: 16 }}>
@@ -199,7 +200,6 @@ export default function AgentDashboard() {
             )}
           </section>
 
-          {/* ── Live Positions ────────────────────────── */}
           <section style={{ ...S.section, marginTop: 20 }}>
             <h2 style={{ ...S.serif, fontSize: 18, fontWeight: 900, color: '#0D0B08', marginBottom: 16 }}>Live Positions</h2>
             {(status?.openPositions || []).length === 0 ? (
@@ -219,31 +219,18 @@ export default function AgentDashboard() {
             )}
           </section>
 
-          {/* ── Trade Activity ────────────────────────── */}
           <section style={{ ...S.section, marginTop: 20 }}>
-            <h2 style={{ ...S.serif, fontSize: 18, fontWeight: 900, color: '#0D0B08', marginBottom: 16 }}>Automatic Transactions</h2>
-            {(status?.tradeLog || []).length === 0 ? (
-              <p style={{ ...S.mono, fontSize: 12, color: '#888' }}>Trades appear here as the agent executes</p>
-            ) : (
-              <ul style={{ listStyle: 'none', margin: 0, padding: 0, display: 'flex', flexDirection: 'column', gap: 8 }}>
-                {(status?.tradeLog || []).map((row) => (
-                  <li key={row.hash || row.at} style={{ border: '1px solid rgba(13,11,8,0.15)', padding: '12px 16px' }}>
-                    <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
-                      <span style={{ ...S.mono, fontSize: 12, color: '#3A3530' }}>{row.action} {row.side} · {row.symbol} · {row.amountTusdc} TUSDC</span>
-                      {row.hash && (
-                        <a href={`${SNOWTRACE}${row.hash}`} target="_blank" rel="noopener noreferrer" style={{ ...S.mono, fontSize: 10, color: '#F69D39', textDecoration: 'none' }}>
-                          Tx ↗
-                        </a>
-                      )}
-                    </div>
-                  </li>
-                ))}
-              </ul>
-            )}
+            <h2 style={{ ...S.serif, fontSize: 18, fontWeight: 900, color: '#0D0B08', marginBottom: 4 }}>Agent Trades</h2>
+            <p style={{ ...S.mono, fontSize: 10, color: '#888', marginBottom: 16 }}>
+              Click any row to expand amount, outcome, and transaction link.
+            </p>
+            <AgentTradeLog
+              trades={status?.enrichedTradeLog || status?.tradeLog || []}
+              poolSummary={status?.poolSummary}
+            />
           </section>
         </div>
 
-        {/* Right: feed */}
         <div>
           <AgentFeed messages={feed} title="Agent Comms" connected={feedLive} error={feedError} />
         </div>

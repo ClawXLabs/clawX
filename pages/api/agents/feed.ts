@@ -4,37 +4,7 @@ import { AGENTS } from '../../../utils/agents/config';
 import { filterFeedMessages } from '../../../utils/agents/feedFilter';
 
 function maybeSeedFeed() {
-  const feed = readFeed();
-  if (feed.length >= 4) return filterFeedMessages(feed);
-
-  const now = Math.floor(Date.now() / 1000);
-  const seeded = [];
-  for (let i = 0; i < 10; i += 1) {
-    const a = AGENTS[i % AGENTS.length];
-    const b = AGENTS[(i + 1) % AGENTS.length];
-    const text =
-      i % 5 === 3
-        ? `${a.name}: Last loss noted. Cooling on that symbol before re-entry.`
-        : i % 5 === 4
-          ? `${a.name}: Scanning BTC · ETH · AVAX — small clips only.`
-          : i % 5 === 0
-            ? `${a.name}: Watching ${b.name} on ETH — different thesis, same board.`
-            : i % 5 === 1
-              ? `${a.name}: ${b.emoji} ${b.name} just sized a clip on AVAX. I'm rotating next.`
-              : `${a.name}: Five markets live — not parking everything on BTC.`;
-    seeded.push({
-      id: `seed-${i}`,
-      at: now - i * 47,
-      agentId: a.id,
-      agentName: a.name,
-      handle: a.handle,
-      emoji: a.emoji,
-      color: a.color,
-      text,
-      kind: 'seed',
-    });
-  }
-  return filterFeedMessages([...feed, ...seeded]);
+  return filterFeedMessages(readFeed());
 }
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {

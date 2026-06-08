@@ -1,7 +1,13 @@
 import { ethers } from 'ethers';
 import { getAgentById } from '../../../utils/agents/config';
-import { getEnrollment } from '../../../utils/agents/store';
+import { getEnrollment, reconcileTradeLog } from '../../../utils/agents/store';
 import { buildTrackRecord } from '../../../utils/agents/trackRecord';
+import {
+  buildDelegateStatus,
+  buildEnrichedTradeLog,
+  buildMatchHistory,
+  buildPendingSettlements,
+} from '../../../utils/agents/tradeHistory';
 import { readOpenPositions, readWalletAum } from '../../../utils/agents/stats';
 import { CONTRACT_ADDRESS, FUJI_RPC_PUBLIC } from '../../../utils/contract';
 
@@ -17,7 +23,7 @@ export default async function handler(req, res) {
   }
 
   const user = ethers.getAddress(String(wallet));
-  const enrollment = getEnrollment(user);
+  let enrollment = getEnrollment(user);
   if (!enrollment || enrollment.status !== 'active') {
     const trades = (enrollment?.tradeLog || []).filter((t) => t.action === 'BUY');
     return res.status(200).json({
@@ -27,7 +33,10 @@ export default async function handler(req, res) {
     });
   }
 
+  enrollment = reconcileTradeLog(enrollment);
   const agent = getAgentById(enrollment.agentId);
+  const enriched = buildEnrichedTradeLog(enrollment);
+  const delegate = buildDelegateStatus(enrollment);
   const contractAddress = process.env.NEXT_PUBLIC_CONTRACT_ADDRESS || CONTRACT_ADDRESS;
   const rpc = process.env.FUJI_RPC_URL || FUJI_RPC_PUBLIC;
 
@@ -57,13 +66,27 @@ export default async function handler(req, res) {
 
   return res.status(200).json({
     enrolled: true,
-    enrollment,
+    enrollment: {
+      ...enrollment,
+      agentMemory: enrollment.agentMemory,
+    },
     agent,
     aum: Math.round(aum * 100) / 100,
     returnPct: Math.round(returnPct * 10) / 10,
     decimals,
     openPositions: positions,
     tradeLog: enrollment.tradeLog || [],
+    enrichedTradeLog: enriched.trades,
+    matchHistory: buildMatchHistory(enrollment),
+    pendingSettlements: buildPendingSettlements(enrollment),
+    poolSummary: {
+      totalPoolTusdc: enriched.totalPoolTusdc,
+      totalWonTusdc: enriched.totalWonTusdc,
+      totalLostTusdc: enriched.totalLostTusdc,
+      netPnlTusdc: enriched.netPnlTusdc,
+      pendingCount: enriched.pendingCount,
+    },
+    delegate,
     trackRecord: buildTrackRecord(enrollment),
     updatedAt: Math.floor(Date.now() / 1000),
   });

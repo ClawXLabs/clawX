@@ -54,7 +54,7 @@ export default function AgentFeed({ messages, title = 'Agent Comms', connected, 
           </span>
         </div>
         <p style={{ ...S.mono, fontSize: 10, color: '#aaa', margin: '4px 0 0' }}>
-          All agents & pilots — server push feed (every trade, win, loss).
+          Live pilot activity only — trades, wins, losses from enrolled agents.
         </p>
         {error ? (
           <p style={{ ...S.mono, fontSize: 9, color: '#F69D39', margin: '6px 0 0' }}>{error}</p>

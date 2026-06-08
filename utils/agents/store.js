@@ -102,6 +102,51 @@ export function removeEnrollment(wallet) {
   return true;
 }
 
+export function setAgentPaused(wallet, paused) {
+  const key = wallet?.toLowerCase();
+  if (!key) return null;
+  const all = readEnrollments();
+  const row = all[key];
+  if (!row || row.status !== 'active') return null;
+  all[key] = {
+    ...row,
+    paused: Boolean(paused),
+    pausedAt: Boolean(paused) ? Math.floor(Date.now() / 1000) : null,
+    updatedAt: Math.floor(Date.now() / 1000),
+  };
+  writeEnrollments(all);
+  return all[key];
+}
+
+/** Stamp win/loss onto a tradeLog row after settlement. */
+export function updateTradeLogOutcome(wallet, roundId, side, outcome, extra = {}) {
+  const key = wallet?.toLowerCase();
+  if (!key) return null;
+  const all = readEnrollments();
+  const row = all[key];
+  if (!row) return null;
+  const normalizedSide = String(side || '').toUpperCase();
+  const log = [...(row.tradeLog || [])];
+  let changed = false;
+  for (let i = 0; i < log.length; i += 1) {
+    const t = log[i];
+    if (Number(t.roundId) !== Number(roundId)) continue;
+    if (String(t.side || '').toUpperCase() !== normalizedSide) continue;
+    log[i] = {
+      ...t,
+      outcome,
+      settledAt: extra.settledAt || Math.floor(Date.now() / 1000),
+      outcomeNote: extra.outcomeNote || t.outcomeNote,
+    };
+    changed = true;
+    break;
+  }
+  if (!changed) return row;
+  all[key] = { ...row, tradeLog: log, updatedAt: Math.floor(Date.now() / 1000) };
+  writeEnrollments(all);
+  return all[key];
+}
+
 /** Retire current agent — keeps tradeLog for leaderboard history. */
 export function retireEnrollment(wallet) {
   const key = wallet?.toLowerCase();

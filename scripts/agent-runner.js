@@ -72,6 +72,12 @@ async function syncLessons(contract, enrollment, libs) {
       const { getAgentById } = await import('../utils/agents/config.js');
       const agent = getAgentById(enrollment.agentId);
       const won = (item.isUp && round.upWins) || (!item.isUp && !round.upWins);
+      const side = item.isUp ? 'UP' : 'DOWN';
+      const { updateTradeLogOutcome } = libs.store;
+      updateTradeLogOutcome(enrollment.wallet, item.roundId, side, won ? 'win' : 'loss', {
+        settledAt: Math.floor(Date.now() / 1000),
+        outcomeNote: won ? 'Round settled — position won' : 'Round settled — position lost',
+      });
       if (agent) {
         memory = libs.ai.journalOutcome(memory, agent, item.symbol, item.isUp, round.upWins);
         const { outcomeJournalText, pickPeerAgent, peerOutcomeReaction } = await import('../utils/agents/chatter.js');
@@ -88,20 +94,6 @@ async function syncLessons(contract, enrollment, libs) {
           pilotName: pilotName || undefined,
           kind: won ? 'win' : 'loss',
         });
-        const peer = pickPeerAgent(agent.id);
-        if (peer) {
-          appendFeedMessage({
-            agentId: peer.id,
-            agentName: peer.name,
-            handle: peer.handle,
-            emoji: peer.emoji,
-            color: peer.color,
-            text: peerOutcomeReaction(peer, agent, item.symbol, item.isUp, won),
-            pilotWallet: enrollment.wallet,
-            pilotName: pilotName || undefined,
-            kind: 'peer',
-          });
-        }
       } else {
         memory = libs.brain.learnFromOutcome(memory, item.symbol, item.isUp, round.upWins);
       }
@@ -150,6 +142,15 @@ async function tick(contract, contractAddress, provider, libs) {
 
   for (let enrollment of active) {
     const wallet = enrollment.wallet;
+    if (enrollment.paused) {
+      try {
+        enrollment = await syncLessons(contract, enrollment, libs);
+        libs.store.setEnrollment(wallet, enrollment);
+      } catch (error) {
+        console.error(`[agent-runner] ${wallet} (paused):`, error.message || error);
+      }
+      continue;
+    }
     try {
       enrollment = await syncLessons(contract, enrollment, libs);
       const { getAgentById, getTradesPerTick } = await import('../utils/agents/config.js');
