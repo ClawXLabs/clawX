@@ -108,6 +108,8 @@ export default async function handler(req, res) {
       amountTusdc: enrollment.tradeSizeTusdc,
       hash: tx.hash,
       roundId: Number(roundId),
+      agentId: enrollment.agentId,
+      agentName: agent?.name || enrollment.agentId,
     });
 
     const memory = recordTradePlanned(enrollment.agentMemory || {}, symbol);

@@ -12,6 +12,15 @@ interface TradeAuthParams {
   deadline: number;
 }
 
+interface BatchClaimAuthParams {
+  chainId: number;
+  contractAddress: string;
+  trader: string;
+  roundIds: number[];
+  nonce: string;
+  deadline: number;
+}
+
 /**
  * Canonical text users sign for relayer-submitted trades (gas paid by settlement key).
  * Must match server verification in pages/api/trade exactly.
@@ -40,6 +49,32 @@ export function buildTradeAuthMessage({
     String(roundId),
     upStr,
     amtStr,
+    nonce,
+    String(deadline),
+  ].join('\n');
+}
+
+/**
+ * Single signature authorising the relayer to claim all listed rounds on behalf of the user.
+ * roundIds must be sorted ascending to keep the message deterministic.
+ */
+export function buildBatchClaimAuthMessage({
+  chainId,
+  contractAddress,
+  trader,
+  roundIds,
+  nonce,
+  deadline,
+}: BatchClaimAuthParams): string {
+  const market = ethers.getAddress(contractAddress).toLowerCase();
+  const user = ethers.getAddress(trader).toLowerCase();
+  const sorted = [...roundIds].sort((a, b) => a - b);
+  return [
+    'AvaxClawBatchClaim',
+    String(chainId),
+    market,
+    user,
+    sorted.join(','),
     nonce,
     String(deadline),
   ].join('\n');

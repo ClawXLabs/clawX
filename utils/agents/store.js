@@ -218,11 +218,51 @@ export function setDisplayName(wallet, displayName) {
   if (!key) return null;
   const all = readProfiles();
   all[key] = {
+    ...(all[key] || {}),
     displayName: String(displayName || '').trim().slice(0, 32),
     updatedAt: Math.floor(Date.now() / 1000),
   };
   writeJson(PROFILES_FILE, all);
   return all[key];
+}
+
+export function getSocialLinks(wallet) {
+  const key = wallet?.toLowerCase();
+  if (!key) return {};
+  return readProfiles()[key]?.socialLinks || {};
+}
+
+export function setSocialLink(wallet, platform, data) {
+  const key = wallet?.toLowerCase();
+  if (!key) return null;
+  const all = readProfiles();
+  const existing = all[key] || {};
+  all[key] = {
+    ...existing,
+    socialLinks: {
+      ...(existing.socialLinks || {}),
+      [platform]: {
+        ...(existing.socialLinks?.[platform] || {}),
+        ...data,
+        updatedAt: Math.floor(Date.now() / 1000),
+      },
+    },
+    updatedAt: Math.floor(Date.now() / 1000),
+  };
+  writeJson(PROFILES_FILE, all);
+  return all[key].socialLinks[platform];
+}
+
+export function getFullProfile(wallet) {
+  const key = wallet?.toLowerCase();
+  if (!key) return null;
+  const row = readProfiles()[key];
+  if (!row) return { wallet: key, displayName: null, socialLinks: {} };
+  return {
+    wallet: key,
+    displayName: row.displayName || null,
+    socialLinks: row.socialLinks || {},
+  };
 }
 
 export function reconcileTradeLog(row) {
@@ -260,7 +300,33 @@ export function buildLeaderboardRows() {
       const wallet = row.wallet?.toLowerCase();
       const trades = (row.tradeLog || []).filter((t) => t.action === 'BUY');
       const txCount = countLeaderboardTxs(row);
-      const lastHash = trades.find((t) => t.hash)?.hash || '';
+      const lastHash = [...trades].reverse().find((t) => t.hash)?.hash || '';
+
+      // Win/loss totals from symbolStats
+      const symbolStats = row.agentMemory?.symbolStats || {};
+      let wins = 0;
+      let losses = 0;
+      const bySymbol = {};
+      for (const [sym, stat] of Object.entries(symbolStats)) {
+        wins   += Number(stat.wins)   || 0;
+        losses += Number(stat.losses) || 0;
+        bySymbol[sym] = {
+          symbol: sym,
+          wins:   Number(stat.wins)   || 0,
+          losses: Number(stat.losses) || 0,
+          trades: (Number(stat.wins) || 0) + (Number(stat.losses) || 0),
+          spend: 0,
+        };
+      }
+      // Per-symbol spend from tradeLog
+      for (const t of trades) {
+        if (!t.symbol) continue;
+        if (!bySymbol[t.symbol]) bySymbol[t.symbol] = { symbol: t.symbol, wins: 0, losses: 0, trades: 0, spend: 0 };
+        bySymbol[t.symbol].spend += Number(t.amountTusdc) || 0;
+      }
+      const settled = wins + losses;
+      const winRate = settled > 0 ? Math.round((wins / settled) * 100) : null;
+
       return {
         wallet: row.wallet,
         displayName: profiles[wallet]?.displayName || null,
@@ -271,9 +337,17 @@ export function buildLeaderboardRows() {
         tradeSizeTusdc: row.tradeSizeTusdc,
         lastTradeAt: row.lastTradeAt || row.updatedAt || row.startedAt || 0,
         status: row.status,
+        wins,
+        losses,
+        winRate,
+        bySymbol: Object.values(bySymbol).sort((a, z) => z.trades - a.trades),
+        // raw enrollment kept for XP calculation in API
+        _enrollment: row,
+        _socialLinks: profiles[wallet]?.socialLinks || {},
       };
     });
 
+  // Default sort by txCount; API will re-sort by XP
   rows.sort((a, b) => b.txCount - a.txCount || b.lastTradeAt - a.lastTradeAt);
   return rows.map((row, index) => ({ ...row, rank: index + 1 }));
 }
