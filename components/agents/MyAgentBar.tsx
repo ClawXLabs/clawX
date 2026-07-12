@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import { useRouter } from 'next/router';
 import { useState } from 'react';
+import AgentIcon from './AgentIcon';
 import { useAgentEnrollment, EnrollmentStatus } from '../../hooks/useAgentEnrollment';
 import { clearAgentStatusCache } from '../../hooks/useAgentStatus';
 

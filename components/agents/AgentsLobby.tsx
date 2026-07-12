@@ -1,6 +1,6 @@
 import Link from 'next/link';
-
 import { useEffect, useState } from 'react';
+import { Bot } from 'lucide-react';
 
 import AgentCard, { AgentData } from './AgentCard';
 
@@ -103,12 +103,11 @@ export default function AgentsLobby() {
         <div style={{ maxWidth: 960, margin: '0 auto', display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 20 }}>
 
           <div style={{
-
             width: 56, height: 56, display: 'flex', alignItems: 'center', justifyContent: 'center',
-
-            border: '2px solid #C0392B', fontSize: 24,
-
-          }}>🤖</div>
+            border: '2px solid #C0392B', color: '#C0392B',
+          }}>
+            <Bot size={28} strokeWidth={1.5} />
+          </div>
 
           <div>
 

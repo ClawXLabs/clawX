@@ -401,7 +401,7 @@ export default function HeroSection({ account, onConnect }: HeroSectionProps) {
               className="np-cta-primary"
               style={{
                 display: 'inline-block',
-                background: '#0D0B08', color: '#FAF8F3',
+                background: '#E74141', color: '#FAF8F3',
                 padding: isMobile ? '10px 20px' : '12px 28px',
                 fontFamily: '"Courier New", monospace',
                 fontSize: isMobile ? 9 : 11, fontWeight: 700,
@@ -410,7 +410,7 @@ export default function HeroSection({ account, onConnect }: HeroSectionProps) {
                 transition: 'background 0.2s ease',
               }}
               onMouseEnter={(e) => { e.currentTarget.style.background = '#C0392B'; }}
-              onMouseLeave={(e) => { e.currentTarget.style.background = '#0D0B08'; }}
+              onMouseLeave={(e) => { e.currentTarget.style.background = '#E74141'; }}
             >
               ENTER MARKETS →
             </span>

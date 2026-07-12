@@ -1,4 +1,5 @@
 import React, { useEffect, useState, useCallback } from 'react';
+import { Bot } from 'lucide-react';
 import { useWallet } from '../contexts/WalletContext';
 
 // ─── types ───────────────────────────────────────────────────────────────────
@@ -324,7 +325,7 @@ export default function PersonalAgentsTab() {
   if (!isConnected || !address) {
     return (
       <div style={{ ...card, textAlign: 'center', padding: '40px 20px', color: '#7B6A52' }}>
-        <div style={{ fontSize: 32, marginBottom: 10 }}>🤖</div>
+        <div style={{ display: 'flex', justifyContent: 'center', color: '#7B6A52', marginBottom: 14 }}><Bot size={40} strokeWidth={1.5} /></div>
         <div style={{ ...serif, fontSize: 15, marginBottom: 16 }}>Connect your wallet to see agent history.</div>
         <button
           onClick={connectWallet}
@@ -353,7 +354,7 @@ export default function PersonalAgentsTab() {
   if (data && !data.hasAgent) {
     return (
       <div style={{ ...card, textAlign: 'center', padding: '40px 20px' }}>
-        <div style={{ fontSize: 32, marginBottom: 10 }}>🤖</div>
+        <div style={{ display: 'flex', justifyContent: 'center', color: '#7B6A52', marginBottom: 14 }}><Bot size={40} strokeWidth={1.5} /></div>
         <div style={{ ...serif, fontSize: 15, color: '#7B6A52' }}>
           No agent enrolled yet. Head to the{' '}
           <a href="/agents" style={{ color: '#D4A96A', textDecoration: 'underline' }}>

@@ -35,7 +35,10 @@ async function fetchJson(url, timeoutMs = REQUEST_TIMEOUT_MS) {
 
   try {
     const response = await fetch(url, {
-      headers: { accept: 'application/json' },
+      headers: { 
+        accept: 'application/json',
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+      },
       signal: controller.signal,
     });
     if (!response.ok) throw new Error(`HTTP ${response.status}`);

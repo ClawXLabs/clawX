@@ -12,39 +12,29 @@ interface Card {
 
 const CARDS: Card[] = [
   {
-    id: 'human',
-    kicker: '◆ MODE A',
-    headline: 'Trade Manually',
-    body: 'Connect your wallet, pick BTC, ETH, or AVAX, and lock a UP or DOWN position before the 5-minute window closes. Chainlink oracle settles the outcome. Winners claim proportional pool rewards.',
-    cta: { label: 'GO TO MARKETS', href: '/markets' },
-    features: ['Chainlink Oracle Pricing', 'Gasless Entry on Fuji', 'Instant Settlement'],
-    dark: true,
-  },
-  {
     id: 'agent',
     kicker: '◆ MODE B',
     headline: 'Deploy an Agent',
     body: 'Delegate trading to one of the on-chain AI agents. Approve a TUSDC allowance once, and the agent executes positions autonomously on your behalf based on its encoded strategy.',
     cta: { label: 'VIEW AGENTS', href: '/agents' },
     features: ['Autonomous Execution', 'Permit-Based Delegation', 'Live Activity Feed'],
+    dark: true,
+  },
+  {
+    id: 'human',
+    kicker: '◆ MODE A',
+    headline: 'Trade Manually',
+    body: 'Connect your wallet, pick BTC, ETH, or AVAX, and lock a UP or DOWN position before the 5-minute window closes. Chainlink oracle settles the outcome. Winners claim proportional pool rewards.',
+    cta: { label: 'GO TO MARKETS', href: '/markets' },
+    features: ['Chainlink Oracle Pricing', 'Gasless Entry on Fuji', 'Instant Settlement'],
     dark: false,
   },
 ];
 
 export default function RoleCards() {
   return (
-    <>
-      <style>{`
-        .np-cards-grid:hover .np-role-card {
-          flex: 0 0 30% !important;
-        }
-        .np-cards-grid:hover .np-role-card:hover {
-          flex: 0 0 70% !important;
-        }
-      `}</style>
-
-      <section
-        id="modes"
+    <section
+      id="modes"
         className="np-modes-section"
         style={{
           background: '#FAF8F3',
@@ -86,7 +76,6 @@ export default function RoleCards() {
               className={`np-role-card np-role-card--${card.id}`}
               style={{
                 flex: '1 1 50%',
-                transition: 'flex 0.5s cubic-bezier(0.4, 0, 0.2, 1)',
                 overflow: 'hidden',
                 background: card.dark ? '#0D0B08' : '#FAF8F3',
                 color: card.dark ? '#FAF8F3' : '#0D0B08',
@@ -113,7 +102,7 @@ export default function RoleCards() {
                     fontWeight: 700,
                     letterSpacing: '0.24em',
                     textTransform: 'uppercase',
-                    color: '#C0392B',
+                    color: card.dark ? '#FAF8F3' : '#0D0B08',
                     margin: 0,
                   }}
                 >
@@ -191,7 +180,7 @@ export default function RoleCards() {
                         whiteSpace: 'nowrap',
                       }}
                     >
-                      <span style={{ color: '#C0392B', fontSize: 12 }}>—</span> {f}
+                      <span style={{ color: card.dark ? '#FAF8F3' : '#0D0B08', fontSize: 12 }}>—</span> {f}
                     </li>
                   ))}
                 </ul>
@@ -224,6 +213,5 @@ export default function RoleCards() {
           ))}
         </div>
       </section>
-    </>
   );
 }

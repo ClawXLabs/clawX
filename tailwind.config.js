@@ -73,8 +73,8 @@ module.exports = {
       },
       colors: {
         cp: {
-          black:   '#050508',
-          dark:    '#0a0a0f',
+          black:   '#E74141',
+          dark:    '#E74141',
           surface: '#0f0f1a',
           red:     '#ff2d3b',
           'red-dim': '#E84142',
