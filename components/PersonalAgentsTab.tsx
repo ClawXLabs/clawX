@@ -1,6 +1,7 @@
 import React, { useEffect, useState, useCallback } from 'react';
-import { Bot } from 'lucide-react';
+import { Bot, BarChart3 } from 'lucide-react';
 import { useWallet } from '../contexts/WalletContext';
+import AgentIcon from './agents/AgentIcon';
 
 // ─── types ───────────────────────────────────────────────────────────────────
 
@@ -104,7 +105,7 @@ function CombinedCard({ combined }: { combined: Combined }) {
   return (
     <div style={{ ...card, marginBottom: 18 }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 14 }}>
-        <span style={{ fontSize: 18 }}>📊</span>
+        <span style={{ display: 'flex', alignItems: 'center', color: '#D4A96A' }}><BarChart3 size={18} strokeWidth={1.5} /></span>
         <span style={{ ...serif, fontSize: 16, fontWeight: 700, color: '#0D0B08' }}>All Agents Combined</span>
         <WinRateBadge rate={combined.winRate} />
       </div>
@@ -146,7 +147,12 @@ function AgentCard({ agent }: { agent: AgentStat }) {
     >
       {/* Header row */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-        <span style={{ fontSize: 22 }}>{agent.emoji}</span>
+        <div style={{
+          width: 40, height: 40, display: 'flex', alignItems: 'center', justifyContent: 'center',
+          border: '1px solid #0D0B08', background: `${agent.color}15`,
+        }}>
+          <AgentIcon agentId={agent.agentId} size={20} color={agent.color} />
+        </div>
         <div style={{ flex: 1 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
             <StatusDot status={agent.status} />
@@ -387,9 +393,22 @@ export default function PersonalAgentsTab() {
               background: view === v ? '#D4A96A' : 'transparent',
               color: view === v ? '#fff' : '#7B6A52',
               transition: 'all 0.15s',
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 6,
             }}
           >
-            {v === 'combined' ? '📊 Combined' : '🤖 Per Agent'}
+            {v === 'combined' ? (
+              <>
+                <BarChart3 size={13} strokeWidth={1.5} />
+                <span>Combined</span>
+              </>
+            ) : (
+              <>
+                <Bot size={13} strokeWidth={1.5} />
+                <span>Per Agent</span>
+              </>
+            )}
           </button>
         ))}
         <button

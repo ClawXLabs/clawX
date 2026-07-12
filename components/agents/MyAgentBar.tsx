@@ -87,13 +87,13 @@ function ActiveAgentPanel({ status, wallet }: { status: EnrollmentStatus | null;
 
       <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-          <span style={{
+          <div style={{
             width: 40, height: 40, display: 'flex', alignItems: 'center', justifyContent: 'center',
-            fontSize: 18, border: '1px solid #0D0B08',
+            border: '1px solid #0D0B08',
             background: `${agent?.color || '#27AE60'}15`,
           }}>
-            {agent?.emoji || '?'}
-          </span>
+            <AgentIcon agentId={status?.agentId || agent?.id} size={20} color={agent?.color || '#27AE60'} />
+          </div>
           <div>
             <p style={{ ...S.mono, fontSize: 9, fontWeight: 700, letterSpacing: '0.14em', textTransform: 'uppercase', color: statusColor, display: 'flex', alignItems: 'center', gap: 6, margin: 0 }}>
               <span style={{ width: 6, height: 6, borderRadius: '50%', background: statusColor, display: 'inline-block' }} />

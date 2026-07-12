@@ -1,5 +1,6 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import { useWallet } from '../contexts/WalletContext';
+import { Flame, Trophy, TrendingUp, Calendar, Star, Milestone, Twitter, Send, Target, Award, Lock, Sparkles, Activity } from 'lucide-react';
 
 // ─── types ────────────────────────────────────────────────────────────────────
 
@@ -98,17 +99,17 @@ function StreakDisplay({ streak }: { streak: XpData['streak'] }) {
       <div style={{ ...mono, fontSize: 11, color: '#7B6A52', marginBottom: 12 }}>TRADING STREAK</div>
       <div style={{ display: 'flex', gap: 16, alignItems: 'center', flexWrap: 'wrap' }}>
         {/* Current streak */}
-        <div style={{ textAlign: 'center', flex: 1 }}>
+        <div style={{ textAlign: 'center', flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
           <div
             style={{
-              fontSize: 36,
-              lineHeight: 1,
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              height: 36,
               filter: current === 0 ? 'grayscale(1) opacity(0.4)' : 'none',
             }}
           >
-            🔥
+            <Flame size={28} color={flameColor} strokeWidth={1.5} />
           </div>
-          <div style={{ ...mono, fontSize: 28, fontWeight: 900, color: flameColor, lineHeight: 1.1 }}>
+          <div style={{ ...mono, fontSize: 28, fontWeight: 900, color: flameColor, lineHeight: 1.1, marginTop: 4 }}>
             {current}
           </div>
           <div style={{ ...mono, fontSize: 10, color: '#7B6A52', marginTop: 2 }}>
@@ -151,14 +152,17 @@ function StreakDisplay({ streak }: { streak: XpData['streak'] }) {
             style={{
               ...mono,
               fontSize: 10,
-              padding: '2px 8px',
+              padding: '4px 8px',
               borderRadius: 5,
               border: `1px solid ${current >= n ? '#D4A96A' : '#E8D5B0'}`,
               background: current >= n ? '#D4A96A22' : 'transparent',
               color: current >= n ? '#7B5E2A' : '#C0A878',
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 4,
             }}
           >
-            {current >= n ? '🏅' : '🔒'} {n}-day
+            {current >= n ? <Award size={11} strokeWidth={1.5} /> : <Lock size={10} strokeWidth={1.5} />} {n}-day
           </div>
         ))}
       </div>
@@ -170,13 +174,13 @@ function StreakDisplay({ streak }: { streak: XpData['streak'] }) {
 
 function XpBreakdown({ breakdown }: { breakdown: XpData['breakdown'] }) {
   const rows = Object.entries(breakdown) as [string, BreakdownEntry][];
-  const icons: Record<string, string> = {
-    trades: '📈',
-    wins: '🏆',
-    streak: '🔥',
-    twitter: '🐦',
-    telegram: '✈️',
-    milestones: '🎯',
+  const icons: Record<string, React.ReactNode> = {
+    trades: <TrendingUp size={14} strokeWidth={1.5} />,
+    wins: <Trophy size={14} strokeWidth={1.5} />,
+    streak: <Flame size={14} strokeWidth={1.5} />,
+    twitter: <Twitter size={14} strokeWidth={1.5} />,
+    telegram: <Send size={14} strokeWidth={1.5} />,
+    milestones: <Target size={14} strokeWidth={1.5} />,
   };
 
   return (
@@ -194,7 +198,7 @@ function XpBreakdown({ breakdown }: { breakdown: XpData['breakdown'] }) {
           }}
         >
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <span style={{ fontSize: 14 }}>{icons[key] || '⭐'}</span>
+            <span style={{ display: 'flex', alignItems: 'center', color: '#D4A96A' }}>{icons[key] || <Star size={14} strokeWidth={1.5} />}</span>
             <span style={{ ...mono, fontSize: 11, color: '#0D0B08' }}>{entry.label}</span>
           </div>
           <span
@@ -220,25 +224,25 @@ function XpBreakdown({ breakdown }: { breakdown: XpData['breakdown'] }) {
 function ActivityStats({ xp }: { xp: XpData }) {
   const statCards = [
     {
-      icon: '📊',
+      icon: <Activity size={20} strokeWidth={1.5} />,
       value: xp.winRate !== null ? `${xp.winRate}%` : '–',
       label: 'Win Rate',
       color: xp.winRate >= 60 ? '#22c55e' : xp.winRate >= 45 ? '#f59e0b' : '#ef4444',
     },
     {
-      icon: '⚡',
+      icon: <Activity size={20} strokeWidth={1.5} />, // fallback/different
       value: xp.avgDailyTxs,
       label: 'Avg Daily Txs',
       color: '#3b82f6',
     },
     {
-      icon: '🔥',
+      icon: <Flame size={20} strokeWidth={1.5} />,
       value: xp.streak.current,
       label: 'Current Streak',
       color: '#f59e0b',
     },
     {
-      icon: '📅',
+      icon: <Calendar size={20} strokeWidth={1.5} />,
       value: xp.streak.activeDays,
       label: 'Active Days',
       color: '#8b5cf6',
@@ -254,7 +258,7 @@ function ActivityStats({ xp }: { xp: XpData }) {
         marginBottom: 16,
       }}
     >
-      {statCards.map(({ icon, value, label, color }) => (
+      {statCards.map(({ icon, value, label, color }, idx) => (
         <div
           key={label}
           style={{
@@ -263,7 +267,9 @@ function ActivityStats({ xp }: { xp: XpData }) {
             padding: '14px 10px',
           }}
         >
-          <div style={{ fontSize: 20, marginBottom: 4 }}>{icon}</div>
+          <div style={{ display: 'flex', justifyContent: 'center', color: color || '#7B6A52', marginBottom: 6 }}>
+            {idx === 1 ? <TrendingUp size={20} strokeWidth={1.5} /> : icon}
+          </div>
           <div style={{ ...mono, fontSize: 22, fontWeight: 800, color }}>{value}</div>
           <div style={{ ...mono, fontSize: 10, color: '#7B6A52', marginTop: 2 }}>{label}</div>
         </div>
@@ -284,9 +290,15 @@ function LevelCard({ xp }: { xp: XpData }) {
     xp.level >= 2  ? 'Emerging Pilot' :
     'Rookie Pilot';
 
-  const rankEmoji =
-    xp.level >= 20 ? '🏆' : xp.level >= 15 ? '👑' : xp.level >= 10 ? '💎' :
-    xp.level >= 7  ? '⚡' : xp.level >= 4  ? '🌟' : xp.level >= 2  ? '🚀' : '🌱';
+  const renderRankIcon = () => {
+    const props = { size: 28, strokeWidth: 1.5, color: '#FAF8F3' };
+    if (xp.level >= 20) return <Trophy {...props} />;
+    if (xp.level >= 15) return <Sparkles {...props} />;
+    if (xp.level >= 10) return <Star {...props} />;
+    if (xp.level >= 7) return <Flame {...props} />;
+    if (xp.level >= 4) return <Activity {...props} />;
+    return <Star {...props} />;
+  };
 
   return (
     <div
@@ -308,12 +320,11 @@ function LevelCard({ xp }: { xp: XpData }) {
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
-          fontSize: 28,
           flexShrink: 0,
           boxShadow: '0 2px 12px #D4A96A44',
         }}
       >
-        {rankEmoji}
+        {renderRankIcon()}
       </div>
       <div style={{ flex: 1 }}>
         <div style={{ ...mono, fontSize: 10, color: '#7B6A52', marginBottom: 2 }}>
@@ -361,13 +372,15 @@ export default function XpDashboard() {
 
   if (!isConnected || !address) {
     return (
-      <div style={{ ...card, textAlign: 'center', padding: '40px 20px', color: '#7B6A52' }}>
-        <div style={{ fontSize: 32, marginBottom: 10 }}>⭐</div>
+      <div style={{ ...card, textAlign: 'center', padding: '40px 20px', color: '#7B6A52', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
+        <div style={{ color: '#D4A96A', marginBottom: 12 }}>
+          <Star size={32} strokeWidth={1.5} />
+        </div>
         <div style={{ ...serif, fontSize: 15, marginBottom: 16 }}>Connect your wallet to see your XP & stats.</div>
         <button
           onClick={connectWallet}
           style={{
-            ...mono, fontSize: 11, fontWeight: 700, letterSpacing: '0.1em',
+            ...mono, fontSize: 11, fontWeight: 700, letterSpacing: '0.15em',
             background: '#0D0B08', color: '#FAF8F3', border: 'none',
             padding: '12px 28px', cursor: 'pointer',
           }}
@@ -387,6 +400,16 @@ export default function XpDashboard() {
   }
 
   if (!xp) return null;
+
+  const hintIcons: Record<string, React.ReactNode> = {
+    trades: <TrendingUp size={13} strokeWidth={1.5} />,
+    wins: <Trophy size={13} strokeWidth={1.5} />,
+    streak: <Flame size={13} strokeWidth={1.5} />,
+    twitter: <Twitter size={13} strokeWidth={1.5} />,
+    telegram: <Send size={13} strokeWidth={1.5} />,
+    milestones: <Target size={13} strokeWidth={1.5} />,
+    rate: <Activity size={13} strokeWidth={1.5} />,
+  };
 
   return (
     <div>
@@ -431,18 +454,19 @@ export default function XpDashboard() {
           background: '#FFFBF4',
         }}
       >
-        <div style={{ ...mono, fontSize: 11, color: '#7B6A52', marginBottom: 10 }}>HOW TO EARN MORE XP</div>
+        <div style={{ ...mono, fontSize: 11, color: '#7B6A52', marginBottom: 14 }}>HOW TO EARN MORE XP</div>
         {[
-          { icon: '📈', text: '2 XP per trade placed by your agent' },
-          { icon: '🏆', text: '5 XP per winning round' },
-          { icon: '🔥', text: 'Up to 100 XP from daily streak bonuses' },
-          { icon: '🐦', text: '50 XP for following @clawxlabs on X' },
-          { icon: '✈️', text: '50 XP for joining ClawXLabs🔺 on Telegram' },
-          { icon: '🎯', text: 'Milestone bonuses at 10, 50, 100, 500 trades' },
-          { icon: '📊', text: 'Win-rate bonuses: 50 XP at ≥50%, up to 200 XP at ≥70%' },
-        ].map(({ icon, text }) => (
-          <div key={text} style={{ ...mono, fontSize: 11, color: '#0D0B08', marginBottom: 5, display: 'flex', gap: 8 }}>
-            <span>{icon}</span><span>{text}</span>
+          { key: 'trades', text: '2 XP per trade placed by your agent' },
+          { key: 'wins', text: '5 XP per winning round' },
+          { key: 'streak', text: 'Up to 100 XP from daily streak bonuses' },
+          { key: 'twitter', text: '50 XP for following @clawxlabs on X' },
+          { key: 'telegram', text: '50 XP for joining ClawXLabs🔺 on Telegram' },
+          { key: 'milestones', text: 'Milestone bonuses at 10, 50, 100, 500 trades' },
+          { key: 'rate', text: 'Win-rate bonuses: 50 XP at ≥50%, up to 200 XP at ≥70%' },
+        ].map(({ key, text }) => (
+          <div key={text} style={{ ...mono, fontSize: 11, color: '#0D0B08', marginBottom: 8, display: 'flex', alignItems: 'center', gap: 8 }}>
+            <span style={{ display: 'flex', alignItems: 'center', color: '#D4A96A' }}>{hintIcons[key]}</span>
+            <span>{text}</span>
           </div>
         ))}
       </div>

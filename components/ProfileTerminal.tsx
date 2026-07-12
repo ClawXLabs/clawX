@@ -333,73 +333,84 @@ export default function ProfileTerminal() {
       ) : (
         <div>
 
-          {/* Wallet card */}
-          <section style={{ ...S.section, marginBottom: 24 }}>
-            <div style={{ marginBottom: 16 }}>
-              <p style={S.label}>Wallet Address</p>
-              <p style={{ ...S.mono, fontSize: 13, color: '#0D0B08', marginTop: 4, wordBreak: 'break-all' }}>{account}</p>
+          {/* Pilot Identity Card */}
+          <section style={{ ...S.section, marginBottom: 24, border: '2px solid #0D0B08' }}>
+            <div style={{ borderBottom: '1px solid #0D0B08', paddingBottom: 16, marginBottom: 20 }}>
+              <p style={{ ...S.label, color: '#C0392B' }}>◆ PILOT ID CARD</p>
+              <h2 style={{ ...S.serif, fontSize: 24, fontWeight: 900, color: '#0D0B08', marginTop: 8, marginBottom: 4 }}>
+                {displayName || 'Anonymous Pilot'}
+              </h2>
+              <p style={{ ...S.mono, fontSize: 10, color: '#888', wordBreak: 'break-all' }}>{account}</p>
             </div>
-            <div style={{ marginBottom: 16 }}>
-              <p style={S.label}>Market Contract</p>
-              <p style={{ ...S.mono, fontSize: 11, color: '#888', marginTop: 4, wordBreak: 'break-all' }}>{CONTRACT_ADDRESS}</p>
-            </div>
-            <div style={{ borderTop: '1px solid #0D0B08', paddingTop: 16, display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12 }}>
+
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 24 }}>
+              {/* Left Column: Configure Username & Socials */}
               <div>
-                <p style={S.label}>{tokenSymbol} Balance</p>
-                <p style={{ ...S.serif, fontSize: 28, fontWeight: 900, color: '#F69D39', margin: '4px 0 0' }}>
-                  {tusdc ? fmt(tusdc.balance, tokenDecimals) : '…'}
-                </p>
-                <p style={{ ...S.mono, fontSize: 9, color: '#888', marginTop: 2 }}>{tokenSymbol} on Fuji</p>
+                <div style={{ marginBottom: 20 }}>
+                  <p style={{ ...S.label, marginBottom: 6 }}>Configure Pilot Name</p>
+                  <div style={{ display: 'flex', gap: 8 }}>
+                    <input
+                      type="text"
+                      value={nameInput}
+                      onChange={(e) => setNameInput(e.target.value)}
+                      placeholder="e.g. Bruceeee"
+                      maxLength={32}
+                      style={{
+                        flex: 1, border: '1px solid #0D0B08', background: '#FAF8F3',
+                        padding: '10px 14px', ...S.mono, fontSize: 13, color: '#0D0B08',
+                      }}
+                    />
+                    <button type="button" onClick={saveDisplayName} disabled={savingName} style={{
+                      background: '#0D0B08', color: '#FAF8F3', border: 'none',
+                      padding: '10px 20px', ...S.mono, fontSize: 10, fontWeight: 700,
+                      letterSpacing: '0.14em', textTransform: 'uppercase', cursor: 'pointer',
+                      opacity: savingName ? 0.5 : 1,
+                    }}>
+                      {savingName ? 'Saving…' : 'Save'}
+                    </button>
+                  </div>
+                  {nameMsg ? <p style={{ ...S.mono, fontSize: 11, color: '#27AE60', marginTop: 8 }}>{nameMsg}</p> : null}
+                </div>
+
+                <div style={{ paddingTop: 12, borderTop: '1px solid rgba(13,11,8,0.1)' }}>
+                  <SocialLinker
+                    wallet={account}
+                    initialLinks={socialLinks}
+                    onSaved={(updated) => setSocialLinks(updated)}
+                  />
+                </div>
               </div>
-              <Link href="/faucet" style={{ textDecoration: 'none' }}>
-                <span style={{
-                  display: 'inline-block', border: '1px solid #F69D39', color: '#F69D39',
-                  padding: '10px 20px', fontFamily: '"Courier New", monospace',
-                  fontSize: 10, fontWeight: 700, letterSpacing: '0.14em', textTransform: 'uppercase',
-                }}>
-                  Get {tokenSymbol} →
-                </span>
-              </Link>
-            </div>
-          </section>
 
-          {/* Display name */}
-          <section style={{ ...S.section, marginBottom: 24 }}>
-            <p style={S.label}>{displayName ? 'Display name' : 'Set up your pilot name'}</p>
-            <p style={{ ...S.mono, fontSize: 11, color: '#5A554E', marginTop: 6, marginBottom: 12 }}>
-              Saved to your wallet — shown on the leaderboard.
-            </p>
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-              <input
-                type="text"
-                value={nameInput}
-                onChange={(e) => setNameInput(e.target.value)}
-                placeholder="e.g. Bruceeee"
-                maxLength={32}
-                style={{
-                  flex: '1 1 180px', border: '1px solid #0D0B08', background: '#FAF8F3',
-                  padding: '10px 14px', ...S.mono, fontSize: 13, color: '#0D0B08',
-                }}
-              />
-              <button type="button" onClick={saveDisplayName} disabled={savingName} style={{
-                background: '#0D0B08', color: '#FAF8F3', border: 'none',
-                padding: '10px 20px', ...S.mono, fontSize: 10, fontWeight: 700,
-                letterSpacing: '0.14em', textTransform: 'uppercase', cursor: 'pointer',
-                opacity: savingName ? 0.5 : 1,
-              }}>
-                {savingName ? 'Saving…' : 'Save name'}
-              </button>
-            </div>
-            {nameMsg ? <p style={{ ...S.mono, fontSize: 11, color: '#27AE60', marginTop: 8 }}>{nameMsg}</p> : null}
-          </section>
+              {/* Right Column: Balances & Contracts */}
+              <div style={{ display: 'flex', flexDirection: 'column', justifyContent: 'space-between', paddingLeft: 12, borderLeft: '1px solid rgba(13,11,8,0.1)' }}>
+                <div>
+                  <p style={S.label}>TUSDC Balance</p>
+                  <p style={{ ...S.serif, fontSize: 32, fontWeight: 900, color: '#F69D39', margin: '4px 0 0' }}>
+                    {tusdc ? fmt(tusdc.balance, tokenDecimals) : '…'}
+                  </p>
+                  <p style={{ ...S.mono, fontSize: 9, color: '#888', marginTop: 4 }}>Available for agent automation</p>
+                </div>
 
-          {/* ── Social Accounts ────────────────────── */}
-          <section style={{ ...S.section, marginBottom: 24 }}>
-            <SocialLinker
-              wallet={account}
-              initialLinks={socialLinks}
-              onSaved={(updated) => setSocialLinks(updated)}
-            />
+                <div style={{ marginTop: 20 }}>
+                  <p style={S.label}>Contracts</p>
+                  <p style={{ ...S.mono, fontSize: 9, color: '#888', marginTop: 4, wordBreak: 'break-all' }}>
+                    Market: {CONTRACT_ADDRESS}
+                  </p>
+                </div>
+
+                <div style={{ marginTop: 16 }}>
+                  <Link href="/faucet" style={{ textDecoration: 'none' }}>
+                    <span style={{
+                      display: 'block', border: '1px solid #F69D39', color: '#FAF8F3', background: '#F69D39',
+                      padding: '12px 20px', fontFamily: '"Courier New", monospace', textAlign: 'center',
+                      fontSize: 10, fontWeight: 700, letterSpacing: '0.14em', textTransform: 'uppercase',
+                    }}>
+                      Claim testnet {tokenSymbol} →
+                    </span>
+                  </Link>
+                </div>
+              </div>
+            </div>
           </section>
 
           {/* Claim status / progress */}

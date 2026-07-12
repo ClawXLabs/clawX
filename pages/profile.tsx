@@ -5,12 +5,14 @@ import ProfileTerminal from '../components/ProfileTerminal';
 import PersonalAgentsTab from '../components/PersonalAgentsTab';
 import XpDashboard from '../components/XpDashboard';
 
+import { User, Bot, Star } from 'lucide-react';
+
 type Tab = 'overview' | 'agents' | 'xp';
 
-const TABS: { id: Tab; label: string; icon: string }[] = [
-  { id: 'overview', label: 'Overview',    icon: '👤' },
-  { id: 'agents',   label: 'My Agents',   icon: '🤖' },
-  { id: 'xp',       label: 'XP & Stats',  icon: '⭐' },
+const TABS: { id: Tab; label: string; icon: React.ReactNode }[] = [
+  { id: 'overview', label: 'Overview',    icon: <User size={15} strokeWidth={1.5} /> },
+  { id: 'agents',   label: 'My Agents',   icon: <Bot size={15} strokeWidth={1.5} /> },
+  { id: 'xp',       label: 'XP & Stats',  icon: <Star size={15} strokeWidth={1.5} /> },
 ];
 
 const mono: React.CSSProperties = { fontFamily: "'Courier New', monospace" };

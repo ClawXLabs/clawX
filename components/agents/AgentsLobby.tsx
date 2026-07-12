@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react';
 import { Bot } from 'lucide-react';
 
 import AgentCard, { AgentData } from './AgentCard';
+import AgentIcon from './AgentIcon';
 
 import AgentFeed from './AgentFeed';
 
@@ -147,13 +148,12 @@ export default function AgentsLobby() {
 
               <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
 
-                <span style={{
-
+                <div style={{
                   width: 48, height: 48, display: 'flex', alignItems: 'center', justifyContent: 'center',
-
-                  fontSize: 22, border: '1px solid #0D0B08', background: `${agent?.color || '#27AE60'}15`,
-
-                }}>{agent?.emoji}</span>
+                  border: '1px solid #0D0B08', background: `${agent?.color || '#27AE60'}15`,
+                }}>
+                  <AgentIcon agentId={agent?.id} size={22} color={agent?.color || '#27AE60'} />
+                </div>
 
                 <div>
 

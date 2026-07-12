@@ -2,6 +2,8 @@ import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import { useWallet } from '../contexts/WalletContext';
 import { CONTRACT_ADDRESS } from '../utils/contract';
+import { Trophy, Bot, Flame } from 'lucide-react';
+import AgentIcon from './agents/AgentIcon';
 
 const SNOWTRACE_ADDRESS = 'https://testnet.snowtrace.io/address/';
 const SNOWTRACE_TX      = 'https://testnet.snowtrace.io/tx/';
@@ -119,16 +121,13 @@ function StreakBadge({ streak }: { streak: number }) {
   if (streak === 0) return <span style={{ ...S.mono, fontSize: 10, color: '#888' }}>—</span>;
   const color = streak >= 7 ? '#E84142' : streak >= 3 ? '#f59e0b' : '#D4A96A';
   return (
-    <span style={{ ...S.mono, fontSize: 11, fontWeight: 700, color }}>
-      🔥 {streak}d
+    <span style={{ ...S.mono, fontSize: 11, fontWeight: 700, color, display: 'inline-flex', alignItems: 'center', gap: 3 }}>
+      <Flame size={12} strokeWidth={1.5} /> {streak}d
     </span>
   );
 }
 
 function RankMedal({ rank }: { rank: number }) {
-  if (rank === 1) return <span style={{ fontSize: 16 }}>🥇</span>;
-  if (rank === 2) return <span style={{ fontSize: 16 }}>🥈</span>;
-  if (rank === 3) return <span style={{ fontSize: 16 }}>🥉</span>;
   return (
     <span style={{ ...S.mono, fontSize: 13, fontWeight: 700, color: '#F69D39' }}>
       #{rank}
@@ -400,12 +399,17 @@ function AgentPersonaRankings({ agents }: { agents: AgentPersona[] }) {
               background: isExpanded ? 'rgba(13,11,8,0.03)' : '#FDF6EC',
             }}>
               {/* Rank */}
-              <span style={{ ...S.serif, fontSize: 24, fontWeight: 900, color: '#D4A96A', width: 28, textAlign: 'center' }}>
-                {i + 1 === 1 ? '🥇' : i + 1 === 2 ? '🥈' : i + 1 === 3 ? '🥉' : `#${i + 1}`}
+              <span style={{ ...S.mono, fontSize: 18, fontWeight: 900, color: '#D4A96A', width: 36, textAlign: 'center' }}>
+                #{i + 1}
               </span>
 
-              {/* Emoji + Name */}
-              <span style={{ fontSize: 24 }}>{agent.emoji}</span>
+              {/* AgentIcon + Name */}
+              <div style={{
+                width: 44, height: 44, display: 'flex', alignItems: 'center', justifyContent: 'center',
+                border: '1px solid #0D0B08', background: `${agent.color}15`,
+              }}>
+                <AgentIcon agentId={agent.agentId} size={22} color={agent.color} />
+              </div>
               <div style={{ flex: 1, minWidth: 100 }}>
                 <p style={{ ...S.serif, fontSize: 15, fontWeight: 900, color: '#0D0B08', margin: 0 }}>
                   {agent.agentName}
@@ -570,9 +574,9 @@ export default function LeaderboardTerminal() {
   const agents  = data?.agentRankings || [];
   const needsName = account && !displayName;
 
-  const TABS: { id: Tab; label: string; icon: string }[] = [
-    { id: 'pilots', label: 'Pilot Rankings', icon: '🏆' },
-    { id: 'agents', label: 'Agent Rankings', icon: '🤖' },
+  const TABS: { id: Tab; label: string; icon: React.ReactNode }[] = [
+    { id: 'pilots', label: 'Pilot Rankings', icon: <Trophy size={15} strokeWidth={1.5} /> },
+    { id: 'agents', label: 'Agent Rankings', icon: <Bot size={15} strokeWidth={1.5} /> },
   ];
 
   return (
@@ -595,47 +599,21 @@ export default function LeaderboardTerminal() {
         <StatBlock label="Total transactions" value={stats?.totalTransactions?.toLocaleString() ?? '—'} hint="Agent BUY clips on-chain" border />
       </div>
 
-      {/* Name setup */}
+      {/* Name setup link */}
       {account ? (
         <div style={{
-          border: needsName ? '2px solid #F69D39' : '1px solid rgba(13,11,8,0.2)',
-          background: needsName ? 'rgba(246,157,57,0.06)' : 'transparent',
+          border: '1px solid rgba(13,11,8,0.2)',
           padding: '16px 20px', marginBottom: 20,
+          ...S.mono, fontSize: 12, color: '#5A554E',
         }}>
-          <p style={{ ...S.label, color: needsName ? '#C0392B' : '#888' }}>
-            {needsName ? '◆ Set your pilot name' : 'Your display name'}
-          </p>
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 10 }}>
-            <input
-              type="text"
-              value={nameInput}
-              onChange={(e) => setNameInput(e.target.value)}
-              placeholder={displayName || 'e.g. Bruceeee'}
-              maxLength={32}
-              style={{
-                flex: '1 1 200px', border: '1px solid #0D0B08', background: '#FAF8F3',
-                padding: '9px 14px', ...S.mono, fontSize: 13, color: '#0D0B08', outline: 'none',
-              }}
-            />
-            <button
-              type="button"
-              onClick={saveName}
-              disabled={savingName}
-              style={{
-                background: '#0D0B08', color: '#FAF8F3', border: 'none',
-                padding: '9px 22px', ...S.mono, fontSize: 10, fontWeight: 700,
-                letterSpacing: '0.14em', textTransform: 'uppercase', cursor: 'pointer',
-                opacity: savingName ? 0.5 : 1,
-              }}
-            >
-              {savingName ? 'Saving…' : 'Save name'}
-            </button>
-          </div>
-          {nameMsg ? <p style={{ ...S.mono, fontSize: 11, color: '#27AE60', marginTop: 6 }}>{nameMsg}</p> : null}
+          <span>Want to appear on the leaderboard? </span>
+          <Link href="/profile" style={{ color: '#C0392B', fontWeight: 700, textDecoration: 'underline' }}>
+            Set your pilot display name in your Profile →
+          </Link>
         </div>
       ) : (
         <p style={{ ...S.mono, fontSize: 11, color: '#888', marginBottom: 16 }}>
-          Connect your wallet to set your pilot name and appear on the board.
+          Connect your wallet to see your rank and appear on the board.
         </p>
       )}
 
