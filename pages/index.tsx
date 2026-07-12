@@ -1,17 +1,22 @@
+import { useEffect } from 'react';
+import { useRouter } from 'next/router';
 import Head from 'next/head';
-import LandingPage from '../components/LandingPage';
-import { useWallet } from '../contexts/WalletContext';
 
 export default function Home() {
-  const { account, connectWallet } = useWallet();
+  const router = useRouter();
+
+  useEffect(() => {
+    router.replace('/markets');
+  }, [router]);
 
   return (
     <>
       <Head>
-        <title>ClawX – Prediction Markets on Avalanche</title>
-        <meta name="description" content="5-minute prediction markets on Avalanche Fuji with fast median oracle prices. Pick UP or DOWN, settle on-chain." />
+        <title>Loading... · ClawX</title>
       </Head>
-      <LandingPage onConnectWallet={connectWallet} account={account ?? null} />
+      <div style={{ background: '#FAF8F3', minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <p style={{ fontFamily: '"Courier New", monospace', fontSize: 13, color: '#888' }}>Redirecting to app...</p>
+      </div>
     </>
   );
 }
