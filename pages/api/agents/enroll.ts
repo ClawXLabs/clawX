@@ -49,6 +49,8 @@ export default async function handler(req, res) {
     return res.status(405).json({ error: 'Method not allowed' });
   }
 
+  try {
+
   const { wallet, agentId, tradeSizeTusdc, delegateSignature, delegateDeadline, delegateMaxRaw, permit } =
     req.body || {};
   if (!wallet || !ethers.isAddress(wallet)) {
@@ -143,4 +145,12 @@ export default async function handler(req, res) {
   });
 
   return res.status(200).json({ ok: true, enrollment });
+
+  } catch (err: any) {
+    console.error('[enroll] Unhandled error:', err);
+    return res.status(500).json({
+      error: err.message || 'Agent enrollment failed',
+      stack: process.env.NODE_ENV === 'development' ? err.stack : undefined,
+    });
+  }
 }

@@ -5,7 +5,18 @@
   },
   "0x6734738d6ab16dff858ffca33d31918370d482e0": {
     "displayName": "Samrat",
-    "updatedAt": 1781042650
+    "updatedAt": 1783885452,
+    "socialLinks": {
+      "twitter": {
+        "handle": "kshimate",
+        "clawxHandle": "clawxlabs",
+        "verified": false,
+        "selfAttested": true,
+        "pendingVerify": false,
+        "linkedAt": 1783885452,
+        "updatedAt": 1783885452
+      }
+    }
   },
   "0x800c933285ffdc1ad27b1ac468a280f1ed5146d3": {
     "displayName": "odin",

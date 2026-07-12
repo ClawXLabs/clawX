@@ -576,7 +576,7 @@ export default function LeaderboardTerminal() {
   ];
 
   return (
-    <div style={{ maxWidth: 960, margin: '0 auto', padding: '48px 24px 64px' }}>
+    <div style={{ maxWidth: 1280, margin: '0 auto', padding: '48px 24px 64px' }}>
       {/* Page header */}
       <div style={{ borderBottom: '2px solid #0D0B08', paddingBottom: 20, marginBottom: 32 }}>
         <p style={{ ...S.label, color: '#C0392B', marginBottom: 10 }}>◆ PILOT RANKINGS</p>

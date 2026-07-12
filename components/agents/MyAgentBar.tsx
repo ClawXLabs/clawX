@@ -19,7 +19,7 @@ export default function MyAgentBar() {
   if (!account) return null;
 
   return (
-    <div style={{ maxWidth: 960, margin: '0 auto', padding: '16px 24px 0' }}>
+    <div style={{ maxWidth: 1280, margin: '0 auto', padding: '16px 24px 0' }}>
       <div style={{
         border: enrolled ? '1px solid #27AE60' : '1px solid #F69D39',
         background: enrolled ? 'rgba(39,174,96,0.04)' : 'rgba(246,157,57,0.04)',

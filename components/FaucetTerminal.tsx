@@ -206,8 +206,8 @@ export default function FaucetTerminal() {
       const tl = gsap.timeline({ defaults: { ease: 'power3.out' } });
 
       tl.from(headerRef.current, { y: 28, opacity: 0, duration: 0.65 })
-        .from(guideRef.current,  { y: 20, opacity: 0, duration: 0.5 }, '-=0.3')
-        .from(claimRef.current,  { y: 20, opacity: 0, duration: 0.5 }, '-=0.25');
+        .from(claimRef.current,  { y: 20, opacity: 0, duration: 0.5 }, '-=0.3')
+        .from(guideRef.current,  { y: 20, opacity: 0, duration: 0.5 }, '-=0.25');
 
       /* stagger step list items */
       tl.from('.faucet-step', { y: 14, opacity: 0, stagger: 0.09, duration: 0.4 }, 0.35);
@@ -319,59 +319,8 @@ export default function FaucetTerminal() {
         </p>
       </div>
 
-      {/* ── Setup guide ─────────────────────────── */}
-      <section ref={guideRef} style={{
-        border: '1px solid #0D0B08', padding: '32px 28px', marginBottom: 24,
-      }}>
-        <p style={{ ...css.label, marginBottom: 6 }}>SETUP GUIDE</p>
-        <h2 style={{ ...css.serif, fontSize: 20, fontWeight: 900, color: '#0D0B08', marginBottom: 24 }}>
-          Get TUSDC in your wallet
-        </h2>
-
-        <ol style={{ listStyle: 'none', margin: 0, padding: 0 }}>
-          {STEPS.map((step) => (
-            <li key={step.n} className="faucet-step" style={{
-              display: 'flex', gap: 14, marginBottom: 20, alignItems: 'flex-start',
-            }}>
-              <StepNumber n={step.n} />
-
-              {step.n === 3 ? (
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <p style={{ ...css.serif, fontSize: 14, color: '#3A3530', marginBottom: 12 }}>
-                    Enter <strong>Avalanche Fuji C-Chain</strong> exactly like this:
-                  </p>
-                  <table style={{ width: '100%', borderCollapse: 'collapse', border: '1px solid #0D0B08' }}>
-                    <tbody>
-                      {FUJI_FIELDS.map(({ label, value, copyable }) => (
-                        <tr key={label} style={{ borderBottom: '1px solid rgba(13,11,8,0.15)' }}>
-                          <td style={{
-                            ...css.mono, fontSize: 10, fontWeight: 700,
-                            padding: '9px 12px', color: '#888',
-                            whiteSpace: 'nowrap', borderRight: '1px solid rgba(13,11,8,0.15)',
-                          }}>
-                            {label}
-                          </td>
-                          <td style={{ ...css.mono, fontSize: 11, padding: '9px 12px', color: '#0D0B08', wordBreak: 'break-all' }}>
-                            {value}
-                            {copyable && <CopyButton text={value} />}
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              ) : (
-                <span style={{ ...css.serif, fontSize: 14, lineHeight: 1.65, color: '#3A3530' }}>
-                  {step.text}
-                </span>
-              )}
-            </li>
-          ))}
-        </ol>
-      </section>
-
       {/* ── Claim card ──────────────────────────── */}
-      <section ref={claimRef} style={{ border: '2px solid #0D0B08', padding: '32px 28px' }}>
+      <section ref={claimRef} style={{ border: '2px solid #0D0B08', padding: '32px 28px', marginBottom: 24 }}>
 
         {/* ── Decorative top bar (animated gradient shimmer) ── */}
         <div style={{
@@ -523,6 +472,57 @@ export default function FaucetTerminal() {
             <span style={{ lineHeight: 1.6 }}>{message.text}</span>
           </div>
         )}
+      </section>
+
+      {/* ── Setup guide ─────────────────────────── */}
+      <section ref={guideRef} style={{
+        border: '1px solid #0D0B08', padding: '32px 28px',
+      }}>
+        <p style={{ ...css.label, marginBottom: 6 }}>SETUP GUIDE</p>
+        <h2 style={{ ...css.serif, fontSize: 20, fontWeight: 900, color: '#0D0B08', marginBottom: 24 }}>
+          Get TUSDC in your wallet
+        </h2>
+
+        <ol style={{ listStyle: 'none', margin: 0, padding: 0 }}>
+          {STEPS.map((step) => (
+            <li key={step.n} className="faucet-step" style={{
+              display: 'flex', gap: 14, marginBottom: 20, alignItems: 'flex-start',
+            }}>
+              <StepNumber n={step.n} />
+
+              {step.n === 3 ? (
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <p style={{ ...css.serif, fontSize: 14, color: '#3A3530', marginBottom: 12 }}>
+                    Enter <strong>Avalanche Fuji C-Chain</strong> exactly like this:
+                  </p>
+                  <table style={{ width: '100%', borderCollapse: 'collapse', border: '1px solid #0D0B08' }}>
+                    <tbody>
+                      {FUJI_FIELDS.map(({ label, value, copyable }) => (
+                        <tr key={label} style={{ borderBottom: '1px solid rgba(13,11,8,0.15)' }}>
+                          <td style={{
+                            ...css.mono, fontSize: 10, fontWeight: 700,
+                            padding: '9px 12px', color: '#888',
+                            whiteSpace: 'nowrap', borderRight: '1px solid rgba(13,11,8,0.15)',
+                          }}>
+                            {label}
+                          </td>
+                          <td style={{ ...css.mono, fontSize: 11, padding: '9px 12px', color: '#0D0B08', wordBreak: 'break-all' }}>
+                            {value}
+                            {copyable && <CopyButton text={value} />}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              ) : (
+                <span style={{ ...css.serif, fontSize: 14, lineHeight: 1.65, color: '#3A3530' }}>
+                  {step.text}
+                </span>
+              )}
+            </li>
+          ))}
+        </ol>
       </section>
     </div>
   );

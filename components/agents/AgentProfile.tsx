@@ -53,7 +53,7 @@ export default function AgentProfile() {
   const displayAgent = agent || staticAgent;
 
   return (
-    <div style={{ maxWidth: 960, margin: '0 auto', padding: '32px 24px 64px' }}>
+    <div style={{ maxWidth: 1280, margin: '0 auto', padding: '32px 24px 64px' }}>
       <Link href="/agents" style={{ textDecoration: 'none' }}>
         <span style={{ ...S.mono, fontSize: 11, color: '#888', display: 'inline-block', marginBottom: 28 }}>← All agents</span>
       </Link>

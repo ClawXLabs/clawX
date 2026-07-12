@@ -2,6 +2,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/router';
 import { useEffect, useState } from 'react';
 import AgentFeed from './AgentFeed';
+import AgentIcon from './AgentIcon';
 import MyAgentBar from './MyAgentBar';
 import AgentTradeLog from './AgentTradeLog';
 import MatchHistoryPanel from './MatchHistoryPanel';
@@ -71,7 +72,7 @@ export default function AgentDashboard() {
         onClose={() => setMatchOpen(false)}
       />
 
-      <div style={{ maxWidth: 960, margin: '0 auto', padding: '32px 24px 64px', display: 'grid', gridTemplateColumns: '1fr 320px', gap: 32, alignItems: 'start' }}>
+      <div style={{ maxWidth: 1280, margin: '0 auto', padding: '32px 24px 64px', display: 'grid', gridTemplateColumns: '1fr 320px', gap: 32, alignItems: 'start' }}>
         <div>
           {(error || stale) && (
             <div style={{
@@ -89,9 +90,11 @@ export default function AgentDashboard() {
               <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
                 <span style={{
                   width: 56, height: 56, display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  fontSize: 24, border: '1px solid #0D0B08',
+                  border: '1px solid #0D0B08',
                   background: `${agent?.color || '#C0392B'}18`,
-                }}>{agent?.emoji}</span>
+                }}>
+                  <AgentIcon agentId={status?.enrollment?.agentId} size={28} color={agent?.color || '#C0392B'} />
+                </span>
                 <div>
                   <p style={{ ...S.mono, fontSize: 9, fontWeight: 700, letterSpacing: '0.14em', textTransform: 'uppercase', color: statusColor, display: 'flex', alignItems: 'center', gap: 6 }}>
                     <span style={{ width: 6, height: 6, borderRadius: '50%', background: statusColor, display: 'inline-block' }} />
@@ -174,61 +177,70 @@ export default function AgentDashboard() {
             </Link>
           </section>
 
-          <section style={{ ...S.section, marginTop: 20 }}>
-            <h2 style={{ ...S.serif, fontSize: 18, fontWeight: 900, color: '#0D0B08', marginBottom: 4 }}>Pending Settlement</h2>
-            <p style={{ ...S.mono, fontSize: 10, color: '#888', marginBottom: 16 }}>
-              Trades placed but not yet resolved on-chain. Rounds auto-settle when the timer ends.
-            </p>
-            <PendingSettlementsPanel items={status?.pendingSettlements || []} />
-          </section>
+          {/* ── Bento Grid Layout ── */}
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20, marginTop: 20 }}>
 
-          <section style={{ ...S.section, marginTop: 20 }}>
-            <h2 style={{ ...S.serif, fontSize: 18, fontWeight: 900, color: '#0D0B08', marginBottom: 4 }}>AI Reasoning</h2>
-            <p style={{ ...S.mono, fontSize: 10, color: '#888', marginBottom: 16 }}>
-              Mode: {status?.enrollment?.agentMemory?.aiMode === 'llm' ? 'Live LLM' : 'Simulated AI'} — learns from settled rounds.
-            </p>
-            {(status?.enrollment?.agentMemory?.recentThoughts || []).length === 0 ? (
-              <p style={{ ...S.mono, fontSize: 12, color: '#888' }}>Watching markets for the next setup…</p>
-            ) : (
-              <ul style={{ listStyle: 'none', margin: 0, padding: 0, display: 'flex', flexDirection: 'column', gap: 8 }}>
-                {(status?.enrollment?.agentMemory?.recentThoughts || []).map((row) => (
-                  <li key={row.at} style={{ border: '1px solid rgba(13,11,8,0.15)', padding: '12px 16px', ...S.mono, fontSize: 13, color: '#3A3530' }}>
-                    {row.text}
-                  </li>
-                ))}
-              </ul>
-            )}
-          </section>
+            {/* Pending Settlement — left */}
+            <section style={{ ...S.section }}>
+              <h2 style={{ ...S.serif, fontSize: 18, fontWeight: 900, color: '#0D0B08', marginBottom: 4 }}>Pending Settlement</h2>
+              <p style={{ ...S.mono, fontSize: 10, color: '#888', marginBottom: 16 }}>
+                Trades placed but not yet resolved on-chain. Rounds auto-settle when the timer ends.
+              </p>
+              <PendingSettlementsPanel items={status?.pendingSettlements || []} />
+            </section>
 
-          <section style={{ ...S.section, marginTop: 20 }}>
-            <h2 style={{ ...S.serif, fontSize: 18, fontWeight: 900, color: '#0D0B08', marginBottom: 16 }}>Live Positions</h2>
-            {(status?.openPositions || []).length === 0 ? (
-              <p style={{ ...S.mono, fontSize: 12, color: '#888' }}>No open positions — scanning next 5m round</p>
-            ) : (
-              <ul style={{ listStyle: 'none', margin: 0, padding: 0, display: 'flex', flexDirection: 'column', gap: 8 }}>
-                {(status?.openPositions || []).map((pos) => (
-                  <li key={pos.roundId} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, border: '1px solid rgba(13,11,8,0.15)', padding: '12px 16px' }}>
-                    <span style={{ ...S.mono, fontSize: 13, fontWeight: 700, color: '#0D0B08' }}>{pos.symbol} · Round #{pos.roundNumber}</span>
-                    <span style={{
-                      padding: '2px 10px', ...S.mono, fontSize: 9, fontWeight: 700,
-                      background: pos.side === 'UP' ? '#27AE60' : '#C0392B', color: '#FAF8F3',
-                    }}>{pos.side}</span>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </section>
+            {/* Live Positions — right */}
+            <section style={{ ...S.section }}>
+              <h2 style={{ ...S.serif, fontSize: 18, fontWeight: 900, color: '#0D0B08', marginBottom: 16 }}>Live Positions</h2>
+              {(status?.openPositions || []).length === 0 ? (
+                <p style={{ ...S.mono, fontSize: 12, color: '#888' }}>No open positions — scanning next 5m round</p>
+              ) : (
+                <ul style={{ listStyle: 'none', margin: 0, padding: 0, display: 'flex', flexDirection: 'column', gap: 8 }}>
+                  {(status?.openPositions || []).map((pos) => (
+                    <li key={pos.roundId} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, border: '1px solid rgba(13,11,8,0.15)', padding: '12px 16px' }}>
+                      <span style={{ ...S.mono, fontSize: 13, fontWeight: 700, color: '#0D0B08' }}>{pos.symbol} · Round #{pos.roundNumber}</span>
+                      <span style={{
+                        padding: '2px 10px', ...S.mono, fontSize: 9, fontWeight: 700,
+                        background: pos.side === 'UP' ? '#27AE60' : '#C0392B', color: '#FAF8F3',
+                      }}>{pos.side}</span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </section>
 
-          <section style={{ ...S.section, marginTop: 20 }}>
-            <h2 style={{ ...S.serif, fontSize: 18, fontWeight: 900, color: '#0D0B08', marginBottom: 4 }}>Agent Trades</h2>
-            <p style={{ ...S.mono, fontSize: 10, color: '#888', marginBottom: 16 }}>
-              Click any row to expand amount, outcome, and transaction link.
-            </p>
-            <AgentTradeLog
-              trades={status?.enrichedTradeLog || status?.tradeLog || []}
-              poolSummary={status?.poolSummary}
-            />
-          </section>
+            {/* AI Reasoning — spans full width */}
+            <section style={{ ...S.section, gridColumn: '1 / -1' }}>
+              <h2 style={{ ...S.serif, fontSize: 18, fontWeight: 900, color: '#0D0B08', marginBottom: 4 }}>AI Reasoning</h2>
+              <p style={{ ...S.mono, fontSize: 10, color: '#888', marginBottom: 16 }}>
+                Mode: {status?.enrollment?.agentMemory?.aiMode === 'llm' ? 'Live LLM' : 'Simulated AI'} — learns from settled rounds.
+              </p>
+              {(status?.enrollment?.agentMemory?.recentThoughts || []).length === 0 ? (
+                <p style={{ ...S.mono, fontSize: 12, color: '#888' }}>Watching markets for the next setup…</p>
+              ) : (
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 8 }}>
+                  {(status?.enrollment?.agentMemory?.recentThoughts || []).map((row) => (
+                    <div key={row.at} style={{ border: '1px solid rgba(13,11,8,0.15)', padding: '12px 16px', ...S.mono, fontSize: 13, color: '#3A3530' }}>
+                      {row.text}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </section>
+
+            {/* Agent Trades — spans full width */}
+            <section style={{ ...S.section, gridColumn: '1 / -1' }}>
+              <h2 style={{ ...S.serif, fontSize: 18, fontWeight: 900, color: '#0D0B08', marginBottom: 4 }}>Agent Trades</h2>
+              <p style={{ ...S.mono, fontSize: 10, color: '#888', marginBottom: 16 }}>
+                Click any row to expand amount, outcome, and transaction link.
+              </p>
+              <AgentTradeLog
+                trades={status?.enrichedTradeLog || status?.tradeLog || []}
+                poolSummary={status?.poolSummary}
+              />
+            </section>
+
+          </div>
         </div>
 
         <div>

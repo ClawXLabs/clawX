@@ -48,20 +48,48 @@ export default function AgentCard({ agent, rank, href, onSelect, selected }: Age
   const inner = (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%', justifyContent: 'space-between', flex: 1 }}>
       <div>
-        {/* Top: identity + return badge */}
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
-          <AgentIdentity rank={rank} agent={agent} />
-          <span style={{
-            ...S.mono, fontSize: 12, fontWeight: 700, letterSpacing: '0.1em',
-            padding: '6px 10px',
-            background: up ? '#27AE60' : '#C0392B',
-            color: '#FAF8F3',
-            display: 'inline-flex', alignItems: 'center', gap: 4,
-            flexShrink: 0,
+        {/* Rank badge */}
+        {rank != null && (
+          <p style={{ ...S.mono, fontSize: 9, fontWeight: 700, letterSpacing: '0.14em', textTransform: 'uppercase', color: '#888', marginBottom: 10 }}>
+            #{rank} ranked
+          </p>
+        )}
+
+        {/* Icon + Name row */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 8 }}>
+          <div style={{
+            width: 40, height: 40, flexShrink: 0,
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            border: '1px solid #0D0B08',
+            background: `${agent.color}15`,
           }}>
-            {up ? '▲' : '▼'} {up ? '+' : ''}{returnPct}%
-          </span>
+            <AgentIcon agentId={agent.id} size={20} color={agent.color} />
+          </div>
+          <div style={{ minWidth: 0 }}>
+            <p style={{ ...S.serif, fontSize: 16, fontWeight: 900, color: '#0D0B08', margin: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              {agent.name}
+            </p>
+            <p style={{ ...S.mono, fontSize: 11, color: '#888', margin: 0 }}>
+              {agent.handle}
+            </p>
+          </div>
         </div>
+
+        {/* Style tag */}
+        <p style={{ ...S.mono, fontSize: 9, fontWeight: 700, letterSpacing: '0.12em', textTransform: 'uppercase', color: '#aaa', marginBottom: 10 }}>
+          {agent.style}
+        </p>
+
+        {/* Return badge */}
+        <span style={{
+          ...S.mono, fontSize: 12, fontWeight: 700, letterSpacing: '0.1em',
+          padding: '5px 10px',
+          background: up ? '#27AE60' : '#C0392B',
+          color: '#FAF8F3',
+          display: 'inline-flex', alignItems: 'center', gap: 4,
+        }}>
+          {up ? '▲' : '▼'} {up ? '+' : ''}{returnPct}%
+        </span>
 
         {/* Position chips */}
         <PositionChips agent={agent} />
@@ -147,39 +175,8 @@ export default function AgentCard({ agent, rank, href, onSelect, selected }: Age
   );
 }
 
-/* ─── Agent Identity ────────────────────────────────────────────── */
 
-function AgentIdentity({ rank, agent }: { rank?: number; agent: AgentData }) {
-  return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 12, minWidth: 0 }}>
-      {/* Emoji avatar */}
-      <div style={{
-        width: 48, height: 48, flexShrink: 0,
-        display: 'flex', alignItems: 'center', justifyContent: 'center',
-        border: '1px solid #0D0B08',
-        background: `${agent.color}15`,
-      }}>
-        <AgentIcon agentId={agent.id} size={24} color={agent.color} />
-      </div>
-      <div style={{ minWidth: 0 }}>
-        {rank != null && (
-          <p style={{ ...S.mono, fontSize: 9, fontWeight: 700, letterSpacing: '0.14em', textTransform: 'uppercase', color: '#888' }}>
-            #{rank} ranked
-          </p>
-        )}
-        <p style={{ ...S.serif, fontSize: 16, fontWeight: 900, color: '#0D0B08', margin: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-          {agent.name}
-        </p>
-        <p style={{ ...S.mono, fontSize: 11, color: '#888', margin: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-          {agent.handle}
-        </p>
-        <p style={{ ...S.mono, fontSize: 9, fontWeight: 700, letterSpacing: '0.12em', textTransform: 'uppercase', color: '#aaa', marginTop: 2 }}>
-          {agent.style}
-        </p>
-      </div>
-    </div>
-  );
-}
+
 
 /* ─── Position Chips ────────────────────────────────────────────── */
 

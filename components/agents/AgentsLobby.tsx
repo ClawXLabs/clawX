@@ -100,7 +100,7 @@ export default function AgentsLobby() {
 
       <div style={{ borderBottom: '2px solid #0D0B08', padding: '48px 24px 32px' }}>
 
-        <div style={{ maxWidth: 960, margin: '0 auto', display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 20 }}>
+        <div style={{ maxWidth: 1280, margin: '0 auto', display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 20 }}>
 
           <div style={{
             width: 56, height: 56, display: 'flex', alignItems: 'center', justifyContent: 'center',
@@ -137,7 +137,7 @@ export default function AgentsLobby() {
 
 
 
-      <div style={{ maxWidth: 960, margin: '0 auto', padding: '32px 24px 64px' }}>
+      <div style={{ maxWidth: 1280, margin: '0 auto', padding: '32px 24px 64px' }}>
 
         {enrolled && account && status ? (
 
@@ -259,7 +259,7 @@ export default function AgentsLobby() {
 
             {loading && agents.length === 0 ? (
 
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 16 }}>
 
                 {Array.from({ length: 4 }).map((_, i) => (
 
@@ -279,7 +279,7 @@ export default function AgentsLobby() {
 
             ) : (
 
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 16 }}>
 
                 {agents.map((agentRow, index) => (
 
