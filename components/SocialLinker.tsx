@@ -341,7 +341,7 @@ export default function SocialLinker({ wallet, initialLinks = {}, onSaved }: Soc
       <p style={{ ...S.mono, fontSize: 11, color: '#5A554E', marginBottom: 16 }}>
         Verify you follow ClawX on Twitter/X and are in our Telegram community. Linked accounts appear on the leaderboard.
       </p>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 12 }}>
         <TwitterLinker wallet={wallet} existing={links.twitter} onDone={updateLink('twitter')} />
         <TelegramLinker wallet={wallet} existing={links.telegram} onDone={updateLink('telegram')} />
       </div>
