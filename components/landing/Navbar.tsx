@@ -108,8 +108,8 @@ export default function Navbar({ account, onConnect }: NavbarProps) {
             )}
           </button>
         ) : (
-          <Link
-            href="/"
+          <a
+            href="https://clawxlab.xyz"
             style={{
               display: 'flex',
               alignItems: 'center',
@@ -134,7 +134,7 @@ export default function Navbar({ account, onConnect }: NavbarProps) {
             >
               CLAW<span style={{ color: '#C0392B' }}>X</span>
             </span>
-          </Link>
+          </a>
         )}
 
         {/* ── Center: Nav links (Desktop only) ── */}

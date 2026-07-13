@@ -1,22 +1,17 @@
-import { useEffect } from 'react';
-import { useRouter } from 'next/router';
 import Head from 'next/head';
+import AppShell from '../components/AppShell';
+import MarketsHubTerminal from '../components/MarketsHubTerminal';
 
 export default function Home() {
-  const router = useRouter();
-
-  useEffect(() => {
-    router.replace('/markets');
-  }, [router]);
-
   return (
     <>
       <Head>
-        <title>Loading... · ClawX</title>
+        <title>Markets · ClawX</title>
+        <meta name="description" content="Browse live Fuji prediction markets and open the trading desk." />
       </Head>
-      <div style={{ background: '#FAF8F3', minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-        <p style={{ fontFamily: '"Courier New", monospace', fontSize: 13, color: '#888' }}>Redirecting to app...</p>
-      </div>
+      <AppShell>
+        <MarketsHubTerminal />
+      </AppShell>
     </>
   );
 }
