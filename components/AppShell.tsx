@@ -1,23 +1,20 @@
-import { ReactNode } from 'react';
+import { ReactNode, useEffect } from 'react';
 import Navbar from './landing/Navbar';
 import { useWallet } from '../contexts/WalletContext';
+import ConnectWalletModal from './ConnectWalletModal';
 
 interface AppShellProps {
   children: ReactNode;
 }
 
-/**
- * AppShell — Old Newspaper Theme
- * ───────────────────────────────
- * Wraps all internal pages with the editorial Navbar from the
- * landing page, keeping the cream linen background (#FAF8F3) and
- * Georgia / Courier New typography consistent across the entire app.
- *
- * The landing page itself does NOT use AppShell — it renders Navbar
- * directly inside LandingPage.tsx.
- */
 export default function AppShell({ children }: AppShellProps) {
-  const { account, connectWallet } = useWallet();
+  const { account, connectWallet, setShowConnectModal } = useWallet();
+
+  useEffect(() => {
+    if (!account) {
+      setShowConnectModal(true);
+    }
+  }, [account, setShowConnectModal]);
 
   return (
     <div
@@ -31,6 +28,9 @@ export default function AppShell({ children }: AppShellProps) {
     >
       {/* Fixed editorial navigation — same as landing */}
       <Navbar account={account} onConnect={connectWallet} />
+
+      {/* Connect Wallet Modal Popup */}
+      <ConnectWalletModal />
 
       {/* Page content — padded below the two fixed nav bars */}
       <main style={{ paddingTop: 56 }}>

@@ -9,6 +9,9 @@ export interface WalletContextValue {
   provider: BrowserProvider | null;
   contract: Contract | null;
   connectWallet: () => Promise<string | null>;
+  disconnectWallet: () => void;
+  showConnectModal: boolean;
+  setShowConnectModal: (show: boolean) => void;
 }
 
 interface WalletProviderProps {
@@ -46,6 +49,7 @@ export function WalletProvider({ children }: WalletProviderProps) {
   const [account, setAccount] = useState<string | null>(null);
   const [provider, setProvider] = useState<BrowserProvider | null>(null);
   const [contract, setContract] = useState<Contract | null>(null);
+  const [showConnectModal, setShowConnectModal] = useState<boolean>(false);
 
   // Auto-restore session on mount
   useEffect(() => {
@@ -93,6 +97,7 @@ export function WalletProvider({ children }: WalletProviderProps) {
       setAccount(address);
       setProvider(nextProvider);
       setContract(marketContract);
+      setShowConnectModal(false);
       return address;
     } catch (error: unknown) {
       const err = error as { message?: string; shortMessage?: string };
@@ -104,22 +109,35 @@ export function WalletProvider({ children }: WalletProviderProps) {
     }
   }, []);
 
+  // Disconnect
+  const disconnectWallet = useCallback(() => {
+    setAccount(null);
+    setProvider(null);
+    setContract(null);
+  }, []);
+
   // Account change listener
   useEffect(() => {
     const eth = getMetaMaskEthereum();
     if (!eth) return;
-    const onAccounts = () => {
-      setAccount(null);
-      setContract(null);
-      setProvider(null);
+    const onAccounts = (accounts: unknown) => {
+      const list = accounts as string[];
+      if (list && list.length > 0) {
+        // Automatically switch account
+        connectWallet();
+      } else {
+        setAccount(null);
+        setContract(null);
+        setProvider(null);
+      }
     };
     eth.on?.('accountsChanged', onAccounts);
     return () => eth.removeListener?.('accountsChanged', onAccounts);
-  }, []);
+  }, [connectWallet]);
 
   const value = useMemo<WalletContextValue>(
-    () => ({ account, provider, contract, connectWallet }),
-    [account, provider, contract, connectWallet]
+    () => ({ account, provider, contract, connectWallet, disconnectWallet, showConnectModal, setShowConnectModal }),
+    [account, provider, contract, connectWallet, disconnectWallet, showConnectModal, setShowConnectModal]
   );
 
   return <WalletContext.Provider value={value}>{children}</WalletContext.Provider>;

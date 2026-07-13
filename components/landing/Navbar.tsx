@@ -3,6 +3,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/router';
 import CrabLogo from '../svgs/CrabLogo';
 import CrabLogoOutline from '../svgs/CrabLogoOutline';
+import { useWallet } from '../../contexts/WalletContext';
 
 interface NavbarProps { account: string | null; onConnect: () => void; }
 
@@ -15,6 +16,7 @@ const NAV_LINKS = [
 ];
 
 export default function Navbar({ account, onConnect }: NavbarProps) {
+  const { setShowConnectModal } = useWallet();
   const [scrolled, setScrolled] = useState(false);
   const [hoveredLink, setHoveredLink] = useState<string | null>(null);
   const [isMobile, setIsMobile] = useState(false);
@@ -191,7 +193,7 @@ export default function Navbar({ account, onConnect }: NavbarProps) {
 
         {/* ── Right: Connect wallet button (Always visible) ── */}
         <button
-          onClick={onConnect}
+          onClick={() => setShowConnectModal(true)}
           style={{
             display: 'flex',
             alignItems: 'center',
