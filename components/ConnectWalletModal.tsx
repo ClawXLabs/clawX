@@ -78,7 +78,7 @@ export default function ConnectWalletModal() {
             letterSpacing: '-0.02em',
           }}
         >
-          {account ? 'Switch Wallet Account' : 'Connect Your Pilot Wallet'}
+          {account ? 'Switch Wallet' : 'Connect Wallet'}
         </h3>
         <p
           style={{
