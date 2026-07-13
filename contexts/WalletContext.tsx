@@ -12,6 +12,7 @@ export interface WalletContextValue {
   disconnectWallet: () => void;
   showConnectModal: boolean;
   setShowConnectModal: (show: boolean) => void;
+  isRestoring: boolean;
 }
 
 interface WalletProviderProps {
@@ -51,24 +52,33 @@ export function WalletProvider({ children }: WalletProviderProps) {
   const [contract, setContract] = useState<Contract | null>(null);
   const [showConnectModal, setShowConnectModal] = useState<boolean>(false);
 
+  const [isRestoring, setIsRestoring] = useState<boolean>(true);
+
   // Auto-restore session on mount
   useEffect(() => {
     const eth = getMetaMaskEthereum();
-    if (!eth) return;
+    if (!eth) {
+      setIsRestoring(false);
+      return;
+    }
 
     let cancelled = false;
     const restore = async () => {
       try {
         const accounts = await eth.request({ method: 'eth_accounts' }) as string[];
-        if (cancelled || !accounts?.[0]) return;
-        const nextProvider = new ethers.BrowserProvider(eth as unknown as ethers.Eip1193Provider);
-        const signer = await nextProvider.getSigner();
-        const address = await signer.getAddress();
-        const marketContract = new ethers.Contract(CONTRACT_ADDRESS, CONTRACT_ABI, signer);
-        setAccount(address);
-        setProvider(nextProvider);
-        setContract(marketContract);
-      } catch { /* ignore */ }
+        if (cancelled) return;
+        if (accounts?.[0]) {
+          const nextProvider = new ethers.BrowserProvider(eth as unknown as ethers.Eip1193Provider);
+          const signer = await nextProvider.getSigner();
+          const address = await signer.getAddress();
+          const marketContract = new ethers.Contract(CONTRACT_ADDRESS, CONTRACT_ABI, signer);
+          setAccount(address);
+          setProvider(nextProvider);
+          setContract(marketContract);
+        }
+      } catch { /* ignore */ } finally {
+        if (!cancelled) setIsRestoring(false);
+      }
     };
 
     restore();
@@ -136,8 +146,8 @@ export function WalletProvider({ children }: WalletProviderProps) {
   }, [connectWallet]);
 
   const value = useMemo<WalletContextValue>(
-    () => ({ account, provider, contract, connectWallet, disconnectWallet, showConnectModal, setShowConnectModal }),
-    [account, provider, contract, connectWallet, disconnectWallet, showConnectModal, setShowConnectModal]
+    () => ({ account, provider, contract, connectWallet, disconnectWallet, showConnectModal, setShowConnectModal, isRestoring }),
+    [account, provider, contract, connectWallet, disconnectWallet, showConnectModal, setShowConnectModal, isRestoring]
   );
 
   return <WalletContext.Provider value={value}>{children}</WalletContext.Provider>;

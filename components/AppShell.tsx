@@ -8,13 +8,13 @@ interface AppShellProps {
 }
 
 export default function AppShell({ children }: AppShellProps) {
-  const { account, connectWallet, setShowConnectModal } = useWallet();
+  const { account, connectWallet, setShowConnectModal, isRestoring } = useWallet();
 
   useEffect(() => {
-    if (!account) {
+    if (!isRestoring && !account) {
       setShowConnectModal(true);
     }
-  }, [account, setShowConnectModal]);
+  }, [isRestoring]);
 
   return (
     <div
