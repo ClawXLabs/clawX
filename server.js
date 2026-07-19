@@ -34,6 +34,10 @@ async function main() {
   subscriber.on('message', (_channel, message) => broadcast(message));
   subscriber.on('pmessage', (_pattern, _channel, message) => broadcast(message));
 
+  // Next dev mode uses its own WebSocket (/_next/webpack-hmr) for hot reload —
+  // pass any non-/ws upgrade through to Next instead of destroying it.
+  const nextUpgrade = typeof app.getUpgradeHandler === 'function' ? app.getUpgradeHandler() : null;
+
   server.on('upgrade', (request, socket, head) => {
     let pathname;
     try {
@@ -42,11 +46,15 @@ async function main() {
       socket.destroy();
       return;
     }
-    if (pathname !== '/ws') {
-      socket.destroy();
+    if (pathname === '/ws') {
+      wss.handleUpgrade(request, socket, head, (ws) => wss.emit('connection', ws, request));
       return;
     }
-    wss.handleUpgrade(request, socket, head, (ws) => wss.emit('connection', ws, request));
+    if (nextUpgrade) {
+      nextUpgrade(request, socket, head);
+      return;
+    }
+    socket.destroy();
   });
 
   wss.on('connection', async (ws) => {

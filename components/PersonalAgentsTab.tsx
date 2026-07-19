@@ -46,9 +46,8 @@ interface HistoryData {
 const mono: React.CSSProperties = { fontFamily: "'Courier New', monospace" };
 const serif: React.CSSProperties = { fontFamily: "Georgia, 'Times New Roman', serif" };
 const card: React.CSSProperties = {
-  background: '#FDF6EC',
-  border: '1.5px solid #D4A96A',
-  borderRadius: 10,
+  background: 'transparent',
+  border: '1px solid #0D0B08',
   padding: '18px 22px',
 };
 
@@ -105,7 +104,7 @@ function CombinedCard({ combined }: { combined: Combined }) {
   return (
     <div style={{ ...card, marginBottom: 18 }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 14 }}>
-        <span style={{ display: 'flex', alignItems: 'center', color: '#D4A96A' }}><BarChart3 size={18} strokeWidth={1.5} /></span>
+        <span style={{ display: 'flex', alignItems: 'center', color: '#888' }}><BarChart3 size={18} strokeWidth={1.5} /></span>
         <span style={{ ...serif, fontSize: 16, fontWeight: 700, color: '#0D0B08' }}>All Agents Combined</span>
         <WinRateBadge rate={combined.winRate} />
       </div>
@@ -114,14 +113,13 @@ function CombinedCard({ combined }: { combined: Combined }) {
           <div
             key={label}
             style={{
-              background: '#FAF0E1',
-              border: '1px solid #E8D5B0',
-              borderRadius: 8,
+              background: 'transparent',
+              border: '1px solid rgba(13,11,8,0.2)',
               padding: '10px 12px',
               textAlign: 'center',
             }}
           >
-            <div style={{ ...mono, fontSize: 18, fontWeight: 700, color: '#0D0B08' }}>{value}</div>
+            <div style={{ ...serif, fontSize: 18, fontWeight: 900, color: '#0D0B08' }}>{value}</div>
             <div style={{ ...mono, fontSize: 10, color: '#7B6A52', marginTop: 2 }}>{label}</div>
           </div>
         ))}
@@ -207,7 +205,7 @@ function AgentCard({ agent }: { agent: AgentStat }) {
 
       {/* Expanded: symbol breakdown + recent trades */}
       {expanded && (
-        <div style={{ marginTop: 16, borderTop: '1px solid #E8D5B0', paddingTop: 14 }}>
+        <div style={{ marginTop: 16, borderTop: '1px solid rgba(13,11,8,0.15)', paddingTop: 14 }}>
           {/* Per-symbol */}
           {agent.bySymbol.length > 0 && (
             <div style={{ marginBottom: 14 }}>
@@ -219,9 +217,8 @@ function AgentCard({ agent }: { agent: AgentStat }) {
                   <div
                     key={s.symbol}
                     style={{
-                      background: '#FAF0E1',
-                      border: '1px solid #E8D5B0',
-                      borderRadius: 7,
+                      background: 'transparent',
+                      border: '1px solid rgba(13,11,8,0.2)',
                       padding: '6px 12px',
                       minWidth: 90,
                       textAlign: 'center',
@@ -254,7 +251,7 @@ function AgentCard({ agent }: { agent: AgentStat }) {
                       alignItems: 'center',
                       gap: 8,
                       padding: '4px 0',
-                      borderBottom: '1px solid #F0E4CE',
+                      borderBottom: '1px solid rgba(13,11,8,0.1)',
                     }}
                   >
                     <span
@@ -363,7 +360,7 @@ export default function PersonalAgentsTab() {
         <div style={{ display: 'flex', justifyContent: 'center', color: '#7B6A52', marginBottom: 14 }}><Bot size={40} strokeWidth={1.5} /></div>
         <div style={{ ...serif, fontSize: 15, color: '#7B6A52' }}>
           No agent enrolled yet. Head to the{' '}
-          <a href="/agents" style={{ color: '#D4A96A', textDecoration: 'underline' }}>
+          <a href="/agents" style={{ color: '#C0392B', textDecoration: 'underline' }}>
             Agents Lobby
           </a>{' '}
           to deploy your first agent.
@@ -384,15 +381,15 @@ export default function PersonalAgentsTab() {
             onClick={() => setView(v)}
             style={{
               ...mono,
-              fontSize: 12,
+              fontSize: 10,
               fontWeight: 700,
-              padding: '6px 16px',
-              borderRadius: 7,
-              border: '1.5px solid #D4A96A',
+              letterSpacing: '0.1em',
+              textTransform: 'uppercase',
+              padding: '7px 16px',
+              border: '1px solid #0D0B08',
               cursor: 'pointer',
-              background: view === v ? '#D4A96A' : 'transparent',
-              color: view === v ? '#fff' : '#7B6A52',
-              transition: 'all 0.15s',
+              background: view === v ? '#0D0B08' : 'transparent',
+              color: view === v ? '#FAF8F3' : '#5A554E',
               display: 'inline-flex',
               alignItems: 'center',
               gap: 6,
@@ -415,13 +412,15 @@ export default function PersonalAgentsTab() {
           onClick={load}
           style={{
             ...mono,
-            fontSize: 11,
-            padding: '5px 12px',
-            borderRadius: 7,
-            border: '1px solid #D4A96A',
+            fontSize: 9,
+            fontWeight: 700,
+            letterSpacing: '0.14em',
+            textTransform: 'uppercase',
+            padding: '7px 14px',
+            border: '1px solid #0D0B08',
             cursor: 'pointer',
             background: 'transparent',
-            color: '#7B6A52',
+            color: '#5A554E',
             marginLeft: 'auto',
           }}
         >

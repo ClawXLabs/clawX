@@ -109,8 +109,8 @@ function TwitterLinker({ wallet, existing, onDone }: {
   };
 
   return (
-    <div style={{ border: '1px solid rgba(13,11,8,0.15)', padding: '18px 20px' }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
+    <div style={{ border: '1px solid #0D0B08', padding: '18px 20px' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12, borderBottom: '1px solid rgba(13,11,8,0.1)', paddingBottom: 10 }}>
         {/* X / Twitter logo */}
         <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" style={{ color: '#0D0B08' }}>
           <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-4.714-6.231-5.401 6.231H2.746l7.73-8.835L1.254 2.25H8.08l4.253 5.622zm-1.161 17.52h1.833L7.084 4.126H5.117z" />
@@ -247,8 +247,8 @@ function TelegramLinker({ wallet, existing, onDone }: {
   }, [botUsername, wallet, onDone]);
 
   return (
-    <div style={{ border: '1px solid rgba(13,11,8,0.15)', padding: '18px 20px' }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
+    <div style={{ border: '1px solid #0D0B08', padding: '18px 20px' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12, borderBottom: '1px solid rgba(13,11,8,0.1)', paddingBottom: 10 }}>
         {/* Telegram logo */}
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
           <path d="M12 0C5.373 0 0 5.373 0 12s5.373 12 12 12 12-5.373 12-12S18.627 0 12 0zm5.894 8.221l-1.97 9.28c-.145.658-.537.818-1.084.508l-3-2.21-1.447 1.394c-.16.16-.295.295-.605.295l.213-3.053 5.56-5.023c.242-.213-.054-.333-.373-.12L7.17 13.667l-2.96-.924c-.643-.204-.657-.643.136-.953l11.57-4.461c.537-.194 1.006.131.978.892z" fill="#229ED9" />
@@ -335,11 +335,18 @@ export default function SocialLinker({ wallet, initialLinks = {}, onSaved }: Soc
     onSaved?.(next);
   };
 
+  const linkedCount = [links.twitter?.handle, links.telegram?.username].filter(Boolean).length;
+
   return (
     <div>
-      <p style={{ ...S.label, color: '#C0392B', marginBottom: 10 }}>Social Accounts</p>
-      <p style={{ ...S.mono, fontSize: 11, color: '#5A554E', marginBottom: 16 }}>
-        Verify you follow ClawX on Twitter/X and are in our Telegram community. Linked accounts appear on the leaderboard.
+      <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap', marginBottom: 4 }}>
+        <h2 style={{ ...S.serif, fontSize: 24, fontWeight: 900, color: '#0D0B08', margin: 0 }}>Connected Wires</h2>
+        <span style={{ ...S.label, letterSpacing: '0.14em' }}>
+          {linkedCount}/2 linked · shown on the leaderboard
+        </span>
+      </div>
+      <p style={{ ...S.mono, fontSize: 10, color: '#5A554E', margin: '0 0 14px' }}>
+        Verify you follow ClawX on Twitter/X and are in our Telegram community.
       </p>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 12 }}>
         <TwitterLinker wallet={wallet} existing={links.twitter} onDone={updateLink('twitter')} />

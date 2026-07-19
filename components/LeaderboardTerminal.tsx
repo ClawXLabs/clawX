@@ -102,13 +102,13 @@ function XpBadge({ xp, level }: { xp: number; level: number }) {
   return (
     <div style={{ textAlign: 'right' }}>
       <span style={{
-        ...S.mono, fontSize: 12, fontWeight: 700, color: '#D4A96A',
+        ...S.mono, fontSize: 12, fontWeight: 700, color: '#0D0B08',
       }}>
         {xp.toLocaleString()}
       </span>
       <span style={{
-        ...S.mono, fontSize: 9, color: '#7B6A52',
-        border: '1px solid #D4A96A55', borderRadius: 4,
+        ...S.mono, fontSize: 9, color: '#5A554E',
+        border: '1px solid rgba(13,11,8,0.25)',
         padding: '1px 5px', marginLeft: 5,
       }}>
         LVL {level}
@@ -119,7 +119,7 @@ function XpBadge({ xp, level }: { xp: number; level: number }) {
 
 function StreakBadge({ streak }: { streak: number }) {
   if (streak === 0) return <span style={{ ...S.mono, fontSize: 10, color: '#888' }}>—</span>;
-  const color = streak >= 7 ? '#E84142' : streak >= 3 ? '#f59e0b' : '#D4A96A';
+  const color = streak >= 7 ? '#C0392B' : streak >= 3 ? '#F69D39' : '#888';
   return (
     <span style={{ ...S.mono, fontSize: 11, fontWeight: 700, color, display: 'inline-flex', alignItems: 'center', gap: 3 }}>
       <Flame size={12} strokeWidth={1.5} /> {streak}d
@@ -135,30 +135,17 @@ function RankMedal({ rank }: { rank: number }) {
   );
 }
 
-// ─── Stat block ───────────────────────────────────────────────────────────────
-
-function StatBlock({ label, value, hint, border }: {
-  label: string; value: string | number; hint: string; border?: boolean;
-}) {
-  return (
-    <div style={{ padding: '20px 24px', borderLeft: border ? '1px solid #0D0B08' : 'none' }}>
-      <p style={S.label}>{label}</p>
-      <p style={{ ...S.serif, fontSize: 32, fontWeight: 900, color: '#0D0B08', margin: '6px 0 0' }}>{value}</p>
-      <p style={{ ...S.mono, fontSize: 10, color: '#888', marginTop: 6 }}>{hint}</p>
-    </div>
-  );
-}
-
 // ─── Your rank card (shown when connected user is not in top view) ────────────
 
 function MyRankCard({ row }: { row: LeaderboardRow }) {
   return (
     <div style={{
-      border: '2px solid #D4A96A', background: 'rgba(212,169,106,0.07)',
+      border: '1px solid #0D0B08', borderLeft: '4px solid #F69D39',
+      background: 'rgba(246,157,57,0.05)',
       padding: '12px 16px', marginBottom: 16,
       display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap',
     }}>
-      <span style={{ ...S.mono, fontSize: 10, color: '#7B6A52', fontWeight: 700 }}>YOUR RANK</span>
+      <span style={{ ...S.label }}>Your Rank</span>
       <RankMedal rank={row.rank} />
       <span style={{ ...S.serif, fontSize: 14, fontWeight: 800, color: '#0D0B08' }}>
         {row.displayName || shortAddr(row.wallet)}
@@ -238,10 +225,10 @@ function PilotTable({
                     style={{
                       borderBottom: '1px solid rgba(13,11,8,0.08)',
                       background: isMe
-                        ? 'rgba(212,169,106,0.12)'
+                        ? 'rgba(246,157,57,0.08)'
                         : isExpanded ? 'rgba(13,11,8,0.03)' : 'transparent',
                       cursor: 'pointer',
-                      outline: isMe ? '2px solid #D4A96A' : 'none',
+                      outline: isMe ? '2px solid #F69D39' : 'none',
                       outlineOffset: -2,
                     }}
                   >
@@ -255,8 +242,8 @@ function PilotTable({
                       <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                         {isMe && (
                           <span style={{
-                            ...S.mono, fontSize: 8, fontWeight: 700, color: '#D4A96A',
-                            border: '1px solid #D4A96A', borderRadius: 3, padding: '1px 5px',
+                            ...S.mono, fontSize: 8, fontWeight: 700, color: '#FAF8F3',
+                            background: '#F69D39', padding: '2px 6px',
                           }}>YOU</span>
                         )}
                         <div>
@@ -325,8 +312,8 @@ function PilotTable({
                         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
                           {row.bySymbol.map((s) => (
                             <div key={s.symbol} style={{
-                              background: '#FDF6EC', border: '1px solid #D4A96A55',
-                              borderRadius: 7, padding: '6px 12px', minWidth: 80, textAlign: 'center',
+                              background: 'transparent', border: '1px solid rgba(13,11,8,0.2)',
+                              padding: '6px 12px', minWidth: 80, textAlign: 'center',
                             }}>
                               <div style={{ ...S.mono, fontSize: 13, fontWeight: 700, color: '#0D0B08' }}>{s.symbol}</div>
                               <div style={{ ...S.mono, fontSize: 9, color: '#7B6A52', marginTop: 2 }}>
@@ -383,9 +370,8 @@ function AgentPersonaRankings({ agents }: { agents: AgentPersona[] }) {
           <div
             key={agent.agentId}
             style={{
-              border: '1.5px solid #D4A96A',
+              border: '1px solid #0D0B08',
               borderLeft: `4px solid ${agent.color}`,
-              borderRadius: 10,
               marginBottom: 12,
               overflow: 'hidden',
               cursor: 'pointer',
@@ -396,10 +382,10 @@ function AgentPersonaRankings({ agents }: { agents: AgentPersona[] }) {
             <div style={{
               display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap',
               padding: '14px 18px',
-              background: isExpanded ? 'rgba(13,11,8,0.03)' : '#FDF6EC',
+              background: isExpanded ? 'rgba(13,11,8,0.03)' : 'transparent',
             }}>
               {/* Rank */}
-              <span style={{ ...S.mono, fontSize: 18, fontWeight: 900, color: '#D4A96A', width: 36, textAlign: 'center' }}>
+              <span style={{ ...S.mono, fontSize: 18, fontWeight: 900, color: '#F69D39', width: 36, textAlign: 'center' }}>
                 #{i + 1}
               </span>
 
@@ -454,7 +440,7 @@ function AgentPersonaRankings({ agents }: { agents: AgentPersona[] }) {
 
             {/* Expanded: per-token breakdown */}
             {isExpanded && (
-              <div style={{ padding: '14px 18px 18px', borderTop: '1px solid #E8D5B0' }}>
+              <div style={{ padding: '14px 18px 18px', borderTop: '1px solid rgba(13,11,8,0.15)' }}>
                 <p style={{ ...S.label, marginBottom: 10 }}>Token performance</p>
                 {agent.bySymbol.length === 0 ? (
                   <p style={{ ...S.mono, fontSize: 11, color: '#888' }}>No resolved trade data yet.</p>
@@ -462,7 +448,7 @@ function AgentPersonaRankings({ agents }: { agents: AgentPersona[] }) {
                   <div style={{ overflowX: 'auto' }}>
                     <table style={{ borderCollapse: 'collapse', width: '100%', minWidth: 400 }}>
                       <thead>
-                        <tr style={{ borderBottom: '1px solid #E8D5B0' }}>
+                        <tr style={{ borderBottom: '1px solid rgba(13,11,8,0.2)' }}>
                           {['Token', 'Trades', 'W / L', 'Win %', 'Pool Spend'].map((h, idx) => (
                             <th key={h} style={{
                               ...S.mono, fontSize: 9, fontWeight: 700, letterSpacing: '0.14em',
@@ -474,7 +460,7 @@ function AgentPersonaRankings({ agents }: { agents: AgentPersona[] }) {
                       </thead>
                       <tbody>
                         {agent.bySymbol.map((s) => (
-                          <tr key={s.symbol} style={{ borderBottom: '1px solid #F0E4CE' }}>
+                          <tr key={s.symbol} style={{ borderBottom: '1px solid rgba(13,11,8,0.08)' }}>
                             <td style={{ ...S.mono, fontSize: 13, fontWeight: 700, color: '#0D0B08', padding: '7px 12px' }}>
                               {s.symbol}
                             </td>
@@ -580,58 +566,18 @@ export default function LeaderboardTerminal() {
   ];
 
   return (
-    <div style={{ maxWidth: 1280, margin: '0 auto', padding: '48px 24px 64px' }}>
-      {/* Page header */}
-      <div style={{ borderBottom: '2px solid #0D0B08', paddingBottom: 20, marginBottom: 32 }}>
-        <p style={{ ...S.label, color: '#C0392B', marginBottom: 10 }}>◆ PILOT RANKINGS</p>
-        <h1 style={{ ...S.serif, fontSize: 'clamp(2rem,4vw,3rem)', fontWeight: 900, lineHeight: 1.1, letterSpacing: '-0.02em', color: '#0D0B08', margin: 0 }}>
-          Leaderboard
-        </h1>
-        <p style={{ ...S.serif, fontSize: 15, lineHeight: 1.6, color: '#5A554E', marginTop: 10, maxWidth: 620 }}>
-          Pilots ranked by XP earned — from real agent trades, wins, streaks, and social milestones on Fuji.
-        </p>
-      </div>
-
-      {/* Global stats */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 0, border: '2px solid #0D0B08', marginBottom: 24 }}>
-        <StatBlock label="Agent personas"     value={stats?.agentPersonas     ?? '—'} hint="AvaStrike · PeakMind · FrostLogic · SubnetSage" />
-        <StatBlock label="Active pilots"      value={stats?.activePilots      ?? '—'} hint={`${stats?.enrolledWallets ?? 0} wallets enrolled`} border />
-        <StatBlock label="Total transactions" value={stats?.totalTransactions?.toLocaleString() ?? '—'} hint="Agent BUY clips on-chain" border />
-      </div>
-
-      {/* Name setup link */}
-      {account ? (
-        <div style={{
-          border: '1px solid rgba(13,11,8,0.2)',
-          padding: '16px 20px', marginBottom: 20,
-          ...S.mono, fontSize: 12, color: '#5A554E',
-        }}>
-          <span>Want to appear on the leaderboard? </span>
-          <Link href="/profile" style={{ color: '#C0392B', fontWeight: 700, textDecoration: 'underline' }}>
-            Set your pilot display name in your Profile →
-          </Link>
+    <div style={{ maxWidth: 1280, margin: '0 auto', padding: '20px 24px 64px' }}>
+      {/* Page header — compact */}
+      <div className="np-fade-up" style={{ borderBottom: '2px solid #0D0B08', paddingBottom: 12, marginBottom: 20 }}>
+        <div style={{ display: 'flex', alignItems: 'baseline', gap: 12, flexWrap: 'wrap' }}>
+          <h1 style={{ ...S.serif, fontSize: 22, fontWeight: 900, lineHeight: 1.1, letterSpacing: '-0.01em', color: '#0D0B08', margin: 0 }}>
+            Leaderboard
+          </h1>
+          <span style={{ ...S.label, color: '#C0392B' }}>◆ PILOT RANKINGS</span>
+          <span style={{ ...S.serif, fontSize: 13, color: '#5A554E' }}>
+            Pilots ranked by XP — real agent trades, wins, streaks, and social milestones on Fuji.
+          </span>
         </div>
-      ) : (
-        <p style={{ ...S.mono, fontSize: 11, color: '#888', marginBottom: 16 }}>
-          Connect your wallet to see your rank and appear on the board.
-        </p>
-      )}
-
-      {/* Snowtrace links */}
-      <div style={{ border: '1px solid rgba(13,11,8,0.15)', padding: '12px 16px', marginBottom: 24, ...S.mono, fontSize: 11, color: '#888' }}>
-        <span style={{ fontWeight: 700, color: '#0D0B08' }}>Fuji contracts: </span>
-        Market{' '}
-        <a href={`${SNOWTRACE_ADDRESS}${CONTRACT_ADDRESS}`} target="_blank" rel="noopener noreferrer" style={{ color: '#27AE60' }}>
-          {shortAddr(CONTRACT_ADDRESS)}
-        </a>
-        {account && (
-          <>
-            {' · '}Your wallet{' '}
-            <a href={`${SNOWTRACE_ADDRESS}${account}`} target="_blank" rel="noopener noreferrer" style={{ color: '#27AE60' }}>
-              {shortAddr(account)}
-            </a>
-          </>
-        )}
       </div>
 
       {error && (
@@ -640,45 +586,119 @@ export default function LeaderboardTerminal() {
         </div>
       )}
 
-      {/* ── Tabs ── */}
-      <div style={{ display: 'flex', gap: 4, borderBottom: '2px solid #D4A96A', marginBottom: 20 }}>
-        {TABS.map((t) => {
-          const isActive = activeTab === t.id;
-          return (
-            <button
-              key={t.id}
-              onClick={() => setActiveTab(t.id)}
-              style={{
-                ...S.mono, fontSize: 12, fontWeight: isActive ? 800 : 500,
-                padding: '8px 18px', border: 'none',
-                borderBottom: isActive ? '2px solid #D4A96A' : '2px solid transparent',
-                marginBottom: -2,
-                background: isActive ? '#FDF6EC' : 'transparent',
-                color: isActive ? '#0D0B08' : '#7B6A52',
-                cursor: 'pointer', borderRadius: '7px 7px 0 0',
-                display: 'flex', alignItems: 'center', gap: 6, transition: 'all 0.15s',
-                whiteSpace: 'nowrap',
-              }}
-            >
-              <span>{t.icon}</span>{t.label}
-              {t.id === 'pilots' && rows.length > 0 && (
-                <span style={{
-                  background: '#D4A96A', color: '#fff', borderRadius: 20,
-                  fontSize: 9, fontWeight: 700, padding: '1px 6px', marginLeft: 2,
-                }}>{rows.length}</span>
-              )}
-            </button>
-          );
-        })}
-      </div>
+      {/* ── Main column (table) + right sidebar (board figures) ── */}
+      <div style={{ display: 'flex', gap: 24, alignItems: 'flex-start', flexWrap: 'wrap' }}>
 
-      {/* Tab content */}
-      {activeTab === 'pilots' && (
-        <PilotTable rows={rows} account={account || null} />
-      )}
-      {activeTab === 'agents' && (
-        <AgentPersonaRankings agents={agents} />
-      )}
+        {/* Main column — rankings get the width */}
+        <div className="np-fade-up-1" style={{ flex: '999 1 520px', minWidth: 0 }}>
+
+          {/* Tabs */}
+          <div style={{ display: 'flex', gap: 0, borderBottom: '2px solid #0D0B08', marginBottom: 18 }}>
+            {TABS.map((t) => {
+              const isActive = activeTab === t.id;
+              return (
+                <button
+                  key={t.id}
+                  onClick={() => setActiveTab(t.id)}
+                  style={{
+                    ...S.mono, fontSize: 11, fontWeight: 700,
+                    letterSpacing: '0.1em', textTransform: 'uppercase',
+                    padding: '10px 18px', border: 'none',
+                    borderBottom: isActive ? '3px solid #0D0B08' : '3px solid transparent',
+                    marginBottom: -2,
+                    background: 'transparent',
+                    color: isActive ? '#0D0B08' : '#7B6A52',
+                    cursor: 'pointer',
+                    display: 'flex', alignItems: 'center', gap: 6,
+                    whiteSpace: 'nowrap',
+                  }}
+                >
+                  <span style={{ display: 'flex', alignItems: 'center' }}>{t.icon}</span>{t.label}
+                  {t.id === 'pilots' && rows.length > 0 && (
+                    <span style={{
+                      background: '#0D0B08', color: '#FAF8F3',
+                      fontSize: 9, fontWeight: 700, padding: '1px 7px', marginLeft: 2,
+                    }}>{rows.length}</span>
+                  )}
+                </button>
+              );
+            })}
+          </div>
+
+          {/* Tab content */}
+          {activeTab === 'pilots' && (
+            <PilotTable rows={rows} account={account || null} />
+          )}
+          {activeTab === 'agents' && (
+            <AgentPersonaRankings agents={agents} />
+          )}
+        </div>
+
+        {/* Right sidebar — minimal board figures + references */}
+        <aside className="np-fade-up-2" style={{ flex: '1 0 240px', maxWidth: 320 }}>
+
+          {/* Board figures */}
+          <div style={{ border: '1px solid #0D0B08', padding: '16px 18px', marginBottom: 14 }}>
+            <p style={{ ...S.label, borderBottom: '1px solid #0D0B08', paddingBottom: 8, marginBottom: 4 }}>
+              Board Figures
+            </p>
+            {[
+              { label: 'Agent personas', value: stats?.agentPersonas ?? '—' },
+              { label: 'Active pilots', value: stats?.activePilots ?? '—' },
+              { label: 'Wallets enrolled', value: stats?.enrolledWallets ?? '—' },
+              { label: 'Total transactions', value: stats?.totalTransactions?.toLocaleString() ?? '—' },
+            ].map((row, i, arr) => (
+              <div key={row.label} style={{
+                display: 'flex', justifyContent: 'space-between', alignItems: 'baseline',
+                padding: '9px 0',
+                borderBottom: i === arr.length - 1 ? 'none' : '1px solid rgba(13,11,8,0.1)',
+              }}>
+                <span style={{ ...S.mono, fontSize: 10, color: '#5A554E' }}>{row.label}</span>
+                <span style={{ ...S.serif, fontSize: 18, fontWeight: 900, color: '#0D0B08' }}>{row.value}</span>
+              </div>
+            ))}
+            <p style={{ ...S.mono, fontSize: 9, color: '#888', marginTop: 8, marginBottom: 0 }}>
+              AvaStrike · PeakMind · FrostLogic · SubnetSage
+            </p>
+          </div>
+
+          {/* Contracts */}
+          <div style={{ border: '1px solid rgba(13,11,8,0.2)', padding: '14px 16px', marginBottom: 14 }}>
+            <p style={{ ...S.label, marginBottom: 8 }}>Fuji References</p>
+            <p style={{ ...S.mono, fontSize: 10, color: '#5A554E', margin: '0 0 6px' }}>
+              Market{' '}
+              <a href={`${SNOWTRACE_ADDRESS}${CONTRACT_ADDRESS}`} target="_blank" rel="noopener noreferrer" style={{ color: '#27AE60' }}>
+                {shortAddr(CONTRACT_ADDRESS)} ↗
+              </a>
+            </p>
+            {account && (
+              <p style={{ ...S.mono, fontSize: 10, color: '#5A554E', margin: 0 }}>
+                Your wallet{' '}
+                <a href={`${SNOWTRACE_ADDRESS}${account}`} target="_blank" rel="noopener noreferrer" style={{ color: '#27AE60' }}>
+                  {shortAddr(account)} ↗
+                </a>
+              </p>
+            )}
+          </div>
+
+          {/* Name hint — only when it matters */}
+          {needsName && (
+            <div style={{ borderLeft: '3px solid #C0392B', padding: '4px 0 4px 12px', marginBottom: 14 }}>
+              <p style={{ ...S.mono, fontSize: 10, color: '#5A554E', margin: 0 }}>
+                Appear on the board with a name —{' '}
+                <Link href="/profile" style={{ color: '#C0392B', fontWeight: 700 }}>
+                  set it in your Profile →
+                </Link>
+              </p>
+            </div>
+          )}
+          {!account && (
+            <p style={{ ...S.mono, fontSize: 10, color: '#888', margin: 0 }}>
+              Connect your wallet to see your rank on the board.
+            </p>
+          )}
+        </aside>
+      </div>
     </div>
   );
 }

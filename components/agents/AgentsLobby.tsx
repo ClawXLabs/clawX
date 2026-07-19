@@ -99,33 +99,25 @@ export default function AgentsLobby() {
 
     <>
 
-      <div style={{ borderBottom: '2px solid #0D0B08', padding: '48px 24px 32px' }}>
+      <div className="np-fade-up" style={{ borderBottom: '2px solid #0D0B08', padding: '18px 24px 12px' }}>
 
-        <div style={{ maxWidth: 1280, margin: '0 auto', display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 20 }}>
+        <div style={{ maxWidth: 1280, margin: '0 auto', display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 14 }}>
 
           <div style={{
-            width: 56, height: 56, display: 'flex', alignItems: 'center', justifyContent: 'center',
+            width: 38, height: 38, display: 'flex', alignItems: 'center', justifyContent: 'center',
             border: '2px solid #C0392B', color: '#C0392B',
           }}>
-            <Bot size={28} strokeWidth={1.5} />
+            <Bot size={20} strokeWidth={1.5} />
           </div>
 
-          <div>
-
-            <p style={{ ...S.label, color: '#C0392B', marginBottom: 6 }}>◆ AUTONOMOUS LAYER</p>
-
-            <h1 style={{ ...S.serif, fontSize: 'clamp(2rem, 4vw, 3rem)', fontWeight: 900, lineHeight: 1.1, letterSpacing: '-0.02em', color: '#0D0B08', margin: 0 }}>
-
+          <div style={{ display: 'flex', alignItems: 'baseline', gap: 12, flexWrap: 'wrap' }}>
+            <h1 style={{ ...S.serif, fontSize: 22, fontWeight: 900, lineHeight: 1.1, letterSpacing: '-0.01em', color: '#0D0B08', margin: 0 }}>
               Agent Command
-
             </h1>
-
-            <p style={{ ...S.serif, fontSize: 15, lineHeight: 1.6, color: '#5A554E', marginTop: 8, maxWidth: 560 }}>
-
+            <span style={{ ...S.label, color: '#C0392B' }}>◆ AUTONOMOUS LAYER</span>
+            <span style={{ ...S.serif, fontSize: 13, color: '#5A554E' }}>
               AvaStrike, PeakMind, FrostLogic & SubnetSage — each thinks differently across all Fuji markets.
-
-            </p>
-
+            </span>
           </div>
 
         </div>
