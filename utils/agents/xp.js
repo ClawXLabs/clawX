@@ -126,7 +126,9 @@ export function buildXp(enrollment, socialLinks = {}) {
 
   const tradeLog = enrollment.tradeLog || [];
   const buys = tradeLog.filter((t) => t.action === 'BUY');
-  const txCount = buys.length;
+  // tradeLog is capped at 200 entries for display; lifetimeTxCount carries the
+  // true total past the cap so trade XP and milestones keep accruing.
+  const txCount = Math.max(buys.length, Number(enrollment.lifetimeTxCount) || 0);
 
   // Count wins from symbolStats (most reliable source)
   const stats = enrollment.agentMemory?.symbolStats || {};
