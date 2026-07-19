@@ -121,6 +121,17 @@ export async function getEnrollment(wallet) {
   return hydrateEnrollment(result.rows[0]);
 }
 
+/** True lifetime BUY count from the uncapped trade_log table. */
+export async function countBuysInTable(wallet) {
+  const key = walletKey(wallet);
+  if (!key) return 0;
+  const result = await query(
+    "SELECT COUNT(*)::int AS cnt FROM trade_log WHERE wallet = $1 AND action = 'BUY'",
+    [key]
+  );
+  return Number(result.rows[0]?.cnt) || 0;
+}
+
 /** Unique confirmed BUY count for leaderboard (never capped by tradeLog slice). */
 export function countLeaderboardTxs(row) {
   if (!row) return 0;
@@ -255,7 +266,6 @@ export async function appendTradeLog(wallet, entry) {
   );
   if (!exists) {
     row.tradeLog = [entry, ...(row.tradeLog || [])].slice(0, TRADE_LOG_DISPLAY_CAP);
-    row.lifetimeTxCount = countLeaderboardTxs(row);
     await query(
       `INSERT INTO trade_log (
          wallet, round_id, side, action, symbol, amount_tusdc, hash,
@@ -277,6 +287,11 @@ export async function appendTradeLog(wallet, entry) {
         toDate(entry.settledAt),
       ]
     );
+    // Lifetime count must come from the uncapped trade_log table: the in-memory
+    // tradeLog array is sliced to TRADE_LOG_DISPLAY_CAP, which froze the count
+    // at 200 once older BUY entries fell out of the window.
+    const tableCount = await countBuysInTable(wallet);
+    row.lifetimeTxCount = Math.max(countLeaderboardTxs(row), tableCount);
   }
   return setEnrollment(wallet, row);
 }
