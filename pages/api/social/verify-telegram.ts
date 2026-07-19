@@ -91,7 +91,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
   if (!botToken) {
     // No bot configured — save the Telegram user data as self-attested
-    setSocialLink(user, 'telegram', {
+    await setSocialLink(user, 'telegram', {
       telegramId: tgUser.id,
       username: tgUser.username || null,
       firstName: tgUser.first_name || null,
@@ -120,7 +120,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   }
 
   if (!groupChatId) {
-    setSocialLink(user, 'telegram', {
+    await setSocialLink(user, 'telegram', {
       telegramId: tgUser.id,
       username: tgUser.username || null,
       firstName: tgUser.first_name || null,
@@ -138,7 +138,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
   const { isMember, status, error: memberError } = await checkGroupMembership(tgUser.id, botToken, groupChatId);
 
-  setSocialLink(user, 'telegram', {
+  await setSocialLink(user, 'telegram', {
     telegramId: tgUser.id,
     username: tgUser.username || null,
     firstName: tgUser.first_name || null,

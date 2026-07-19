@@ -1,6 +1,7 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
 import { ethers } from 'ethers';
 import { buildBatchClaimAuthMessage } from '../../utils/tradeAuth';
+import { acquireRedisLock } from '../../utils/db/redisLock';
 
 const MARKET_ABI = [
   'function owner() view returns (address)',
@@ -116,9 +117,18 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       }
 
       await market.claimWinningsFor.staticCall(user, BigInt(roundId));
-      const tx = await market.claimWinningsFor(user, BigInt(roundId));
-      const receipt = await tx.wait();
-      results.push({ roundId, ok: true, hash: tx.hash });
+      // The keeper, /api/settle, and agent workers share this relayer wallet.
+      // Serialize sends per relayer address so txs never collide on a nonce.
+      const releaseNonceLock = await acquireRedisLock(
+        `lock:relayer-nonce:${relayerWallet.address.toLowerCase()}`
+      );
+      try {
+        const tx = await market.claimWinningsFor(user, BigInt(roundId));
+        await tx.wait();
+        results.push({ roundId, ok: true, hash: tx.hash });
+      } finally {
+        await releaseNonceLock();
+      }
     } catch (e: unknown) {
       const err = e as { shortMessage?: string; message?: string };
       results.push({ roundId, ok: false, error: err.shortMessage || err.message || 'Claim failed' });

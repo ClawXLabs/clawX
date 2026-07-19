@@ -1,5 +1,6 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
-import { fetchFastPrices } from '../../utils/fastPrice';
+import { ASSET_CONFIG, fetchFastPrices } from '../../utils/fastPrice';
+import { readCachedPrices } from '../../utils/prices/redisPrices';
 
 /* Fallback prices used when all CEX sources are unreachable (e.g. local dev, network issues) */
 const FALLBACK_PRICES: Record<string, number> = {
@@ -10,6 +11,20 @@ const FALLBACK_PRICES: Record<string, number> = {
   NEAR: 7.0,
 };
 
+function serializePrices(prices: Record<string, any>) {
+  return Object.fromEntries(
+    Object.entries(prices).map(([symbol, price]) => [
+      symbol,
+      {
+        price: price.price,
+        price8: price.price8?.toString?.() ?? String(price.price8),
+        updatedAt: price.updatedAt,
+        sources: price.sources,
+      },
+    ])
+  );
+}
+
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== 'GET') {
     res.setHeader('Allow', 'GET');
@@ -18,24 +33,20 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
   const requestedSymbols = typeof req.query.symbols === 'string'
     ? req.query.symbols.split(',').map((symbol) => symbol.trim().toUpperCase()).filter(Boolean)
-    : undefined;
+    : Object.keys(ASSET_CONFIG);
 
   try {
-    const prices = await fetchFastPrices(requestedSymbols);
+    const cached = await readCachedPrices(requestedSymbols);
+    const missing = requestedSymbols.filter((symbol) => !cached[symbol]);
+    let prices = { ...cached };
+    if (missing.length) {
+      Object.assign(prices, await fetchFastPrices(missing));
+    }
 
     return res.status(200).json({
       updatedAt: Math.floor(Date.now() / 1000),
-      prices: Object.fromEntries(
-        Object.entries(prices).map(([symbol, price]: [string, any]) => [
-          symbol,
-          {
-            price: price.price,
-            price8: price.price8.toString(),
-            updatedAt: price.updatedAt,
-            sources: price.sources,
-          },
-        ])
-      ),
+      source: missing.length ? (Object.keys(cached).length ? 'mixed' : 'live') : 'redis',
+      prices: serializePrices(prices),
     });
   } catch (error: any) {
     console.error('Fast price fetch failed, using fallback prices:', error.message);

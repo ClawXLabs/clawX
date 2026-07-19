@@ -1,6 +1,5 @@
-const fs = require('fs');
-const path = require('path');
 const { ethers } = require('ethers');
+const { query } = require('../../utils/db/postgres');
 
 const TUSDC_ABI = [
   'function mint(address to, uint256 amount) external',
@@ -35,25 +34,21 @@ function faucetKeyCandidates() {
   return [...new Set(list)];
 }
 
-function claimsFilePath() {
-  return path.join(process.cwd(), 'data', 'faucet-claims.json');
+async function readLastClaim(wallet) {
+  const result = await query('SELECT last_claim FROM faucet_claims WHERE wallet = $1', [wallet]);
+  const value = result.rows[0]?.last_claim;
+  return value ? Math.floor(new Date(value).getTime() / 1000) : 0;
 }
 
-function readClaims() {
-  try {
-    const raw = fs.readFileSync(claimsFilePath(), 'utf8');
-    return JSON.parse(raw);
-  } catch {
-    return {};
-  }
-}
-
-function writeClaims(data) {
-  const dir = path.dirname(claimsFilePath());
-  if (!fs.existsSync(dir)) {
-    fs.mkdirSync(dir, { recursive: true });
-  }
-  fs.writeFileSync(claimsFilePath(), JSON.stringify(data, null, 2), 'utf8');
+async function recordClaim(wallet, claimedAt) {
+  await query(
+    `INSERT INTO faucet_claims (wallet, last_claim, claim_count)
+     VALUES ($1, $2, 1)
+     ON CONFLICT (wallet) DO UPDATE SET
+       last_claim = EXCLUDED.last_claim,
+       claim_count = faucet_claims.claim_count + 1`,
+    [wallet, new Date(claimedAt * 1000)]
+  );
 }
 
 export default async function handler(req, res) {
@@ -117,9 +112,8 @@ export default async function handler(req, res) {
   }
 
   const cooldownSec = cooldownSeconds();
-  const claims = readClaims();
   const now = Math.floor(Date.now() / 1000);
-  let last = claims[recipient.toLowerCase()] || 0;
+  let last = await readLastClaim(recipient.toLowerCase());
   // Corrupt / clock-skew entries (e.g. timestamp in the future) would block forever — ignore them.
   if (last > now) last = 0;
 
@@ -160,8 +154,7 @@ export default async function handler(req, res) {
         });
       }
 
-      claims[recipient.toLowerCase()] = now;
-      writeClaims(claims);
+      await recordClaim(recipient.toLowerCase(), now);
 
       return res.status(200).json({
         ok: true,

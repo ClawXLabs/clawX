@@ -14,12 +14,12 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   }
 
   const user = ethers.getAddress(String(wallet));
-  const enrollment = getEnrollment(user);
+  const enrollment = await getEnrollment(user);
   if (!enrollment || enrollment.status !== 'active') {
     return res.status(404).json({ error: 'No active enrollment' });
   }
 
-  const row = setAgentPaused(user, Boolean(paused));
+  const row = await setAgentPaused(user, Boolean(paused));
   return res.status(200).json({
     ok: true,
     wallet: user,

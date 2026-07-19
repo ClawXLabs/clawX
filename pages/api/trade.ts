@@ -1,5 +1,6 @@
 import { ethers } from 'ethers';
 import { buildTradeAuthMessage } from '../../utils/tradeAuth';
+import { acquireRedisLock } from '../../utils/db/redisLock';
 
 const MARKET_ABI = [
   'function owner() view returns (address)',
@@ -257,9 +258,14 @@ export default async function handler(req, res) {
     return res.status(503).json({ error: relayerAuthError(wallet.address, ownerAddr, operatorAddr) });
   }
 
+  // Keeper, /api/settle, /api/claim-all, and agent workers share this relayer
+  // wallet; serialize sends so concurrent txs never collide on a nonce.
+  let releaseNonceLock = null;
   try {
     const collateralAddr = await market.collateralToken();
     const token = new ethers.Contract(collateralAddr, ERC20_PERMIT_ABI, wallet);
+
+    releaseNonceLock = await acquireRedisLock(`lock:relayer-nonce:${relayer}`);
 
     if (permit && typeof permit === 'object') {
       const pDeadline = Number(permit.deadline);
@@ -331,5 +337,9 @@ export default async function handler(req, res) {
     return res.status(500).json({
       error: humanizeContractError(error, 'tx'),
     });
+  } finally {
+    if (releaseNonceLock) {
+      await releaseNonceLock().catch(() => {});
+    }
   }
 }

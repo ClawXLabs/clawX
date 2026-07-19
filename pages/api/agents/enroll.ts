@@ -63,7 +63,7 @@ export default async function handler(req, res) {
   }
 
   const user = ethers.getAddress(wallet);
-  const existing = getEnrollment(user);
+  const existing = await getEnrollment(user);
   const preservedTradeLog = existing?.tradeLog || [];
   if (existing?.status === 'active') {
     return res.status(200).json({ ok: true, enrollment: existing, alreadyActive: true });
@@ -115,7 +115,7 @@ export default async function handler(req, res) {
     /* optional */
   }
 
-  const enrollment = setEnrollment(user, {
+  const enrollment = await setEnrollment(user, {
     agentId: agent.id,
     agentName: agent.name,
     tradeSizeTusdc: size,
@@ -132,7 +132,7 @@ export default async function handler(req, res) {
     delegateSpentRaw: '0',
   });
 
-  appendFeedMessage({
+  await appendFeedMessage({
     agentId: agent.id,
     agentName: agent.name,
     handle: agent.handle,
@@ -140,7 +140,7 @@ export default async function handler(req, res) {
     color: agent.color,
     text: `${agent.name}: New pilot joined — automating ${size} TUSDC clips on Fuji.`,
     pilotWallet: user,
-    pilotName: getDisplayName(user) || undefined,
+    pilotName: (await getDisplayName(user)) || undefined,
     kind: 'enroll',
   });
 

@@ -46,18 +46,19 @@ function buildMarketSnapshot(assets, openPositions) {
     });
 }
 
-async function callLLM(agent, enrollment, assets, openPositions, memory) {
-  const key = process.env.AGENT_LLM_API_KEY || process.env.OPENAI_API_KEY;
+async function callLLM(agent, enrollment, assets, openPositions, memory, llmOptions = {}) {
+  const key = llmOptions.apiKey || process.env.AGENT_LLM_API_KEY || process.env.OPENAI_API_KEY;
   if (!key) return null;
 
   const lastLlm = memory.lastLlmAt || 0;
-  if (Date.now() / 1000 - lastLlm < LLM_COOLDOWN_SEC) return null;
+  const cooldownSec = Number(llmOptions.cooldownSec || LLM_COOLDOWN_SEC);
+  if (Date.now() / 1000 - lastLlm < cooldownSec) return null;
 
   const markets = buildMarketSnapshot(assets, openPositions);
   if (!markets.length) return null;
 
-  const model = process.env.AGENT_LLM_MODEL || 'gpt-4o-mini';
-  const base = (process.env.AGENT_LLM_BASE_URL || 'https://api.openai.com/v1').replace(/\/$/, '');
+  const model = llmOptions.model || process.env.AGENT_LLM_MODEL || 'gpt-4o-mini';
+  const base = (llmOptions.baseUrl || process.env.AGENT_LLM_BASE_URL || 'https://api.openai.com/v1').replace(/\/$/, '');
 
   const system = `You are ${agent.name}, an autonomous prediction-market agent on Avalanche Fuji.
 Persona: ${agent.tagline}. Style: ${agent.style}.
@@ -183,7 +184,7 @@ function simulatedAIThink(agent, enrollment, assets, openPositions, memory) {
 }
 
 /** Main entry — real LLM when API key set, else rich simulated AI voice */
-export async function decideWithAI(enrollment, assets, openPositions) {
+export async function decideWithAI(enrollment, assets, openPositions, llmOptions = {}) {
   const agent = getAgentById(enrollment.agentId);
   if (!agent || !assets?.length) {
     return { memory: enrollment.agentMemory || createAgentMemory(enrollment.agentId), decision: null };
@@ -191,7 +192,10 @@ export async function decideWithAI(enrollment, assets, openPositions) {
 
   const memory = enrollment.agentMemory || createAgentMemory(agent.id);
 
-  const llmParsed = await callLLM(agent, enrollment, assets, openPositions, memory);
+  let llmParsed = await callLLM(agent, enrollment, assets, openPositions, memory, llmOptions);
+  if (!llmParsed && llmOptions.apiKey) {
+    llmParsed = await callLLM(agent, enrollment, assets, openPositions, memory);
+  }
   if (llmParsed) {
     const fromLlm = llmToDecision(llmParsed, assets, agent, memory);
     if (fromLlm) return fromLlm;

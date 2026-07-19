@@ -4,15 +4,17 @@ import AppShell from '../components/AppShell';
 import ProfileTerminal from '../components/ProfileTerminal';
 import PersonalAgentsTab from '../components/PersonalAgentsTab';
 import XpDashboard from '../components/XpDashboard';
+import AgentSettingsPanel from '../components/AgentSettingsPanel';
 
-import { User, Bot, Star } from 'lucide-react';
+import { User, Bot, Star, Settings } from 'lucide-react';
 
-type Tab = 'overview' | 'agents' | 'xp';
+type Tab = 'overview' | 'agents' | 'xp' | 'settings';
 
 const TABS: { id: Tab; label: string; icon: React.ReactNode }[] = [
   { id: 'overview', label: 'Overview',    icon: <User size={15} strokeWidth={1.5} /> },
   { id: 'agents',   label: 'My Agents',   icon: <Bot size={15} strokeWidth={1.5} /> },
   { id: 'xp',       label: 'XP & Stats',  icon: <Star size={15} strokeWidth={1.5} /> },
+  { id: 'settings', label: 'Agent AI', icon: <Settings size={15} strokeWidth={1.5} /> },
 ];
 
 const mono: React.CSSProperties = { fontFamily: "'Courier New', monospace" };
@@ -83,6 +85,7 @@ export default function ProfilePage() {
           {activeTab === 'overview' && <ProfileTerminal />}
           {activeTab === 'agents'   && <PersonalAgentsTab />}
           {activeTab === 'xp'       && <XpDashboard />}
+          {activeTab === 'settings' && <AgentSettingsPanel />}
         </div>
       </AppShell>
     </>

@@ -77,7 +77,7 @@ async function fetchFastPrice(symbol, options = {}) {
   const timeoutMs = options.requestTimeoutMs ?? REQUEST_TIMEOUT_MS;
   const key = cacheKey(symbol);
   const cached = priceCache.get(key);
-  if (cached && cached.expiresAt > Date.now()) {
+  if (!options.forceRefresh && cached && cached.expiresAt > Date.now()) {
     return cached.data;
   }
 
@@ -146,7 +146,10 @@ async function fetchFastPrice(symbol, options = {}) {
     payload = buildPricePayload(symbol, results);
   }
 
-  priceCache.set(key, { data: payload, expiresAt: Date.now() + PRICE_CACHE_MS });
+  const cacheMs = options.cacheMs ?? PRICE_CACHE_MS;
+  if (cacheMs > 0) {
+    priceCache.set(key, { data: payload, expiresAt: Date.now() + cacheMs });
+  }
   return payload;
 }
 

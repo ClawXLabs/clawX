@@ -10,7 +10,6 @@ const SETTLE_API_MAX_MS = 6000;
 const SETTLE_KEEPER_WAIT_MS = 2500;
 const EXPIRED_REFRESH_MS = 450;
 const SETTLE_FIRE_DELAY_MS = 0;
-const SETTLE_PREFETCH_SEC = 90;
 
 type SettleResult = {
   settled?: boolean;
@@ -164,19 +163,4 @@ export function useAutoSettlement() {
     };
   }, [ready, expiredMarketKey]);
 
-  useEffect(() => {
-    if (!ready) return undefined;
-    const now = Math.floor(Date.now() / 1000);
-    const endingSoon = Object.values(markets).some(
-      (m) => !m.resolved && m.endTime > now && m.endTime - now <= SETTLE_PREFETCH_SEC
-    );
-    if (!endingSoon) return undefined;
-    const symbols = [...new Set(Object.values(markets).map((m) => m.symbol))].join(',');
-    const prefetch = () => {
-      fetch(`/api/prices?symbols=${encodeURIComponent(symbols)}`, { cache: 'no-store' }).catch(() => {});
-    };
-    prefetch();
-    const warm = setInterval(prefetch, 800);
-    return () => clearInterval(warm);
-  }, [ready, markets]);
 }

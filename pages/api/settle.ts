@@ -1,5 +1,7 @@
 import { ethers } from 'ethers';
 import { fetchFastPrices } from '../../utils/fastPrice';
+import { readCachedPrices } from '../../utils/prices/redisPrices';
+import { acquireRedisLock } from '../../utils/db/redisLock';
 import type { NextApiRequest, NextApiResponse } from 'next';
 
 const CONTRACT_ABI = [
@@ -116,10 +118,12 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     }
 
     const symbols = [...new Set(expired.map((market) => market.symbol))];
-    const fastPrices = await fetchFastPrices(symbols, {
-      requestTimeoutMs: 3000,
-      settleQuick: true,
-    });
+    const cached = await readCachedPrices(symbols);
+    const missing = symbols.filter((symbol) => !cached[symbol]);
+    const live = missing.length
+      ? await fetchFastPrices(missing, { requestTimeoutMs: 3000, settleQuick: true })
+      : {};
+    const fastPrices = { ...cached, ...live };
     for (const market of expired) {
       if (!fastPrices[market.symbol]) {
         return res.status(500).json({
@@ -147,55 +151,64 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     } else if (fee.gasPrice) {
       gasOverrides.gasPrice = (fee.gasPrice * 300n) / 100n;
     }
-    const tx = await contract.resolveExpiredRoundsWithPrices(
-      settlements.map((market) => market.assetId),
-      settlements.map((market) => fastPrices[market.symbol].price8),
-      gasOverrides
+    // Serialize sends with the other relayer users (keeper, trade, claim-all)
+    // so concurrent txs from the shared wallet never collide on a nonce.
+    const releaseNonceLock = await acquireRedisLock(
+      `lock:relayer-nonce:${wallet.address.toLowerCase()}`
     );
-
-    let receipt = null;
     try {
-      receipt = await tx.wait(1, 3000);
-    } catch (waitError: any) {
-      if (waitError?.code === 'CALL_EXCEPTION') {
-        return res.status(200).json({
-          settled: true,
-          submitted: true,
-          hash: tx.hash,
-          blockNumber: block.number,
-          blockTimestamp: block.timestamp,
-          expired: settlements,
-          settledBy: wallet.address,
-        });
-      }
+      const tx = await contract.resolveExpiredRoundsWithPrices(
+        settlements.map((market) => market.assetId),
+        settlements.map((market) => fastPrices[market.symbol].price8),
+        gasOverrides
+      );
+
+      let receipt = null;
       try {
-        const lateReceipt = await provider.getTransactionReceipt(tx.hash);
-        if (lateReceipt && Number(lateReceipt.status) === 1) {
+        receipt = await tx.wait(1, 3000);
+      } catch (waitError: any) {
+        if (waitError?.code === 'CALL_EXCEPTION') {
           return res.status(200).json({
             settled: true,
             submitted: true,
             hash: tx.hash,
-            blockNumber: lateReceipt.blockNumber,
+            blockNumber: block.number,
             blockTimestamp: block.timestamp,
             expired: settlements,
             settledBy: wallet.address,
           });
         }
-      } catch {
-        /* client will poll */
+        try {
+          const lateReceipt = await provider.getTransactionReceipt(tx.hash);
+          if (lateReceipt && Number(lateReceipt.status) === 1) {
+            return res.status(200).json({
+              settled: true,
+              submitted: true,
+              hash: tx.hash,
+              blockNumber: lateReceipt.blockNumber,
+              blockTimestamp: block.timestamp,
+              expired: settlements,
+              settledBy: wallet.address,
+            });
+          }
+        } catch {
+          /* client will poll */
+        }
+        console.warn('Settlement tx wait timeout, returning hash for client polling');
       }
-      console.warn('Settlement tx wait timeout, returning hash for client polling');
-    }
 
-    return res.status(200).json({
-      settled: Boolean(receipt),
-      submitted: true,
-      hash: tx.hash,
-      blockNumber: receipt?.blockNumber ?? block.number,
-      blockTimestamp: block.timestamp,
-      expired: settlements,
-      settledBy: wallet.address,
-    });
+      return res.status(200).json({
+        settled: Boolean(receipt),
+        submitted: true,
+        hash: tx.hash,
+        blockNumber: receipt?.blockNumber ?? block.number,
+        blockTimestamp: block.timestamp,
+        expired: settlements,
+        settledBy: wallet.address,
+      });
+    } finally {
+      await releaseNonceLock().catch(() => {});
+    }
   } catch (error: any) {
     console.error('Server settlement failed:', error);
     return res.status(500).json({

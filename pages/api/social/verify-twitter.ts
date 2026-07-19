@@ -96,7 +96,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
   if (invalidCreds) linkData.credentialError = true;
 
-  setSocialLink(user, 'twitter', linkData);
+  await setSocialLink(user, 'twitter', linkData);
 
   if (following) {
     return res.status(200).json({ ok: true, following: true, handle, message: `Verified — @${handle} is following @${CLAWX_HANDLE}` });
