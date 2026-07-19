@@ -27,7 +27,7 @@ export function publishFeedMessage(message) {
   }
 }
 
-export function subscribeFeedStream(res, initialMessages) {
+export async function subscribeFeedStream(res, initialMessages) {
   res.writeHead(200, {
     'Content-Type': 'text/event-stream',
     'Cache-Control': 'no-cache, no-transform',
@@ -36,7 +36,7 @@ export function subscribeFeedStream(res, initialMessages) {
   });
   res.write(': connected\n\n');
 
-  const filtered = filterFeedMessages(initialMessages);
+  const filtered = await filterFeedMessages(initialMessages);
   filtered.forEach((m) => seenIds.add(m.id));
   sseWrite(res, { type: 'snapshot', messages: filtered });
 
@@ -67,9 +67,9 @@ export function subscribeFeedStream(res, initialMessages) {
 function ensureFileWatcher() {
   if (watcherStarted) return;
   watcherStarted = true;
-  setInterval(() => {
+  setInterval(async () => {
     try {
-      const feed = filterFeedMessages(readFeed());
+      const feed = await filterFeedMessages(await readFeed());
       const fresh = feed.filter((m) => m.id && !seenIds.has(m.id));
       if (!fresh.length) return;
       fresh.reverse().forEach((m) => publishFeedMessage(m));

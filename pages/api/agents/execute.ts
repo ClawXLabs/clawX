@@ -5,6 +5,7 @@ import { appendFeedMessage, appendTradeLog, getEnrollment, getDisplayName, setEn
 import { agentChatterText } from '../../../utils/agents/strategy';
 import { recordTradePlanned } from '../../../utils/agents/brain';
 import { isRunnerAuthorized } from '../../../utils/agents/runnerAuth';
+import { acquireRedisLock } from '../../../utils/db/redisLock';
 
 const MARKET_ABI = [
   'function owner() view returns (address)',
@@ -39,7 +40,7 @@ export default async function handler(req, res) {
   }
 
   const user = ethers.getAddress(wallet);
-  const enrollment = getEnrollment(user);
+  const enrollment = await getEnrollment(user);
   if (!enrollment || enrollment.status !== 'active') {
     return res.status(404).json({ error: 'No active enrollment' });
   }
@@ -94,13 +95,17 @@ export default async function handler(req, res) {
     });
   }
 
+  let releaseNonceLock: (() => Promise<unknown>) | null = null;
   try {
+    releaseNonceLock = await acquireRedisLock(`lock:relayer-nonce:${relayer.address.toLowerCase()}`);
     await market.buyPositionFor.staticCall(user, BigInt(roundId), isUp, amountIn);
     const tx = await market.buyPositionFor(user, BigInt(roundId), isUp, amountIn);
     const receipt = await tx.wait();
+    await releaseNonceLock();
+    releaseNonceLock = null;
 
     const agent = getAgentById(enrollment.agentId);
-    appendTradeLog(user, {
+    await appendTradeLog(user, {
       at: Math.floor(Date.now() / 1000),
       action: 'BUY',
       side: isUp ? 'UP' : 'DOWN',
@@ -113,8 +118,8 @@ export default async function handler(req, res) {
     });
 
     const memory = recordTradePlanned(enrollment.agentMemory || {}, symbol);
-    const afterLog = getEnrollment(user);
-    setEnrollment(user, {
+    const afterLog = await getEnrollment(user);
+    await setEnrollment(user, {
       ...(afterLog || enrollment),
       agentMemory: memory,
       delegateSpentRaw: (spent + amountIn).toString(),
@@ -123,8 +128,8 @@ export default async function handler(req, res) {
 
     if (agent) {
       const feedText = thought || agentChatterText(agent, null, symbol, isUp, thought);
-      const pilotName = getDisplayName(user);
-      appendFeedMessage({
+      const pilotName = await getDisplayName(user);
+      await appendFeedMessage({
         agentId: agent.id,
         agentName: agent.name,
         handle: agent.handle,
@@ -145,5 +150,7 @@ export default async function handler(req, res) {
   } catch (error) {
     console.error('Agent execute failed:', error);
     return res.status(500).json({ error: error?.shortMessage || error?.message || 'Trade failed' });
+  } finally {
+    if (releaseNonceLock) await releaseNonceLock().catch(() => {});
   }
 }

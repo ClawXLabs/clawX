@@ -1,5 +1,16 @@
 # ClawX — Production-ready step-by-step
 
+> **Architecture update:** the current runtime uses the custom `server.js` WebSocket
+> gateway, `scripts/price-fetcher.js`, `scripts/agent-scheduler.js`, and one or more
+> `scripts/agent-worker.js` processes. PostgreSQL and Redis are required. The older
+> `agent-runner`/JSON/Next-only sections below are retained as historical setup notes;
+> use `deploy/aws/ecosystem.config.cjs` as the current process manifest.
+>
+> Local service startup:
+> `npm run db:init`, `npm run db:migrate`, then run `npm run dev`,
+> `npm run price-fetcher`, `npm run keeper`, `npm run agent-scheduler`, and
+> `npm run agent-worker` in separate processes.
+
 This is the full checklist: **AWS** runs the app 24/7, **Supabase** stores agent/leaderboard data, **Fuji** handles on-chain markets.
 
 ---

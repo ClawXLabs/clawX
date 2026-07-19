@@ -226,7 +226,7 @@ export function agentChatterFromThought(agent, peer, thought) {
 }
 
 /** AI-style reasoning (LLM if keyed, else simulated first-person analysis) */
-export async function decideNextTrade(enrollment, assets, openPositions) {
+export async function decideNextTrade(enrollment, assets, openPositions, llmOptions = {}) {
   const { decideWithAI } = await import('./aiReason.js');
-  return decideWithAI(enrollment, assets, openPositions);
+  return decideWithAI(enrollment, assets, openPositions, llmOptions);
 }

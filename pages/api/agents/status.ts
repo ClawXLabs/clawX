@@ -23,7 +23,7 @@ export default async function handler(req, res) {
   }
 
   const user = ethers.getAddress(String(wallet));
-  let enrollment = getEnrollment(user);
+  let enrollment = await getEnrollment(user);
   if (!enrollment || enrollment.status !== 'active') {
     const trades = (enrollment?.tradeLog || []).filter((t) => t.action === 'BUY');
     return res.status(200).json({

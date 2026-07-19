@@ -6,13 +6,13 @@ import {
   getAppAgentStats,
   readEnrollments,
   reconcileTradeLog,
-  writeEnrollments,
+  setEnrollment,
 } from '../../../utils/agents/store';
 import { buildXp } from '../../../utils/agents/xp';
 
-function persistReconciledTradeLogs() {
-  const all = readEnrollments();
-  let changed = false;
+async function persistReconciledTradeLogs() {
+  const all = await readEnrollments();
+  const updates = [];
   for (const [key, row] of Object.entries(all)) {
     const enrollment = row as Record<string, unknown>;
     const fixed = reconcileTradeLog(enrollment);
@@ -21,11 +21,10 @@ function persistReconciledTradeLogs() {
     const logChanged = JSON.stringify(fixed.tradeLog) !== JSON.stringify(enrollment.tradeLog);
     const countChanged = nextLifetime !== (Number(enrollment.lifetimeTxCount) || 0);
     if (logChanged || countChanged) {
-      all[key] = { ...fixed, lifetimeTxCount: nextLifetime };
-      changed = true;
+      updates.push(setEnrollment(key, { ...fixed, lifetimeTxCount: nextLifetime }));
     }
   }
-  if (changed) writeEnrollments(all);
+  await Promise.all(updates);
 }
 
 /** Build per-agent-persona rankings aggregated across all wallets. */
@@ -107,11 +106,11 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   }
 
   try {
-    persistReconciledTradeLogs();
-    const appStats = getAppAgentStats();
+    await persistReconciledTradeLogs();
+    const appStats = await getAppAgentStats();
 
     // Raw rows (already have wins/losses/bySymbol/_enrollment/_socialLinks)
-    const rawRows = buildLeaderboardRows();
+    const rawRows = await buildLeaderboardRows();
 
     // Enrich with XP + streak, then re-rank by XP
     const enriched = rawRows.map((row: any) => {

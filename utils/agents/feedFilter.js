@@ -5,8 +5,8 @@ const LEGACY_AGENT_IDS = new Set(['claw-momentum', 'claw-fade', 'claw-sniper', '
 const CURRENT_IDS = new Set(AGENTS.map((a) => a.id));
 const REAL_KINDS = new Set(['trade', 'win', 'loss', 'enroll']);
 
-function activePilotAgents() {
-  const enrollments = readEnrollments();
+async function activePilotAgents() {
+  const enrollments = await readEnrollments();
   const map = new Map();
   for (const row of Object.values(enrollments)) {
     if (row.status !== 'active' || !row.wallet || !row.agentId) continue;
@@ -16,8 +16,8 @@ function activePilotAgents() {
 }
 
 /** Normalize feed — only real pilot/agent activity (no ghost peer/seed bots). */
-export function filterFeedMessages(messages) {
-  const pilots = activePilotAgents();
+export async function filterFeedMessages(messages) {
+  const pilots = await activePilotAgents();
 
   return (messages || [])
     .filter((m) => {

@@ -11,7 +11,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const user = ethers.getAddress(String(wallet));
     return res.status(200).json({
       wallet: user,
-      displayName: getDisplayName(user),
+      displayName: await getDisplayName(user),
     });
   }
 
@@ -28,7 +28,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       return res.status(400).json({ error: 'Display name max 32 characters' });
     }
     const user = ethers.getAddress(String(wallet));
-    const saved = setDisplayName(user, name);
+    const saved = await setDisplayName(user, name);
     return res.status(200).json({ ok: true, wallet: user, displayName: saved.displayName });
   }
 

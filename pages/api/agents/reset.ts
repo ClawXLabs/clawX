@@ -11,8 +11,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   const { wallet, clearAll, clearFeed: wipeFeed } = req.body || {};
 
   if (clearAll) {
-    clearAllEnrollments();
-    if (wipeFeed) clearFeed();
+    await clearAllEnrollments();
+    if (wipeFeed) await clearFeed();
     return res.status(200).json({ ok: true, cleared: 'all', feedCleared: Boolean(wipeFeed) });
   }
 
@@ -21,8 +21,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   }
 
   const user = ethers.getAddress(String(wallet));
-  const retired = retireEnrollment(user);
-  if (wipeFeed) clearFeed();
+  const retired = await retireEnrollment(user);
+  if (wipeFeed) await clearFeed();
 
   return res.status(200).json({
     ok: true,

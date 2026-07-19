@@ -9,11 +9,17 @@ node_modules/
 # Next
 .next/
 out/
+*.tsbuildinfo
 
-# Local runtime data (single-server; may contain delegation signatures)
+# Hardhat generated
+artifacts/
+cache/
+
+# Local runtime data (may contain delegation signatures / PII)
 data/faucet-claims.json
 data/agent-enrollments.json
 data/agent-feed.json
+data/wallet-profiles.json
 
 # OS
 .DS_Store

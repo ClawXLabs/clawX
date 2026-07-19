@@ -13,9 +13,14 @@
     "test-price-feeds": "hardhat run scripts/test-price-feeds.js --network fuji",
     "keeper": "node scripts/keeper.js",
     "agent-runner": "node scripts/agent-runner.js",
-    "dev": "next dev",
+    "price-fetcher": "node scripts/price-fetcher.js",
+    "agent-scheduler": "node scripts/agent-scheduler.js",
+    "agent-worker": "node scripts/agent-worker.js",
+    "db:init": "node scripts/init-db.js",
+    "db:migrate": "node scripts/migrate-to-postgres.js",
+    "dev": "node server.js",
     "build": "next build",
-    "start": "next start"
+    "start": "node server.js"
   },
   "devDependencies": {
     "@nomicfoundation/hardhat-toolbox": "^4.0.0",
@@ -33,13 +38,17 @@
   "dependencies": {
     "@chainlink/contracts": "^0.8.0",
     "@openzeppelin/contracts": "^5.6.1",
+    "bullmq": "^5.80.8",
     "clsx": "^2.0.0",
     "dotenv": "^17.4.2",
     "ethers": "^6.8.0",
     "framer-motion": "^12.39.0",
     "gsap": "^3.15.0",
+    "ioredis": "^5.11.1",
     "lucide-react": "^0.294.0",
+    "pg": "^8.22.0",
     "recharts": "^2.8.0",
-    "web3": "^4.0.0"
+    "web3": "^4.0.0",
+    "ws": "^8.21.1"
   }
 }

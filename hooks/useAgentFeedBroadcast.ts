@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { subscribeRealtimeMessages, subscribeRealtimeStatus } from '../utils/realtimeClient';
 
 export interface FeedMessage {
   id: string;
@@ -28,54 +29,32 @@ export function useAgentFeedBroadcast(options: UseAgentFeedBroadcastOptions = {}
 
   useEffect(() => {
     if (typeof window === 'undefined') return undefined;
-
-    let es: EventSource | null = null;
-    let retryTimer: ReturnType<typeof setTimeout> | null = null;
     let cancelled = false;
-
-    const connect = () => {
-      if (cancelled) return;
-      es = new EventSource('/api/agents/feed/stream');
-
-      es.onopen = () => {
-        setConnected(true);
-        setError('');
-      };
-
-      es.onmessage = (event) => {
-        if (!event.data || event.data.startsWith(':')) return;
-        try {
-          const payload = JSON.parse(event.data);
-          if (payload.type === 'snapshot' && Array.isArray(payload.messages)) {
-            setMessages(payload.messages.slice(0, limit));
-            return;
-          }
-          if (payload.type === 'message' && payload.message) {
-            const msg = payload.message as FeedMessage;
-            setMessages((prev) => {
-              if (prev.some((m) => m.id === msg.id)) return prev;
-              return [msg, ...prev].slice(0, limit);
-            });
-          }
-        } catch {
-          /* ignore malformed events */
-        }
-      };
-
-      es.onerror = () => {
-        setConnected(false);
-        setError('Reconnecting to agent broadcast…');
-        es?.close();
-        retryTimer = setTimeout(connect, 2500);
-      };
-    };
-
-    connect();
+    fetch('/api/agents/feed')
+      .then((response) => response.json())
+      .then((body) => {
+        if (!cancelled && Array.isArray(body.messages)) setMessages(body.messages.slice(0, limit));
+      })
+      .catch(() => {
+        if (!cancelled) setError('Could not load agent feed');
+      });
+    const unsubscribeMessages = subscribeRealtimeMessages((payload) => {
+      if (payload.type !== 'feed' || !payload.data) return;
+      const msg = payload.data as FeedMessage;
+      setMessages((previous) => {
+        if (previous.some((message) => message.id === msg.id)) return previous;
+        return [msg, ...previous].slice(0, limit);
+      });
+    });
+    const unsubscribeStatus = subscribeRealtimeStatus((isConnected, nextError) => {
+      setConnected(isConnected);
+      setError(nextError);
+    });
 
     return () => {
       cancelled = true;
-      if (retryTimer) clearTimeout(retryTimer);
-      es?.close();
+      unsubscribeMessages();
+      unsubscribeStatus();
     };
   }, [limit]);
 

@@ -9,7 +9,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       return res.status(400).json({ error: 'wallet query required' });
     }
     const user = ethers.getAddress(String(wallet));
-    return res.status(200).json(getFullProfile(user));
+    return res.status(200).json(await getFullProfile(user));
   }
 
   if (req.method === 'POST') {
@@ -27,18 +27,18 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       if (name.length > 32) {
         return res.status(400).json({ error: 'Display name max 32 characters' });
       }
-      if (name.length >= 2) setDisplayName(user, name);
+      if (name.length >= 2) await setDisplayName(user, name);
     }
 
     if (socialLinks && typeof socialLinks === 'object') {
       for (const [platform, data] of Object.entries(socialLinks)) {
         if (['twitter', 'telegram'].includes(platform) && data && typeof data === 'object') {
-          setSocialLink(user, platform, data as Record<string, unknown>);
+          await setSocialLink(user, platform, data as Record<string, unknown>);
         }
       }
     }
 
-    return res.status(200).json({ ok: true, ...getFullProfile(user) });
+    return res.status(200).json({ ok: true, ...(await getFullProfile(user)) });
   }
 
   res.setHeader('Allow', 'GET, POST');

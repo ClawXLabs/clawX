@@ -8,7 +8,7 @@
  *   to React StrictMode's double-invoke-and-cleanup pattern which breaks
  *   interval management inside useEffect.
  * - Components subscribe to the singleton via a React context + useState.
- * - Polls CEX prices every 3s (lightweight: one /api/prices call)
+ * - Receives backend-aggregated CEX prices over a single WebSocket
  * - Polls chain data every 12s (heavier: Fuji RPC round info)
  * - Back-fills price history on first load so the chart is never empty.
  */
@@ -26,6 +26,7 @@ import {
   FUJI_RPC_PUBLIC,
   COLLATERAL_TOKEN_ADDRESS,
 } from '../utils/contract';
+import { usePriceStream } from '../hooks/usePriceStream';
 
 /* ─── Public types ───────────────────────────────────────────────── */
 
@@ -72,7 +73,7 @@ const ASSET_META: Record<string, { color: string }> = {
 
 const HISTORY_MAX   = 300;
 const PREFILL_TICKS = 60;   // synthetic ticks seeded at startup
-const CEX_POLL_MS   = 3_000;
+const PRICE_TICK_MS = 3_000;
 const CHAIN_POLL_MS = 12_000;
 
 // Snapshot held outside React — survives StrictMode unmount/remount
@@ -95,7 +96,6 @@ function notify(next: Partial<MarketSnapshot>) {
 }
 
 // Polling state
-let cexTimer: ReturnType<typeof setInterval> | null = null;
 let chainTimer: ReturnType<typeof setInterval> | null = null;
 let contract: ethers.Contract | null = null;
 let decimals = 6;
@@ -120,7 +120,7 @@ function seedHistory(assetId: number, startPrice: number, currentPrice: number, 
   const now  = Date.now();
   const t0   = startTime * 1000;
   const elapsed = Math.max(0, now - t0);
-  const count   = Math.min(PREFILL_TICKS, Math.floor(elapsed / CEX_POLL_MS));
+  const count   = Math.min(PREFILL_TICKS, Math.floor(elapsed / PRICE_TICK_MS));
   if (count <= 0) {
     pushTick(assetId, startPrice, t0);
     return;
@@ -134,21 +134,22 @@ function seedHistory(assetId: number, startPrice: number, currentPrice: number, 
   }
 }
 
-async function fetchCexPrices(symbols: string[]): Promise<Record<string, number>> {
-  if (symbols.length === 0) return {};
-  try {
-    const res = await fetch(`/api/prices?symbols=${symbols.join(',')}`);
-    if (!res.ok) return {};
-    const data = await res.json();
-    const out: Record<string, number> = {};
-    for (const sym of symbols) {
-      const p8 = data.prices?.[sym]?.price8;
-      if (p8 != null) out[sym] = Number(p8); // raw 8-decimal integer
-    }
-    return out;
-  } catch {
-    return {};
-  }
+async function hydrateCandleHistory(assetMap: Array<{ assetId: number; symbol: string }>) {
+  await Promise.all(
+    assetMap.map(async ({ assetId, symbol }) => {
+      if (snapshot.history[assetId]?.length) return;
+      try {
+        const response = await fetch(`/api/candles?symbol=${encodeURIComponent(symbol)}&interval=1m&limit=120`);
+        if (!response.ok) return;
+        const body = await response.json();
+        for (const candle of body.candles || []) {
+          pushTick(assetId, Number(candle.close), Number(candle.openTime));
+        }
+      } catch {
+        // Synthetic round history remains available when candle storage is empty.
+      }
+    })
+  );
 }
 
 async function fetchChain() {
@@ -174,11 +175,10 @@ async function fetchChain() {
       return;
     }
 
-    const symbols = assetMap.map(a => a.symbol);
-    const [roundResults, cexPrices] = await Promise.all([
-      Promise.all(assetMap.map(({ roundId }) => contract!.getRoundInfo(roundId))),
-      fetchCexPrices(symbols),
-    ]);
+    const roundResults = await Promise.all(
+      assetMap.map(({ roundId }) => contract!.getRoundInfo(roundId))
+    );
+    await hydrateCandleHistory(assetMap);
 
     const newMarkets: Record<number, MarketInfo> = { ...snapshot.markets };
 
@@ -189,8 +189,7 @@ async function fetchChain() {
 
       const startPrice  = Number(round.startPrice)  / 1e8;
       const chainPrice  = Number(round.currentPrice) / 1e8;
-      const rawCex      = cexPrices[symbol] ?? 0;
-      const currentPrice = rawCex > 0 ? rawCex / 1e8 : chainPrice;
+      const currentPrice = snapshot.markets[assetId]?.currentPrice || chainPrice;
       const startTime   = Number(round.startTime);
 
       seedHistory(assetId, startPrice, currentPrice, startTime);
@@ -227,30 +226,6 @@ async function fetchChain() {
   }
 }
 
-async function fetchCexOnly() {
-  const markets = snapshot.markets;
-  const symbols = [...new Set(Object.values(markets).map(m => m.symbol))];
-  if (symbols.length === 0) return;
-
-  const cexPrices = await fetchCexPrices(symbols);
-  if (Object.keys(cexPrices).length === 0) return;
-
-  const newMarkets = { ...markets };
-  for (const market of Object.values(newMarkets)) {
-    const rawCex = cexPrices[market.symbol];
-    if (!rawCex) continue;
-    const currentPrice = rawCex / 1e8;
-    newMarkets[market.assetId] = { ...market, currentPrice };
-    pushTick(market.assetId, currentPrice);
-  }
-
-  notify({
-    markets:     newMarkets,
-    history:     { ...snapshot.history },
-    lastUpdated: Date.now(),
-  });
-}
-
 /** Call once — safe to call multiple times (no-op after first call). */
 async function bootstrap() {
   if (started) return;
@@ -279,8 +254,7 @@ async function bootstrap() {
     notify({ error: msg, ready: true });
   }
 
-  // Start both polling loops (only once, at module level)
-  if (!cexTimer)   cexTimer   = setInterval(fetchCexOnly, CEX_POLL_MS);
+  // Chain state remains polled; prices arrive exclusively over WebSocket.
   if (!chainTimer) chainTimer = setInterval(fetchChain,   CHAIN_POLL_MS);
 }
 
@@ -290,6 +264,7 @@ const MarketDataContext = createContext<MarketSnapshot>(snapshot);
 
 export function MarketDataProvider({ children }: { children: ReactNode }) {
   const [state, setState] = useState<MarketSnapshot>(snapshot);
+  const { prices, error: streamError } = usePriceStream();
 
   useEffect(() => {
     // Subscribe to singleton updates
@@ -306,6 +281,31 @@ export function MarketDataProvider({ children }: { children: ReactNode }) {
       // This survives StrictMode unmount/remount cycles correctly.
     };
   }, []);
+
+  useEffect(() => {
+    if (!Object.keys(prices).length) return;
+    const markets = { ...snapshot.markets };
+    let changed = false;
+    for (const market of Object.values(markets)) {
+      const tick = prices[market.symbol];
+      if (!tick || !Number.isFinite(tick.price) || tick.price <= 0) continue;
+      markets[market.assetId] = { ...market, currentPrice: tick.price };
+      pushTick(market.assetId, tick.price, tick.updatedAt * 1_000);
+      changed = true;
+    }
+    if (changed) {
+      notify({
+        markets,
+        history: { ...snapshot.history },
+        lastUpdated: Date.now(),
+        error: '',
+      });
+    }
+  }, [prices]);
+
+  useEffect(() => {
+    if (streamError && snapshot.ready) notify({ error: streamError });
+  }, [streamError]);
 
   return (
     <MarketDataContext.Provider value={state}>

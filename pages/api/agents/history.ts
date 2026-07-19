@@ -13,8 +13,10 @@ export default async function handler(req, res) {
     return res.status(400).json({ error: 'Invalid wallet' });
   }
 
-  const enrollment = getEnrollment(wallet);
-  const profile = getFullProfile(wallet);
+  const [enrollment, profile] = await Promise.all([
+    getEnrollment(wallet),
+    getFullProfile(wallet),
+  ]);
   const socialLinks = profile?.socialLinks || {};
 
   const breakdown = buildAgentBreakdown(enrollment, AGENTS);
