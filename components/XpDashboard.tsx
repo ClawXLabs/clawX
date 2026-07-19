@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import { useWallet } from '../contexts/WalletContext';
-import { Flame, Trophy, TrendingUp, Calendar, Star, Milestone, Twitter, Send, Target, Award, Lock, Sparkles, Activity } from 'lucide-react';
+import { Flame, Trophy, TrendingUp, Calendar, Star, Twitter, Send, Target, Award, Lock, Sparkles, Activity } from 'lucide-react';
 
 // ─── types ────────────────────────────────────────────────────────────────────
 
@@ -33,15 +33,18 @@ interface XpData {
   };
 }
 
-// ─── style tokens ─────────────────────────────────────────────────────────────
+// ─── style tokens (newspaper ink) ─────────────────────────────────────────────
 
 const mono: React.CSSProperties = { fontFamily: "'Courier New', monospace" };
 const serif: React.CSSProperties = { fontFamily: "Georgia, 'Times New Roman', serif" };
+const label: React.CSSProperties = {
+  ...mono, fontSize: 9, fontWeight: 700,
+  letterSpacing: '0.18em', textTransform: 'uppercase', color: '#888',
+};
 const card: React.CSSProperties = {
-  background: '#FDF6EC',
-  border: '1.5px solid #D4A96A',
-  borderRadius: 10,
+  border: '1px solid #0D0B08',
   padding: '18px 22px',
+  background: 'transparent',
 };
 
 // ─── XP progress bar ──────────────────────────────────────────────────────────
@@ -51,19 +54,17 @@ function XpBar({ pct, level }: { pct: number; level: number }) {
     <div>
       <div
         style={{
-          height: 12,
-          background: '#F0E4CE',
-          borderRadius: 6,
+          height: 10,
+          background: 'rgba(13,11,8,0.08)',
           overflow: 'hidden',
-          border: '1px solid #D4A96A',
+          border: '1px solid #0D0B08',
         }}
       >
         <div
           style={{
             height: '100%',
             width: `${Math.min(pct, 100)}%`,
-            background: 'linear-gradient(90deg, #D4A96A 0%, #E8C87A 100%)',
-            borderRadius: 6,
+            background: '#0D0B08',
             transition: 'width 0.6s ease',
           }}
         />
@@ -72,11 +73,11 @@ function XpBar({ pct, level }: { pct: number; level: number }) {
         style={{
           display: 'flex',
           justifyContent: 'space-between',
-          marginTop: 4,
+          marginTop: 5,
         }}
       >
-        <span style={{ ...mono, fontSize: 10, color: '#7B6A52' }}>LVL {level}</span>
-        <span style={{ ...mono, fontSize: 10, color: '#7B6A52' }}>
+        <span style={{ ...mono, fontSize: 10, fontWeight: 700, color: '#0D0B08' }}>LVL {level}</span>
+        <span style={{ ...mono, fontSize: 10, color: '#888' }}>
           {pct}% → LVL {level + 1}
         </span>
       </div>
@@ -92,31 +93,29 @@ function StreakDisplay({ streak }: { streak: XpData['streak'] }) {
   const today = new Date().toISOString().split('T')[0];
   const isActiveToday = lastActiveDate === today;
 
-  const flameColor = current >= 7 ? '#E84142' : current >= 3 ? '#f59e0b' : '#D4A96A';
+  const flameColor = current >= 7 ? '#C0392B' : current >= 3 ? '#F69D39' : '#888';
 
   return (
-    <div style={{ ...card }}>
-      <div style={{ ...mono, fontSize: 11, color: '#7B6A52', marginBottom: 12 }}>TRADING STREAK</div>
+    <div style={card}>
+      <p style={{ ...label, marginBottom: 14 }}>Trading Streak</p>
       <div style={{ display: 'flex', gap: 16, alignItems: 'center', flexWrap: 'wrap' }}>
         {/* Current streak */}
         <div style={{ textAlign: 'center', flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
           <div
             style={{
               display: 'flex', alignItems: 'center', justifyContent: 'center',
-              height: 36,
+              height: 34,
               filter: current === 0 ? 'grayscale(1) opacity(0.4)' : 'none',
             }}
           >
-            <Flame size={28} color={flameColor} strokeWidth={1.5} />
+            <Flame size={26} color={flameColor} strokeWidth={1.5} />
           </div>
-          <div style={{ ...mono, fontSize: 28, fontWeight: 900, color: flameColor, lineHeight: 1.1, marginTop: 4 }}>
+          <div style={{ ...serif, fontSize: 28, fontWeight: 900, color: current > 0 ? '#0D0B08' : '#888', lineHeight: 1.1, marginTop: 4 }}>
             {current}
           </div>
-          <div style={{ ...mono, fontSize: 10, color: '#7B6A52', marginTop: 2 }}>
-            {current === 1 ? 'DAY STREAK' : 'DAY STREAK'}
-          </div>
+          <div style={{ ...label, marginTop: 4 }}>Day Streak</div>
           {isActiveToday && current > 0 && (
-            <div style={{ ...mono, fontSize: 9, color: '#22c55e', marginTop: 3 }}>
+            <div style={{ ...mono, fontSize: 9, color: '#27AE60', marginTop: 3 }}>
               ✓ Active today
             </div>
           )}
@@ -127,36 +126,36 @@ function StreakDisplay({ streak }: { streak: XpData['streak'] }) {
           )}
         </div>
 
-        <div style={{ width: 1, height: 60, background: '#E8D5B0' }} />
+        <div style={{ width: 1, height: 60, background: 'rgba(13,11,8,0.15)' }} />
 
         {/* Longest streak */}
         <div style={{ textAlign: 'center', flex: 1 }}>
-          <div style={{ ...mono, fontSize: 22, fontWeight: 800, color: '#0D0B08' }}>{longest}</div>
-          <div style={{ ...mono, fontSize: 10, color: '#7B6A52', marginTop: 2 }}>BEST STREAK</div>
+          <div style={{ ...serif, fontSize: 24, fontWeight: 900, color: '#0D0B08' }}>{longest}</div>
+          <div style={{ ...label, marginTop: 4 }}>Best Streak</div>
         </div>
 
-        <div style={{ width: 1, height: 60, background: '#E8D5B0' }} />
+        <div style={{ width: 1, height: 60, background: 'rgba(13,11,8,0.15)' }} />
 
         {/* Active days */}
         <div style={{ textAlign: 'center', flex: 1 }}>
-          <div style={{ ...mono, fontSize: 22, fontWeight: 800, color: '#0D0B08' }}>{activeDays}</div>
-          <div style={{ ...mono, fontSize: 10, color: '#7B6A52', marginTop: 2 }}>ACTIVE DAYS</div>
+          <div style={{ ...serif, fontSize: 24, fontWeight: 900, color: '#0D0B08' }}>{activeDays}</div>
+          <div style={{ ...label, marginTop: 4 }}>Active Days</div>
         </div>
       </div>
 
       {/* Streak milestones */}
-      <div style={{ marginTop: 14, display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+      <div style={{ marginTop: 14, paddingTop: 12, borderTop: '1px solid rgba(13,11,8,0.1)', display: 'flex', gap: 6, flexWrap: 'wrap' }}>
         {[3, 7, 14, 30].map((n) => (
           <div
             key={n}
             style={{
               ...mono,
               fontSize: 10,
-              padding: '4px 8px',
-              borderRadius: 5,
-              border: `1px solid ${current >= n ? '#D4A96A' : '#E8D5B0'}`,
-              background: current >= n ? '#D4A96A22' : 'transparent',
-              color: current >= n ? '#7B5E2A' : '#C0A878',
+              fontWeight: 700,
+              padding: '4px 10px',
+              border: `1px solid ${current >= n ? '#0D0B08' : 'rgba(13,11,8,0.2)'}`,
+              background: current >= n ? '#0D0B08' : 'transparent',
+              color: current >= n ? '#FAF8F3' : '#B0A894',
               display: 'inline-flex',
               alignItems: 'center',
               gap: 4,
@@ -184,21 +183,21 @@ function XpBreakdown({ breakdown }: { breakdown: XpData['breakdown'] }) {
   };
 
   return (
-    <div style={{ ...card }}>
-      <div style={{ ...mono, fontSize: 11, color: '#7B6A52', marginBottom: 12 }}>XP BREAKDOWN</div>
-      {rows.map(([key, entry]) => (
+    <div style={card}>
+      <p style={{ ...label, marginBottom: 12 }}>XP Breakdown</p>
+      {rows.map(([key, entry], i) => (
         <div
           key={key}
           style={{
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'space-between',
-            padding: '6px 0',
-            borderBottom: '1px solid #F0E4CE',
+            padding: '7px 0',
+            borderBottom: i === rows.length - 1 ? 'none' : '1px solid rgba(13,11,8,0.1)',
           }}
         >
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <span style={{ display: 'flex', alignItems: 'center', color: '#D4A96A' }}>{icons[key] || <Star size={14} strokeWidth={1.5} />}</span>
+            <span style={{ display: 'flex', alignItems: 'center', color: '#5A554E' }}>{icons[key] || <Star size={14} strokeWidth={1.5} />}</span>
             <span style={{ ...mono, fontSize: 11, color: '#0D0B08' }}>{entry.label}</span>
           </div>
           <span
@@ -206,7 +205,7 @@ function XpBreakdown({ breakdown }: { breakdown: XpData['breakdown'] }) {
               ...mono,
               fontSize: 12,
               fontWeight: 700,
-              color: entry.xp > 0 ? '#D4A96A' : '#C0A878',
+              color: entry.xp > 0 ? '#27AE60' : '#B0A894',
               minWidth: 55,
               textAlign: 'right',
             }}
@@ -219,33 +218,33 @@ function XpBreakdown({ breakdown }: { breakdown: XpData['breakdown'] }) {
   );
 }
 
-// ─── Activity stats ───────────────────────────────────────────────────────────
+// ─── Activity stats — ruled columnar strip ───────────────────────────────────
 
 function ActivityStats({ xp }: { xp: XpData }) {
-  const statCards = [
+  const cells = [
     {
-      icon: <Activity size={20} strokeWidth={1.5} />,
+      icon: <Activity size={16} strokeWidth={1.5} />,
       value: xp.winRate !== null ? `${xp.winRate}%` : '–',
       label: 'Win Rate',
-      color: xp.winRate >= 60 ? '#22c55e' : xp.winRate >= 45 ? '#f59e0b' : '#ef4444',
+      color: xp.winRate >= 60 ? '#27AE60' : xp.winRate >= 45 ? '#F69D39' : '#C0392B',
     },
     {
-      icon: <Activity size={20} strokeWidth={1.5} />, // fallback/different
+      icon: <TrendingUp size={16} strokeWidth={1.5} />,
       value: xp.avgDailyTxs,
       label: 'Avg Daily Txs',
-      color: '#3b82f6',
+      color: '#0D0B08',
     },
     {
-      icon: <Flame size={20} strokeWidth={1.5} />,
+      icon: <Flame size={16} strokeWidth={1.5} />,
       value: xp.streak.current,
       label: 'Current Streak',
-      color: '#f59e0b',
+      color: '#F69D39',
     },
     {
-      icon: <Calendar size={20} strokeWidth={1.5} />,
+      icon: <Calendar size={16} strokeWidth={1.5} />,
       value: xp.streak.activeDays,
       label: 'Active Days',
-      color: '#8b5cf6',
+      color: '#0D0B08',
     },
   ];
 
@@ -254,24 +253,24 @@ function ActivityStats({ xp }: { xp: XpData }) {
       style={{
         display: 'grid',
         gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))',
-        gap: 10,
+        border: '1px solid #0D0B08',
         marginBottom: 16,
       }}
     >
-      {statCards.map(({ icon, value, label, color }, idx) => (
+      {cells.map(({ icon, value, label: cellLabel, color }, idx) => (
         <div
-          key={label}
+          key={cellLabel}
           style={{
-            ...card,
             textAlign: 'center',
-            padding: '14px 10px',
+            padding: '16px 10px',
+            borderLeft: idx === 0 ? 'none' : '1px solid rgba(13,11,8,0.15)',
           }}
         >
-          <div style={{ display: 'flex', justifyContent: 'center', color: color || '#7B6A52', marginBottom: 6 }}>
-            {idx === 1 ? <TrendingUp size={20} strokeWidth={1.5} /> : icon}
+          <div style={{ display: 'flex', justifyContent: 'center', color: '#888', marginBottom: 6 }}>
+            {icon}
           </div>
-          <div style={{ ...mono, fontSize: 22, fontWeight: 800, color }}>{value}</div>
-          <div style={{ ...mono, fontSize: 10, color: '#7B6A52', marginTop: 2 }}>{label}</div>
+          <div style={{ ...serif, fontSize: 24, fontWeight: 900, color, lineHeight: 1 }}>{value}</div>
+          <div style={{ ...label, marginTop: 6 }}>{cellLabel}</div>
         </div>
       ))}
     </div>
@@ -291,7 +290,7 @@ function LevelCard({ xp }: { xp: XpData }) {
     'Rookie Pilot';
 
   const renderRankIcon = () => {
-    const props = { size: 28, strokeWidth: 1.5, color: '#FAF8F3' };
+    const props = { size: 26, strokeWidth: 1.5, color: '#FAF8F3' };
     if (xp.level >= 20) return <Trophy {...props} />;
     if (xp.level >= 15) return <Sparkles {...props} />;
     if (xp.level >= 10) return <Star {...props} />;
@@ -303,40 +302,38 @@ function LevelCard({ xp }: { xp: XpData }) {
   return (
     <div
       style={{
-        ...card,
+        border: '2px solid #0D0B08',
+        padding: '20px 22px',
         display: 'flex',
         alignItems: 'center',
         gap: 18,
         marginBottom: 16,
-        background: 'linear-gradient(135deg, #FDF6EC 60%, #FFF8E8)',
       }}
     >
       <div
         style={{
-          width: 64,
-          height: 64,
-          borderRadius: '50%',
-          background: 'linear-gradient(135deg, #D4A96A, #E8C87A)',
+          width: 60,
+          height: 60,
+          background: '#0D0B08',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
           flexShrink: 0,
-          boxShadow: '0 2px 12px #D4A96A44',
         }}
       >
         {renderRankIcon()}
       </div>
       <div style={{ flex: 1 }}>
-        <div style={{ ...mono, fontSize: 10, color: '#7B6A52', marginBottom: 2 }}>
-          LEVEL {xp.level} · {rankLabel}
+        <div style={{ ...label, marginBottom: 4 }}>
+          Level {xp.level} · {rankLabel}
         </div>
-        <div style={{ ...serif, fontSize: 18, fontWeight: 900, color: '#0D0B08' }}>
+        <div style={{ ...serif, fontSize: 24, fontWeight: 900, color: '#0D0B08', lineHeight: 1.1 }}>
           {xp.total.toLocaleString()} XP
         </div>
-        <div style={{ ...mono, fontSize: 10, color: '#7B6A52', marginTop: 1 }}>
+        <div style={{ ...mono, fontSize: 10, color: '#888', marginTop: 2 }}>
           {xp.progressXp} / 500 XP toward Level {xp.level + 1}
         </div>
-        <div style={{ marginTop: 8 }}>
+        <div style={{ marginTop: 10 }}>
           <XpBar pct={xp.progressPct} level={xp.level} />
         </div>
       </div>
@@ -372,9 +369,9 @@ export default function XpDashboard() {
 
   if (!isConnected || !address) {
     return (
-      <div style={{ ...card, textAlign: 'center', padding: '40px 20px', color: '#7B6A52', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
-        <div style={{ color: '#D4A96A', marginBottom: 12 }}>
-          <Star size={32} strokeWidth={1.5} />
+      <div style={{ ...card, textAlign: 'center', padding: '40px 20px', color: '#5A554E', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
+        <div style={{ color: '#888', marginBottom: 12 }}>
+          <Star size={30} strokeWidth={1.5} />
         </div>
         <div style={{ ...serif, fontSize: 15, marginBottom: 16 }}>Connect your wallet to see your XP & stats.</div>
         <button
@@ -393,8 +390,8 @@ export default function XpDashboard() {
 
   if (loading && !xp) {
     return (
-      <div style={{ ...card, textAlign: 'center', padding: 40, color: '#7B6A52' }}>
-        <div style={{ ...mono, fontSize: 13 }}>Loading XP data…</div>
+      <div style={{ ...card, textAlign: 'center', padding: 40, color: '#5A554E' }}>
+        <div style={{ ...mono, fontSize: 12 }}>Loading XP data…</div>
       </div>
     );
   }
@@ -413,19 +410,22 @@ export default function XpDashboard() {
 
   return (
     <div>
-      {/* Refresh */}
-      <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 14 }}>
+      {/* Section header + refresh */}
+      <div className="np-fade-up" style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap', borderBottom: '3px double #0D0B08', paddingBottom: 10, marginBottom: 18 }}>
+        <h2 style={{ ...serif, fontSize: 22, fontWeight: 900, color: '#0D0B08', margin: 0 }}>XP & Standing</h2>
         <button
           onClick={load}
           style={{
             ...mono,
-            fontSize: 11,
-            padding: '5px 12px',
-            borderRadius: 7,
-            border: '1px solid #D4A96A',
+            fontSize: 9,
+            fontWeight: 700,
+            letterSpacing: '0.14em',
+            textTransform: 'uppercase',
+            padding: '6px 14px',
+            border: '1px solid #0D0B08',
             cursor: 'pointer',
             background: 'transparent',
-            color: '#7B6A52',
+            color: '#5A554E',
           }}
         >
           ↻ Refresh
@@ -433,28 +433,24 @@ export default function XpDashboard() {
       </div>
 
       {/* Level card */}
-      <LevelCard xp={xp} />
-
-      {/* Activity stats grid */}
-      <ActivityStats xp={xp} />
-
-      {/* Streak */}
-      <div style={{ marginBottom: 14 }}>
-        <StreakDisplay streak={xp.streak} />
+      <div className="np-fade-up-1">
+        <LevelCard xp={xp} />
       </div>
 
-      {/* XP breakdown */}
-      <XpBreakdown breakdown={xp.breakdown} />
+      {/* Activity stats strip */}
+      <div className="np-fade-up-2">
+        <ActivityStats xp={xp} />
+      </div>
+
+      {/* Streak + breakdown side by side on wide screens */}
+      <div className="np-fade-up-3" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: 16, marginBottom: 16 }}>
+        <StreakDisplay streak={xp.streak} />
+        <XpBreakdown breakdown={xp.breakdown} />
+      </div>
 
       {/* Unlock hints */}
-      <div
-        style={{
-          marginTop: 14,
-          ...card,
-          background: '#FFFBF4',
-        }}
-      >
-        <div style={{ ...mono, fontSize: 11, color: '#7B6A52', marginBottom: 14 }}>HOW TO EARN MORE XP</div>
+      <div className="np-fade-up-4" style={card}>
+        <p style={{ ...label, marginBottom: 14 }}>How to earn more XP</p>
         {[
           { key: 'trades', text: '2 XP per trade placed by your agent' },
           { key: 'wins', text: '5 XP per winning round' },
@@ -465,7 +461,7 @@ export default function XpDashboard() {
           { key: 'rate', text: 'Win-rate bonuses: 50 XP at ≥50%, up to 200 XP at ≥70%' },
         ].map(({ key, text }) => (
           <div key={text} style={{ ...mono, fontSize: 11, color: '#0D0B08', marginBottom: 8, display: 'flex', alignItems: 'center', gap: 8 }}>
-            <span style={{ display: 'flex', alignItems: 'center', color: '#D4A96A' }}>{hintIcons[key]}</span>
+            <span style={{ display: 'flex', alignItems: 'center', color: '#888' }}>{hintIcons[key]}</span>
             <span>{text}</span>
           </div>
         ))}

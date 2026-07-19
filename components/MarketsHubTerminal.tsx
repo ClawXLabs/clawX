@@ -409,16 +409,18 @@ export default function MarketsHubTerminal() {
   const error = contextError;
 
   return (
-    <div style={{ maxWidth: 980, margin: '0 auto', padding: '48px 24px 64px' }}>
+    <div style={{ maxWidth: 980, margin: '0 auto', padding: '20px 24px 64px' }}>
 
-      {/* ── Page header ── */}
-      <div style={{ borderBottom: '3px double #0D0B08', paddingBottom: 20, marginBottom: 32 }}>
-        <p style={{ ...S.label, color: '#27AE60', marginBottom: 12 }}>◆ LIVE MARKETS</p>
-        <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12 }}>
-          <h1 style={{ ...S.serif, fontSize: 'clamp(2.4rem, 5vw, 3.2rem)', fontWeight: 900, lineHeight: 1.1, letterSpacing: '-0.02em', color: '#0D0B08', margin: 0 }}>
-            5-Minute Prediction Rounds
-          </h1>
-          <span style={{ ...S.mono, fontSize: 11, color: '#888', letterSpacing: '0.14em' }}>
+      {/* ── Page header — compact ── */}
+      <div className="np-fade-up" style={{ borderBottom: '3px double #0D0B08', paddingBottom: 10, marginBottom: 20 }}>
+        <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12 }}>
+          <div style={{ display: 'flex', alignItems: 'baseline', gap: 12, flexWrap: 'wrap' }}>
+            <h1 style={{ ...S.serif, fontSize: 22, fontWeight: 900, lineHeight: 1.1, letterSpacing: '-0.01em', color: '#0D0B08', margin: 0 }}>
+              5-Minute Prediction Rounds
+            </h1>
+            <span style={{ ...S.label, color: '#27AE60' }}>◆ LIVE MARKETS</span>
+          </div>
+          <span style={{ ...S.mono, fontSize: 10, color: '#888', letterSpacing: '0.14em' }}>
             UPDATES EVERY 3S · ORACLE-SETTLED
           </span>
         </div>

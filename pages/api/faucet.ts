@@ -1,5 +1,5 @@
-const { ethers } = require('ethers');
-const { query } = require('../../utils/db/postgres');
+import { ethers } from 'ethers';
+import { query } from '../../utils/db/postgres';
 
 const TUSDC_ABI = [
   'function mint(address to, uint256 amount) external',
@@ -113,7 +113,15 @@ export default async function handler(req, res) {
 
   const cooldownSec = cooldownSeconds();
   const now = Math.floor(Date.now() / 1000);
-  let last = await readLastClaim(recipient.toLowerCase());
+  let last;
+  try {
+    last = await readLastClaim(recipient.toLowerCase());
+  } catch (e) {
+    console.error('Faucet: could not read claim history:', e);
+    return res.status(503).json({
+      error: 'Database unavailable — start Postgres (docker compose -f docker-compose.infrastructure.yml up -d) and retry.',
+    });
+  }
   // Corrupt / clock-skew entries (e.g. timestamp in the future) would block forever — ignore them.
   if (last > now) last = 0;
 
@@ -154,7 +162,12 @@ export default async function handler(req, res) {
         });
       }
 
-      await recordClaim(recipient.toLowerCase(), now);
+      try {
+        await recordClaim(recipient.toLowerCase(), now);
+      } catch (e) {
+        // Tokens are already minted — log but don't fail the claim over bookkeeping.
+        console.error('Faucet: could not record claim:', e);
+      }
 
       return res.status(200).json({
         ok: true,

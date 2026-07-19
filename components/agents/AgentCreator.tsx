@@ -106,11 +106,13 @@ export default function AgentCreator() {
         </Link>
 
         {/* ── Header ─────────────────────────────────── */}
-        <div style={{ borderBottom: '2px solid #0D0B08', paddingBottom: 20, marginBottom: 32 }}>
-          <p style={{ ...S.label, color: '#C0392B', marginBottom: 10 }}>◆ DEPLOY AGENT</p>
-          <h1 style={{ ...S.serif, fontSize: 'clamp(2rem, 4vw, 3rem)', fontWeight: 900, lineHeight: 1.1, letterSpacing: '-0.02em', color: '#0D0B08', margin: 0 }}>
-            New Agent
-          </h1>
+        <div className="np-fade-up" style={{ borderBottom: '2px solid #0D0B08', paddingBottom: 14, marginBottom: 24 }}>
+          <div style={{ display: 'flex', alignItems: 'baseline', gap: 12, flexWrap: 'wrap' }}>
+            <h1 style={{ ...S.serif, fontSize: 22, fontWeight: 900, lineHeight: 1.1, letterSpacing: '-0.01em', color: '#0D0B08', margin: 0 }}>
+              New Agent
+            </h1>
+            <span style={{ ...S.label, color: '#C0392B' }}>◆ DEPLOY AGENT</span>
+          </div>
           <p style={{ ...S.serif, fontSize: 15, lineHeight: 1.6, color: '#5A554E', marginTop: 10 }}>
             Each agent uses AI-style reasoning across all markets. Add <code style={{ ...S.mono, fontSize: 12, background: 'rgba(13,11,8,0.06)', padding: '2px 6px' }}>OPENAI_API_KEY</code> for real GPT decisions.
           </p>

@@ -8,7 +8,8 @@ const MARKET_ABI = [
   'function settlementOperator() view returns (address)',
   'function claimWinningsFor(address claimer,uint256 roundId) returns (uint256)',
   'function getUserPosition(uint256 roundId,address user) view returns (uint256 upShares,uint256 downShares,bool claimed)',
-  'function getRoundInfo(uint256 roundId) view returns (string asset,uint256 roundNumber,uint256 startPrice,uint256 endPrice,uint256 upPool,uint256 downPool,uint256 collateralPool,bool resolved,bool upWins)',
+  // Must match PredictionMarket.getRoundInfo exactly (16 fields) or decoding fails for non-zero assetIds
+  'function getRoundInfo(uint256 roundId) view returns (uint256 assetId,string asset,uint256 roundNumber,uint256 startTime,uint256 endTime,uint256 startPrice,uint256 endPrice,bool resolved,bool upWins,uint256 upPool,uint256 downPool,uint256 upShares,uint256 downShares,uint256 collateralPool,uint256 currentPrice,address priceFeed)',
 ];
 
 function normalizeKey(value?: string) {

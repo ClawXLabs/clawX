@@ -293,27 +293,26 @@ export default function FaucetTerminal() {
 
   /* ────────────────────────────────── Render ─── */
   return (
-    <div ref={rootRef} style={{ maxWidth: 680, margin: '0 auto', padding: '48px 24px 80px' }}>
+    <div ref={rootRef} style={{ maxWidth: 680, margin: '0 auto', padding: '20px 24px 80px' }}>
 
-      {/* ── Header ──────────────────────────────── */}
-      <div ref={headerRef} style={{ borderBottom: '2px solid #0D0B08', paddingBottom: 20, marginBottom: 32 }}>
-        <p style={{ ...css.label, color: '#C0392B', marginBottom: 10 }}>◆ TESTNET FAUCET</p>
-
-        {/* Large animated headline */}
-        <h1 style={{
-          ...css.serif,
-          fontSize: 'clamp(2.4rem, 5vw, 3.6rem)',
-          fontWeight: 900, lineHeight: 1.05,
-          letterSpacing: '-0.025em', color: '#0D0B08', margin: 0,
-        }}>
-          Claim&nbsp;
-          <span style={{ color: '#F69D39' }}>
-            <AnimatedCounter target={300} />
-          </span>
-          &nbsp;TUSDC
-        </h1>
-
-        <p style={{ ...css.serif, fontSize: 15, lineHeight: 1.7, color: '#5A554E', marginTop: 12, maxWidth: 520 }}>
+      {/* ── Header — compact ────────────────────── */}
+      <div ref={headerRef} style={{ borderBottom: '2px solid #0D0B08', paddingBottom: 12, marginBottom: 24 }}>
+        <div style={{ display: 'flex', alignItems: 'baseline', gap: 12, flexWrap: 'wrap' }}>
+          <h1 style={{
+            ...css.serif,
+            fontSize: 22,
+            fontWeight: 900, lineHeight: 1.1,
+            letterSpacing: '-0.01em', color: '#0D0B08', margin: 0,
+          }}>
+            Claim&nbsp;
+            <span style={{ color: '#F69D39' }}>
+              <AnimatedCounter target={300} />
+            </span>
+            &nbsp;TUSDC
+          </h1>
+          <span style={{ ...css.label, color: '#C0392B' }}>◆ TESTNET FAUCET</span>
+        </div>
+        <p style={{ ...css.serif, fontSize: 13, lineHeight: 1.6, color: '#5A554E', marginTop: 8, maxWidth: 520 }}>
           Connect your MetaMask on Fuji, click one button, and receive testnet tokens —
           no AVAX required, we pay gas.
         </p>
