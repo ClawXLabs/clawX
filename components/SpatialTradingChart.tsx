@@ -1,54 +1,18 @@
 /**
  * SpatialTradingChart
  * ───────────────────
- * Canvas spatial chart: price stream lives in mutable refs + rAF (60fps),
- * not React state — so sub-second ticks never thrash the render tree.
+ * Canvas price chart: ticks live in mutable refs + rAF (60fps),
+ * not React state — so sub-second updates never thrash the render tree.
  *
- * Viewport:
- *   - Current time locked ~35% from the left (History | Future)
- *   - Vertical draw band inset 30% top/bottom so the ridge is zoomed
- *   - Axis labels sit on left/right gutters outside the ridge band
- *
- * Modes:
- *   classic — horizontal dashed line from entry to expiry
- *   box     — hover/click grid cells in the future zone
- *   draw    — click-drag custom bounding box
+ * Viewport: current time locked ~35% from the left (History | Future).
+ * Line / tip color comes from the market’s own brand color.
  */
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { MarketInfo, PriceTick } from '../contexts/MarketDataContext';
 
-export type SpatialMode = 'classic' | 'box' | 'draw';
-
-export interface ClassicBet {
-  id: string;
-  kind: 'classic';
-  side: 'up' | 'down';
-  entryPrice: number;
-  entryTime: number;
-  expiryTime: number;
-  status: 'open' | 'won' | 'lost';
-}
-
-export interface RectBet {
-  id: string;
-  kind: 'box' | 'draw';
-  t0: number;
-  t1: number;
-  p0: number;
-  p1: number;
-  status: 'open' | 'hit' | 'miss';
-}
-
-export type SpatialBet = ClassicBet | RectBet;
-
 interface SpatialTradingChartProps {
   market: MarketInfo;
   history: PriceTick[];
-  mode?: SpatialMode;
-  onModeChange?: (mode: SpatialMode) => void;
-  /** Fired when Classic Up/Down is placed from the chart (optional bridge). */
-  onClassicEntry?: (side: 'up' | 'down', price: number, at: number) => void;
-  classicExpirySec?: number;
   isHistorical?: boolean;
 }
 
@@ -56,13 +20,12 @@ const INK = '#0D0B08';
 const PAPER = '#FAF8F3';
 const GREEN = '#1E5E3A';
 const RED = '#8A1C14';
-const NOW_FRAC = 0.35; // current time at 35% from left
-const V_MARGIN = 0.30; // 30% top + 30% bottom → ridge in middle 40%
+const NOW_FRAC = 0.35;
 const HISTORY_WINDOW_MS = 90_000;
 const FUTURE_WINDOW_MS = 180_000;
-const BOX_COLS = 6;
-const BOX_ROWS = 5;
-const Y_PAD_FRAC = 0.08; // tight pad so ticks read as a big ridge
+const Y_PAD_FRAC = 0.12;
+/** Small inset so labels don’t clip the edge — not the old 30% ridge margins. */
+const EDGE = 28;
 
 function fmtUsd(n: number): string {
   if (!Number.isFinite(n)) return '—';
@@ -76,55 +39,20 @@ function fmtClock(ms: number): string {
   return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}:${String(d.getSeconds()).padStart(2, '0')}`;
 }
 
-function uid() {
-  return `${Date.now()}-${Math.random().toString(16).slice(2, 8)}`;
-}
-
-function segmentsIntersectRect(
-  x1: number, y1: number, x2: number, y2: number,
-  rx0: number, ry0: number, rx1: number, ry1: number,
-): boolean {
-  const left = Math.min(rx0, rx1);
-  const right = Math.max(rx0, rx1);
-  const top = Math.min(ry0, ry1);
-  const bottom = Math.max(ry0, ry1);
-  // Either endpoint inside
-  if (
-    (x1 >= left && x1 <= right && y1 >= top && y1 <= bottom) ||
-    (x2 >= left && x2 <= right && y2 >= top && y2 <= bottom)
-  ) return true;
-  // Sample along segment
-  for (let i = 1; i <= 8; i++) {
-    const t = i / 8;
-    const x = x1 + (x2 - x1) * t;
-    const y = y1 + (y2 - y1) * t;
-    if (x >= left && x <= right && y >= top && y <= bottom) return true;
-  }
-  return false;
-}
-
 interface Engine {
   width: number;
   height: number;
   dpr: number;
   ticks: PriceTick[];
-  bets: SpatialBet[];
-  mode: SpatialMode;
-  hoverCell: { col: number; row: number } | null;
-  draft: { x0: number; y0: number; x1: number; y1: number } | null;
-  dragging: boolean;
   nowMs: number;
   startPrice: number;
   symbol: string;
+  color: string;
 }
 
 export default function SpatialTradingChart({
   market,
   history,
-  mode: modeProp = 'classic',
-  onModeChange,
-  onClassicEntry,
-  classicExpirySec = 30,
   isHistorical = false,
 }: SpatialTradingChartProps) {
   const wrapRef = useRef<HTMLDivElement>(null);
@@ -134,25 +62,18 @@ export default function SpatialTradingChart({
     height: 0,
     dpr: 1,
     ticks: [],
-    bets: [],
-    mode: modeProp,
-    hoverCell: null,
-    draft: null,
-    dragging: false,
     nowMs: Date.now(),
     startPrice: market.startPrice,
     symbol: market.symbol,
+    color: market.color || INK,
   });
-  const [mode, setMode] = useState<SpatialMode>(modeProp);
   const [hud, setHud] = useState({ price: market.currentPrice, now: Date.now() });
 
-  // Sync incoming history / price into mutable engine (no React re-render per tick)
   useEffect(() => {
     const e = engineRef.current;
     e.ticks = history.length
       ? [...history]
       : [{ t: Date.now(), price: market.currentPrice }];
-    // Ensure latest market price is represented
     const last = e.ticks[e.ticks.length - 1];
     if (!last || Math.abs(last.price - market.currentPrice) > 1e-12 || Date.now() - last.t > 800) {
       e.ticks.push({ t: Date.now(), price: market.currentPrice });
@@ -160,18 +81,9 @@ export default function SpatialTradingChart({
     }
     e.startPrice = market.startPrice;
     e.symbol = market.symbol;
-  }, [history, market.currentPrice, market.startPrice, market.symbol]);
+    e.color = market.color || INK;
+  }, [history, market.currentPrice, market.startPrice, market.symbol, market.color]);
 
-  useEffect(() => {
-    setMode(modeProp);
-  }, [modeProp]);
-
-  useEffect(() => {
-    engineRef.current.mode = mode;
-    onModeChange?.(mode);
-  }, [mode, onModeChange]);
-
-  // Size canvas to container
   useEffect(() => {
     const wrap = wrapRef.current;
     const canvas = canvasRef.current;
@@ -198,14 +110,13 @@ export default function SpatialTradingChart({
     return () => ro.disconnect();
   }, []);
 
-  // Coordinate helpers (shared by draw + hit-testing)
   const scales = useCallback(() => {
     const e = engineRef.current;
     const W = e.width;
     const H = e.height;
     const nowX = W * NOW_FRAC;
-    const bandTop = H * V_MARGIN;
-    const bandBot = H * (1 - V_MARGIN);
+    const bandTop = EDGE;
+    const bandBot = H - EDGE;
     const bandH = Math.max(1, bandBot - bandTop);
 
     const now = e.nowMs;
@@ -224,18 +135,8 @@ export default function SpatialTradingChart({
       pMin = mid * 0.998;
       pMax = mid * 1.002;
     }
-    // Include start price + open bets so lines stay on-screen
     pMin = Math.min(pMin, e.startPrice);
     pMax = Math.max(pMax, e.startPrice);
-    for (const b of e.bets) {
-      if (b.kind === 'classic') {
-        pMin = Math.min(pMin, b.entryPrice);
-        pMax = Math.max(pMax, b.entryPrice);
-      } else {
-        pMin = Math.min(pMin, b.p0, b.p1);
-        pMax = Math.max(pMax, b.p0, b.p1);
-      }
-    }
     const span = pMax - pMin || 1;
     pMin -= span * Y_PAD_FRAC;
     pMax += span * Y_PAD_FRAC;
@@ -252,52 +153,13 @@ export default function SpatialTradingChart({
       const u = (p - pMin) / (pMax - pMin || 1);
       return bandBot - u * bandH;
     };
-    const xToTime = (x: number) => {
-      if (x <= nowX) {
-        const u = x / (nowX || 1);
-        return tMin + u * (now - tMin);
-      }
-      const u = (x - nowX) / (W - nowX || 1);
-      return now + u * (tMax - now);
-    };
-    const yToPrice = (y: number) => {
-      const u = (bandBot - y) / bandH;
-      return pMin + u * (pMax - pMin);
-    };
 
-    return { W, H, nowX, bandTop, bandBot, bandH, tMin, tMax, now, pMin, pMax, timeToX, priceToY, xToTime, yToPrice };
+    return { W, H, nowX, bandTop, bandBot, tMin, tMax, now, pMin, pMax, timeToX, priceToY };
   }, []);
 
-  // Settlement / collision on each frame against latest tip
-  const settleBets = useCallback((prev: PriceTick | null, curr: PriceTick) => {
-    const e = engineRef.current;
-    for (const b of e.bets) {
-      if (b.kind === 'classic' && b.status === 'open' && curr.t >= b.expiryTime) {
-        const won = b.side === 'up' ? curr.price >= b.entryPrice : curr.price < b.entryPrice;
-        b.status = won ? 'won' : 'lost';
-      }
-      if ((b.kind === 'box' || b.kind === 'draw') && b.status === 'open') {
-        if (curr.t < b.t0) continue;
-        if (curr.t > b.t1) {
-          b.status = 'miss';
-          continue;
-        }
-        if (prev) {
-          const hit = segmentsIntersectRect(
-            prev.t, prev.price, curr.t, curr.price,
-            b.t0, b.p0, b.t1, b.p1,
-          );
-          if (hit) b.status = 'hit';
-        }
-      }
-    }
-  }, []);
-
-  // rAF draw loop
   useEffect(() => {
     let raf = 0;
     let lastHud = 0;
-    let prevTip: PriceTick | null = null;
 
     const draw = () => {
       const canvas = canvasRef.current;
@@ -314,8 +176,7 @@ export default function SpatialTradingChart({
 
       e.nowMs = Date.now();
       const tip = e.ticks[e.ticks.length - 1] || { t: e.nowMs, price: e.startPrice };
-      if (prevTip) settleBets(prevTip, tip);
-      prevTip = tip;
+      const lineColor = e.color || INK;
 
       const s = scales();
       const { W, H, nowX, bandTop, bandBot, timeToX, priceToY, pMin, pMax, tMin, tMax } = s;
@@ -323,7 +184,6 @@ export default function SpatialTradingChart({
       ctx.setTransform(e.dpr, 0, 0, e.dpr, 0, 0);
       ctx.clearRect(0, 0, W, H);
 
-      // Paper background
       ctx.fillStyle = PAPER;
       ctx.fillRect(0, 0, W, H);
 
@@ -331,22 +191,7 @@ export default function SpatialTradingChart({
       ctx.fillStyle = 'rgba(13,11,8,0.03)';
       ctx.fillRect(nowX, 0, W - nowX, H);
 
-      // Vertical margins (dimmed outside ridge)
-      ctx.fillStyle = 'rgba(13,11,8,0.045)';
-      ctx.fillRect(0, 0, W, bandTop);
-      ctx.fillRect(0, bandBot, W, H - bandBot);
-
-      // Ridge band outline
-      ctx.strokeStyle = 'rgba(13,11,8,0.18)';
-      ctx.lineWidth = 1;
-      ctx.beginPath();
-      ctx.moveTo(0, bandTop);
-      ctx.lineTo(W, bandTop);
-      ctx.moveTo(0, bandBot);
-      ctx.lineTo(W, bandBot);
-      ctx.stroke();
-
-      // Now vertical line
+      // Now vertical
       ctx.strokeStyle = INK;
       ctx.lineWidth = 1.5;
       ctx.setLineDash([]);
@@ -355,7 +200,7 @@ export default function SpatialTradingChart({
       ctx.lineTo(nowX + 0.5, H);
       ctx.stroke();
 
-      // Start / open price reference across ridge
+      // Open price reference
       const openY = priceToY(e.startPrice);
       ctx.strokeStyle = 'rgba(13,11,8,0.35)';
       ctx.setLineDash([4, 4]);
@@ -365,98 +210,10 @@ export default function SpatialTradingChart({
       ctx.stroke();
       ctx.setLineDash([]);
 
-      // Box grid in future zone (mode box)
-      if (e.mode === 'box') {
-        const cellW = (W - nowX) / BOX_COLS;
-        const cellH = (bandBot - bandTop) / BOX_ROWS;
-        ctx.strokeStyle = 'rgba(13,11,8,0.12)';
-        ctx.lineWidth = 1;
-        for (let c = 0; c <= BOX_COLS; c++) {
-          const x = nowX + c * cellW;
-          ctx.beginPath();
-          ctx.moveTo(x, bandTop);
-          ctx.lineTo(x, bandBot);
-          ctx.stroke();
-        }
-        for (let r = 0; r <= BOX_ROWS; r++) {
-          const y = bandTop + r * cellH;
-          ctx.beginPath();
-          ctx.moveTo(nowX, y);
-          ctx.lineTo(W, y);
-          ctx.stroke();
-        }
-        if (e.hoverCell) {
-          const { col, row } = e.hoverCell;
-          ctx.fillStyle = 'rgba(30,94,58,0.14)';
-          ctx.fillRect(nowX + col * cellW, bandTop + row * cellH, cellW, cellH);
-          ctx.strokeStyle = GREEN;
-          ctx.strokeRect(nowX + col * cellW + 0.5, bandTop + row * cellH + 0.5, cellW - 1, cellH - 1);
-        }
-      }
-
-      // Active bets
-      for (const b of e.bets) {
-        if (b.kind === 'classic') {
-          const x0 = timeToX(b.entryTime);
-          const x1 = timeToX(b.expiryTime);
-          const y = priceToY(b.entryPrice);
-          const color = b.status === 'won' ? GREEN : b.status === 'lost' ? RED : (b.side === 'up' ? GREEN : RED);
-          ctx.strokeStyle = color;
-          ctx.lineWidth = 1.25;
-          ctx.setLineDash([6, 5]);
-          ctx.beginPath();
-          ctx.moveTo(x0, y);
-          ctx.lineTo(Math.max(x0, x1), y);
-          ctx.stroke();
-          ctx.setLineDash([]);
-          ctx.fillStyle = color;
-          ctx.beginPath();
-          ctx.arc(x0, y, 3.5, 0, Math.PI * 2);
-          ctx.fill();
-        } else {
-          const x0 = timeToX(b.t0);
-          const x1 = timeToX(b.t1);
-          const y0 = priceToY(b.p0);
-          const y1 = priceToY(b.p1);
-          const left = Math.min(x0, x1);
-          const top = Math.min(y0, y1);
-          const w = Math.abs(x1 - x0);
-          const h = Math.abs(y1 - y0);
-          const color = b.status === 'hit' ? GREEN : b.status === 'miss' ? RED : INK;
-          ctx.fillStyle = b.status === 'hit'
-            ? 'rgba(30,94,58,0.16)'
-            : b.status === 'miss'
-              ? 'rgba(138,28,20,0.12)'
-              : 'rgba(13,11,8,0.06)';
-          ctx.fillRect(left, top, w, h);
-          ctx.strokeStyle = color;
-          ctx.lineWidth = 1.5;
-          ctx.setLineDash(b.kind === 'draw' ? [] : [3, 3]);
-          ctx.strokeRect(left + 0.5, top + 0.5, w - 1, h - 1);
-          ctx.setLineDash([]);
-        }
-      }
-
-      // Draft draw rectangle
-      if (e.draft) {
-        const { x0, y0, x1, y1 } = e.draft;
-        const left = Math.min(x0, x1);
-        const top = Math.min(y0, y1);
-        const w = Math.abs(x1 - x0);
-        const h = Math.abs(y1 - y0);
-        ctx.fillStyle = 'rgba(13,11,8,0.08)';
-        ctx.fillRect(left, top, w, h);
-        ctx.strokeStyle = INK;
-        ctx.lineWidth = 1.5;
-        ctx.setLineDash([4, 3]);
-        ctx.strokeRect(left + 0.5, top + 0.5, w - 1, h - 1);
-        ctx.setLineDash([]);
-      }
-
-      // Price line (history only, up to now)
+      // Price line
       const pts = e.ticks.filter((p) => p.t >= tMin && p.t <= e.nowMs + 50);
       if (pts.length >= 2) {
-        ctx.strokeStyle = INK;
+        ctx.strokeStyle = lineColor;
         ctx.lineWidth = 3;
         ctx.lineJoin = 'round';
         ctx.lineCap = 'round';
@@ -470,23 +227,22 @@ export default function SpatialTradingChart({
         ctx.stroke();
       }
 
-      // Leading price node (big ridge tip)
+      // Leading node
       const nodeX = timeToX(Math.min(tip.t, e.nowMs));
       const nodeY = priceToY(tip.price);
       ctx.fillStyle = PAPER;
-      ctx.strokeStyle = INK;
+      ctx.strokeStyle = lineColor;
       ctx.lineWidth = 3;
       ctx.beginPath();
       ctx.arc(nodeX, nodeY, 10, 0, Math.PI * 2);
       ctx.fill();
       ctx.stroke();
-      ctx.fillStyle = INK;
+      ctx.fillStyle = lineColor;
       ctx.beginPath();
       ctx.arc(nodeX, nodeY, 3.5, 0, Math.PI * 2);
       ctx.fill();
 
       // Left gutter — price labels
-      ctx.fillStyle = INK;
       ctx.font = '700 11px "Courier New", monospace';
       ctx.textAlign = 'left';
       ctx.textBaseline = 'middle';
@@ -504,9 +260,9 @@ export default function SpatialTradingChart({
         ctx.stroke();
       }
 
-      // Right gutter — mirrored live price
+      // Right gutter — live price
       ctx.textAlign = 'right';
-      ctx.fillStyle = INK;
+      ctx.fillStyle = lineColor;
       ctx.font = '900 13px "Courier New", monospace';
       ctx.fillText(fmtUsd(tip.price), W - 12, nodeY);
       ctx.font = '700 10px "Courier New", monospace';
@@ -514,15 +270,13 @@ export default function SpatialTradingChart({
       const pct = e.startPrice > 0 ? ((tip.price - e.startPrice) / e.startPrice) * 100 : 0;
       ctx.fillText(`${pct >= 0 ? '▲' : '▼'} ${Math.abs(pct).toFixed(3)}%`, W - 12, nodeY + 16);
 
-      // Bottom / top time ticks
+      // Time ticks
       ctx.fillStyle = 'rgba(13,11,8,0.55)';
       ctx.font = '700 10px "Courier New", monospace';
       ctx.textAlign = 'center';
       ctx.textBaseline = 'top';
-      const timeMarks = [tMin, e.nowMs, tMax];
-      for (const t of timeMarks) {
-        const x = timeToX(t);
-        ctx.fillText(fmtClock(t), x, H - 18);
+      for (const t of [tMin, e.nowMs, tMax]) {
+        ctx.fillText(fmtClock(t), timeToX(t), H - 18);
       }
       ctx.fillStyle = INK;
       ctx.font = '900 10px "Courier New", monospace';
@@ -531,7 +285,6 @@ export default function SpatialTradingChart({
       ctx.fillText('HISTORY', nowX * 0.45, 10);
       ctx.fillText('FUTURE', nowX + (W - nowX) * 0.55, 10);
 
-      // Archive watermark
       if (isHistorical) {
         ctx.fillStyle = 'rgba(138,28,20,0.08)';
         ctx.fillRect(0, 0, W, H);
@@ -541,7 +294,6 @@ export default function SpatialTradingChart({
         ctx.fillText('ARCHIVE VIEW', W / 2, 28);
       }
 
-      // Throttle React HUD updates
       if (e.nowMs - lastHud > 200) {
         lastHud = e.nowMs;
         setHud({ price: tip.price, now: e.nowMs });
@@ -552,120 +304,9 @@ export default function SpatialTradingChart({
 
     raf = requestAnimationFrame(draw);
     return () => cancelAnimationFrame(raf);
-  }, [isHistorical, scales, settleBets]);
+  }, [isHistorical, scales]);
 
-  const localPoint = (ev: React.MouseEvent | React.PointerEvent) => {
-    const canvas = canvasRef.current;
-    if (!canvas) return { x: 0, y: 0 };
-    const rect = canvas.getBoundingClientRect();
-    return { x: ev.clientX - rect.left, y: ev.clientY - rect.top };
-  };
-
-  const placeClassic = (side: 'up' | 'down') => {
-    const e = engineRef.current;
-    const tip = e.ticks[e.ticks.length - 1];
-    if (!tip) return;
-    const bet: ClassicBet = {
-      id: uid(),
-      kind: 'classic',
-      side,
-      entryPrice: tip.price,
-      entryTime: e.nowMs,
-      expiryTime: e.nowMs + classicExpirySec * 1000,
-      status: 'open',
-    };
-    e.bets = [...e.bets.filter((b) => b.status === 'open' || b.kind !== 'classic'), bet].slice(-24);
-    onClassicEntry?.(side, tip.price, e.nowMs);
-  };
-
-  const onPointerMove = (ev: React.PointerEvent) => {
-    const e = engineRef.current;
-    const { x, y } = localPoint(ev);
-    const s = scales();
-
-    if (e.mode === 'box' && x >= s.nowX && y >= s.bandTop && y <= s.bandBot) {
-      const cellW = (s.W - s.nowX) / BOX_COLS;
-      const cellH = (s.bandBot - s.bandTop) / BOX_ROWS;
-      e.hoverCell = {
-        col: Math.min(BOX_COLS - 1, Math.max(0, Math.floor((x - s.nowX) / cellW))),
-        row: Math.min(BOX_ROWS - 1, Math.max(0, Math.floor((y - s.bandTop) / cellH))),
-      };
-    } else {
-      e.hoverCell = null;
-    }
-
-    if (e.dragging && e.draft) {
-      e.draft = { ...e.draft, x1: x, y1: y };
-    }
-  };
-
-  const onPointerDown = (ev: React.PointerEvent) => {
-    const e = engineRef.current;
-    const { x, y } = localPoint(ev);
-    const s = scales();
-
-    if (e.mode === 'classic') {
-      // Click above/below open price in future zone → quick classic
-      if (x >= s.nowX) {
-        const side = y < s.priceToY(e.startPrice) ? 'up' : 'down';
-        placeClassic(side);
-      }
-      return;
-    }
-
-    if (e.mode === 'box' && e.hoverCell && x >= s.nowX) {
-      const cellW = (s.W - s.nowX) / BOX_COLS;
-      const cellH = (s.bandBot - s.bandTop) / BOX_ROWS;
-      const { col, row } = e.hoverCell;
-      const x0 = s.nowX + col * cellW;
-      const x1 = x0 + cellW;
-      const y0 = s.bandTop + row * cellH;
-      const y1 = y0 + cellH;
-      const bet: RectBet = {
-        id: uid(),
-        kind: 'box',
-        t0: s.xToTime(x0),
-        t1: s.xToTime(x1),
-        p0: s.yToPrice(y1),
-        p1: s.yToPrice(y0),
-        status: 'open',
-      };
-      e.bets = [...e.bets, bet].slice(-24);
-      return;
-    }
-
-    if (e.mode === 'draw' && x >= s.nowX) {
-      e.dragging = true;
-      e.draft = { x0: x, y0: y, x1: x, y1: y };
-      (ev.target as HTMLElement).setPointerCapture?.(ev.pointerId);
-    }
-  };
-
-  const onPointerUp = (ev: React.PointerEvent) => {
-    const e = engineRef.current;
-    if (!e.dragging || !e.draft) return;
-    const s = scales();
-    const { x0, y0, x1, y1 } = e.draft;
-    e.dragging = false;
-    e.draft = null;
-    if (Math.abs(x1 - x0) < 8 || Math.abs(y1 - y0) < 8) return;
-    const bet: RectBet = {
-      id: uid(),
-      kind: 'draw',
-      t0: s.xToTime(Math.min(x0, x1)),
-      t1: s.xToTime(Math.max(x0, x1)),
-      p0: s.yToPrice(Math.max(y0, y1)),
-      p1: s.yToPrice(Math.min(y0, y1)),
-      status: 'open',
-    };
-    e.bets = [...e.bets, bet].slice(-24);
-  };
-
-  const modes: { id: SpatialMode; label: string }[] = [
-    { id: 'classic', label: 'Classic' },
-    { id: 'box', label: 'Box' },
-    { id: 'draw', label: 'Draw' },
-  ];
+  const lineColor = market.color || INK;
 
   return (
     <div
@@ -676,105 +317,10 @@ export default function SpatialTradingChart({
         background: PAPER,
         overflow: 'hidden',
         userSelect: 'none',
-        touchAction: 'none',
       }}
     >
       <canvas ref={canvasRef} style={{ display: 'block', width: '100%', height: '100%' }} />
 
-      {/* Invisible interaction overlay — below HUD/mode chrome */}
-      <div
-        onPointerMove={onPointerMove}
-        onPointerDown={onPointerDown}
-        onPointerUp={onPointerUp}
-        onPointerLeave={() => {
-          engineRef.current.hoverCell = null;
-          engineRef.current.dragging = false;
-          engineRef.current.draft = null;
-        }}
-        style={{ position: 'absolute', inset: 0, zIndex: 1, cursor: mode === 'draw' ? 'crosshair' : 'default' }}
-      />
-
-      {/* Mode switcher + classic quick entries — top center */}
-      <div
-        style={{
-          position: 'absolute',
-          top: 56,
-          left: '50%',
-          transform: 'translateX(-50%)',
-          display: 'flex',
-          flexDirection: 'column',
-          alignItems: 'center',
-          gap: 8,
-          zIndex: 5,
-          pointerEvents: 'auto',
-        }}
-      >
-        <div style={{ display: 'flex', border: `1px solid ${INK}`, background: PAPER }}>
-          {modes.map((m) => (
-            <button
-              key={m.id}
-              type="button"
-              onClick={() => setMode(m.id)}
-              style={{
-                padding: '8px 16px',
-                border: 'none',
-                borderRight: m.id !== 'draw' ? `1px solid ${INK}` : 'none',
-                background: mode === m.id ? INK : 'transparent',
-                color: mode === m.id ? PAPER : INK,
-                fontFamily: '"Courier New", monospace',
-                fontSize: 10,
-                fontWeight: 900,
-                letterSpacing: '0.12em',
-                textTransform: 'uppercase',
-                cursor: 'pointer',
-              }}
-            >
-              {m.label}
-            </button>
-          ))}
-        </div>
-        {mode === 'classic' && !isHistorical && (
-          <div style={{ display: 'flex', border: `1px solid ${INK}`, background: PAPER }}>
-            <button
-              type="button"
-              onClick={() => placeClassic('up')}
-              style={{
-                padding: '8px 18px',
-                border: 'none',
-                borderRight: `1px solid ${INK}`,
-                background: 'transparent',
-                color: GREEN,
-                fontFamily: '"Courier New", monospace',
-                fontSize: 11,
-                fontWeight: 900,
-                letterSpacing: '0.1em',
-                cursor: 'pointer',
-              }}
-            >
-              UP
-            </button>
-            <button
-              type="button"
-              onClick={() => placeClassic('down')}
-              style={{
-                padding: '8px 18px',
-                border: 'none',
-                background: 'transparent',
-                color: RED,
-                fontFamily: '"Courier New", monospace',
-                fontSize: 11,
-                fontWeight: 900,
-                letterSpacing: '0.1em',
-                cursor: 'pointer',
-              }}
-            >
-              DOWN
-            </button>
-          </div>
-        )}
-      </div>
-
-      {/* Compact live readout (React-throttled) */}
       <div
         style={{
           position: 'absolute',
@@ -791,10 +337,20 @@ export default function SpatialTradingChart({
           pointerEvents: 'none',
           display: 'flex',
           gap: 14,
+          alignItems: 'center',
         }}
       >
+        <span
+          style={{
+            width: 10,
+            height: 10,
+            borderRadius: '50%',
+            background: lineColor,
+            flexShrink: 0,
+          }}
+        />
         <span>{market.symbol}</span>
-        <span style={{ fontWeight: 900 }}>{fmtUsd(hud.price)}</span>
+        <span style={{ fontWeight: 900, color: lineColor }}>{fmtUsd(hud.price)}</span>
         <span style={{ color: '#5A554E' }}>{fmtClock(hud.now)}</span>
       </div>
     </div>

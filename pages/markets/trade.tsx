@@ -9,7 +9,7 @@ import { buildTradeAuthMessage } from '../../utils/tradeAuth';
 import { relayClaimWinnings } from '../../utils/relayClaim';
 import { CONTRACT_ADDRESS, TUSDC_ADDRESS, ERC20_ABI } from '../../utils/contract';
 import { ethers } from 'ethers';
-import SpatialTradingChart, { SpatialMode } from '../../components/SpatialTradingChart';
+import SpatialTradingChart from '../../components/SpatialTradingChart';
 import { ActiveMarketsPanel, RoundHistoryPanel } from '../../components/TradeSidePanels';
 import TradeTicketPanel from '../../components/TradeTicketPanel';
 
@@ -61,7 +61,6 @@ export default function MarketsTradePage() {
 
   // Archive and interactive previous rounds state
   const [selectedHistoryRound, setSelectedHistoryRound] = useState<any | null>(null);
-  const [spatialMode, setSpatialMode] = useState<SpatialMode>('classic');
 
   // Clear archive view when active asset changes
   useEffect(() => {
@@ -358,9 +357,6 @@ export default function MarketsTradePage() {
               <SpatialTradingChart
                 market={displayMarket}
                 history={history}
-                mode={spatialMode}
-                onModeChange={setSpatialMode}
-                classicExpirySec={Math.max(15, Math.floor(Math.max(0, displayMarket.endTime * 1000 - Date.now()) / 1000) || 30)}
                 isHistorical={selectedHistoryRound !== null}
               />
 
@@ -392,18 +388,16 @@ export default function MarketsTradePage() {
                 />
               </div>
 
-              {/* Right: Buy/Sell ticket attached to the desk */}
+              {/* Right: Buy/Sell ticket — height follows content */}
               <div
                 style={{
                   position: 'absolute',
                   top: 12,
                   right: 12,
-                  bottom: 16,
                   zIndex: 20,
                   width: 300,
                   maxWidth: 'min(300px, 34vw)',
-                  display: 'flex',
-                  flexDirection: 'column',
+                  maxHeight: 'calc(100% - 24px)',
                   border: '1px solid #0D0B08',
                   background: 'rgba(250,248,243,0.94)',
                   overflow: 'auto',
