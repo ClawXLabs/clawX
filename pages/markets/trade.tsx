@@ -12,6 +12,7 @@ import { CONTRACT_ADDRESS, TUSDC_ADDRESS, ERC20_ABI } from '../../utils/contract
 import { ethers } from 'ethers';
 import TradingChart from '../../components/TradingChart';
 import { ActiveMarketsPanel, RoundHistoryPanel } from '../../components/TradeSidePanels';
+import TradeTicketPanel from '../../components/TradeTicketPanel';
 
 const MONO: React.CSSProperties = { fontFamily: '"Courier New", Courier, monospace' };
 const FUJI_CHAIN_ID_HEX = '0xa869';
@@ -367,53 +368,108 @@ export default function MarketsTradePage() {
           )}
 
 
-          {/* Happy path — chart + bottom docks (overview + history expand upward) */}
+          {/* Left docks + chart + buy/sell ticket */}
           {market && displayMarket && (
             <div
               style={{
-                display: 'flex',
-                flexDirection: 'column',
+                display: 'grid',
+                gridTemplateColumns: 'minmax(200px, 260px) minmax(0, 1fr)',
                 gap: 16,
                 width: '100%',
                 minHeight: 'calc(100vh - 120px)',
-                paddingBottom: 8,
+                alignItems: 'stretch',
+                paddingBottom: 16,
               }}
+              className="trade-desk-layout"
             >
-              <div style={{ flex: '1 1 auto', minWidth: 0, minHeight: 0 }}>
-                <TradingChartv2
-                  market={displayMarket}
-                  history={history}
-                  onTakePosition={handleTakePosition}
-                  onSellPosition={handleSellPosition}
-                  onResolveMarket={handleResolveMarket}
-                  onClaimWinnings={handleClaimWinnings}
-                  tokenSymbol="TUSDC"
-                  isHistorical={selectedHistoryRound !== null}
-                  onReturnToLive={() => setSelectedHistoryRound(null)}
-                />
-              </div>
+              <style dangerouslySetInnerHTML={{ __html: `
+                @media (max-width: 900px) {
+                  .trade-desk-layout {
+                    grid-template-columns: 1fr !important;
+                  }
+                  .trade-left-rail {
+                    flex-direction: row !important;
+                    align-items: stretch !important;
+                    gap: 10px !important;
+                    min-height: auto !important;
+                  }
+                  .trade-left-rail > * {
+                    flex: 1 1 0 !important;
+                    max-width: none !important;
+                  }
+                  .trade-main-stage {
+                    flex-direction: column !important;
+                  }
+                  .trade-ticket-wrap {
+                    max-width: none !important;
+                    width: 100% !important;
+                  }
+                }
+              `}} />
 
-              {/* Bottom dock stack — Overview above History; both expand upward */}
+              {/* Left rail — Overview top, History bottom */}
               <div
+                className="trade-left-rail"
                 style={{
-                  position: 'sticky',
-                  bottom: 0,
-                  zIndex: 50,
-                  marginTop: 'auto',
                   display: 'flex',
                   flexDirection: 'column',
-                  gap: 0,
-                  background: '#FAF8F3',
-                  paddingBottom: 'env(safe-area-inset-bottom, 0px)',
+                  justifyContent: 'space-between',
+                  gap: 12,
+                  minHeight: '100%',
+                  position: 'relative',
                 }}
               >
                 <ActiveMarketsPanel currentAssetId={assetId} />
-                <RoundHistoryPanel
-                  assetId={assetId}
-                  currentRoundId={market.roundId}
-                  selectedRoundId={selectedHistoryRound?.roundId}
-                  onSelectRound={(r) => setSelectedHistoryRound(r)}
-                />
+                <div style={{ marginTop: 'auto' }}>
+                  <RoundHistoryPanel
+                    assetId={assetId}
+                    currentRoundId={market.roundId}
+                    selectedRoundId={selectedHistoryRound?.roundId}
+                    onSelectRound={(r) => setSelectedHistoryRound(r)}
+                  />
+                </div>
+              </div>
+
+              {/* Main stage — chart + attached Buy/Sell ticket */}
+              <div
+                className="trade-main-stage"
+                style={{
+                  display: 'flex',
+                  gap: 0,
+                  minWidth: 0,
+                  alignItems: 'stretch',
+                  border: '1px solid #0D0B08',
+                  background: '#FAF8F3',
+                }}
+              >
+                <div style={{ flex: '1 1 auto', minWidth: 0 }}>
+                  <TradingChartv2
+                    market={displayMarket}
+                    history={history}
+                    isHistorical={selectedHistoryRound !== null}
+                    onReturnToLive={() => setSelectedHistoryRound(null)}
+                  />
+                </div>
+                <div
+                  className="trade-ticket-wrap"
+                  style={{
+                    flex: '0 0 300px',
+                    maxWidth: 320,
+                    borderLeft: '1px solid #0D0B08',
+                    minHeight: 0,
+                  }}
+                >
+                  <TradeTicketPanel
+                    market={displayMarket}
+                    onTakePosition={handleTakePosition}
+                    onSellPosition={handleSellPosition}
+                    onResolveMarket={handleResolveMarket}
+                    onClaimWinnings={handleClaimWinnings}
+                    tokenSymbol="TUSDC"
+                    isHistorical={selectedHistoryRound !== null}
+                    onReturnToLive={() => setSelectedHistoryRound(null)}
+                  />
+                </div>
               </div>
             </div>
           )}
