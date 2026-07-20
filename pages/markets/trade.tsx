@@ -2,7 +2,6 @@ import { useState, useEffect } from 'react';
 import Head from 'next/head';
 import { useRouter } from 'next/router';
 import AppShell from '../../components/AppShell';
-import TradingChartv2 from '../../components/TradingChartv2';
 import { useMarket, useMarketHistory, useMarketData } from '../../contexts/MarketDataContext';
 import { useWallet } from '../../contexts/WalletContext';
 import { signErc2612Permit } from '../../utils/tradePermit';
@@ -10,7 +9,7 @@ import { buildTradeAuthMessage } from '../../utils/tradeAuth';
 import { relayClaimWinnings } from '../../utils/relayClaim';
 import { CONTRACT_ADDRESS, TUSDC_ADDRESS, ERC20_ABI } from '../../utils/contract';
 import { ethers } from 'ethers';
-import TradingChart from '../../components/TradingChart';
+import SpatialTradingChart, { SpatialMode } from '../../components/SpatialTradingChart';
 import { ActiveMarketsPanel, RoundHistoryPanel } from '../../components/TradeSidePanels';
 import TradeTicketPanel from '../../components/TradeTicketPanel';
 
@@ -62,6 +61,7 @@ export default function MarketsTradePage() {
 
   // Archive and interactive previous rounds state
   const [selectedHistoryRound, setSelectedHistoryRound] = useState<any | null>(null);
+  const [spatialMode, setSpatialMode] = useState<SpatialMode>('classic');
 
   // Clear archive view when active asset changes
   useEffect(() => {
@@ -321,157 +321,107 @@ export default function MarketsTradePage() {
         <meta name="description" content="Trade 5-minute UP/DOWN markets on Avalanche Fuji." />
       </Head>
       <AppShell>
-        <div style={{ width: '100%', maxWidth: '100%', margin: '0 auto', padding: '20px 24px 0' }}>
+        <div style={{ position: 'relative', width: '100%', minHeight: 'calc(100vh - 56px)', overflow: 'hidden' }}>
 
-          <button
-            onClick={() => router.push('/markets')}
-            style={{
-              marginBottom: 24, background: 'transparent', border: 'none',
-              ...MONO, fontSize: 12, fontWeight: 700,
-              cursor: 'pointer', color: '#5A554E',
-              display: 'flex', alignItems: 'center', gap: 8,
-            }}
-          >
-            ← BACK TO MARKETS
-          </button>
-
-          {/* Hard error from context (chain RPC failed etc.) */}
           {error && (
             <div style={{
+              position: 'absolute', top: 64, left: 24, right: 24, zIndex: 30,
               border: '2px solid #8A1C14', padding: '14px 18px',
-              background: 'rgba(138,28,20,0.06)',
-              ...MONO, fontSize: 12, color: '#8A1C14', marginBottom: 20,
+              background: 'rgba(250,248,243,0.95)',
+              ...MONO, fontSize: 12, color: '#8A1C14',
             }}>
-              ⚠ {error}
+              {error}
             </div>
           )}
 
-          {/* Invalid or missing URL param */}
           {assetId === null && (
-            <p style={{ ...MONO, fontSize: 12, color: '#888' }}>
+            <p style={{ ...MONO, fontSize: 12, color: '#888', padding: 24 }}>
               Invalid market URL — no asset ID found.
             </p>
           )}
 
-          {/* Context loading for the first time (usually <3s) */}
           {assetId !== null && !ready && !error && (
-            <p style={{ ...MONO, fontSize: 12, color: '#888' }}>
+            <p style={{ ...MONO, fontSize: 12, color: '#888', padding: 24 }}>
               Connecting to Avalanche Fuji…
             </p>
           )}
 
-          {/* Market with this assetId doesn't exist / no active round */}
           {notFound && !error && (
-            <p style={{ ...MONO, fontSize: 12, color: '#888' }}>
+            <p style={{ ...MONO, fontSize: 12, color: '#888', padding: 24 }}>
               No active round found for asset #{assetId}. It may have resolved or not started yet.
             </p>
           )}
 
-
-          {/* Left docks + chart + buy/sell ticket */}
           {market && displayMarket && (
-            <div
-              style={{
-                display: 'grid',
-                gridTemplateColumns: 'minmax(200px, 260px) minmax(0, 1fr)',
-                gap: 16,
-                width: '100%',
-                minHeight: 'calc(100vh - 120px)',
-                alignItems: 'stretch',
-                paddingBottom: 16,
-              }}
-              className="trade-desk-layout"
-            >
-              <style dangerouslySetInnerHTML={{ __html: `
-                @media (max-width: 900px) {
-                  .trade-desk-layout {
-                    grid-template-columns: 1fr !important;
-                  }
-                  .trade-left-rail {
-                    flex-direction: row !important;
-                    align-items: stretch !important;
-                    gap: 10px !important;
-                    min-height: auto !important;
-                  }
-                  .trade-left-rail > * {
-                    flex: 1 1 0 !important;
-                    max-width: none !important;
-                  }
-                  .trade-main-stage {
-                    flex-direction: column !important;
-                  }
-                  .trade-ticket-wrap {
-                    max-width: none !important;
-                    width: 100% !important;
-                  }
-                }
-              `}} />
+            <>
+              {/* Full-bleed spatial canvas — fills the desk behind overlays */}
+              <SpatialTradingChart
+                market={displayMarket}
+                history={history}
+                mode={spatialMode}
+                onModeChange={setSpatialMode}
+                classicExpirySec={Math.max(15, Math.floor(Math.max(0, displayMarket.endTime * 1000 - Date.now()) / 1000) || 30)}
+                isHistorical={selectedHistoryRound !== null}
+              />
 
-              {/* Left rail — Overview top, History bottom */}
-              <div
-                className="trade-left-rail"
-                style={{
-                  display: 'flex',
-                  flexDirection: 'column',
-                  justifyContent: 'space-between',
-                  gap: 12,
-                  minHeight: '100%',
-                  position: 'relative',
-                }}
-              >
-                <ActiveMarketsPanel currentAssetId={assetId} />
-                <div style={{ marginTop: 'auto' }}>
-                  <RoundHistoryPanel
-                    assetId={assetId}
-                    currentRoundId={market.roundId}
-                    selectedRoundId={selectedHistoryRound?.roundId}
-                    onSelectRound={(r) => setSelectedHistoryRound(r)}
-                  />
-                </div>
-              </div>
-
-              {/* Main stage — chart + attached Buy/Sell ticket */}
-              <div
-                className="trade-main-stage"
-                style={{
-                  display: 'flex',
-                  gap: 0,
-                  minWidth: 0,
-                  alignItems: 'stretch',
-                  border: '1px solid #0D0B08',
-                  background: '#FAF8F3',
-                }}
-              >
-                <div style={{ flex: '1 1 auto', minWidth: 0 }}>
-                  <TradingChartv2
-                    market={displayMarket}
-                    history={history}
-                    isHistorical={selectedHistoryRound !== null}
-                    onReturnToLive={() => setSelectedHistoryRound(null)}
-                  />
-                </div>
-                <div
-                  className="trade-ticket-wrap"
+              {/* Top-left: back + overview dock */}
+              <div style={{ position: 'absolute', top: 12, left: 12, zIndex: 20, width: 250, display: 'flex', flexDirection: 'column', gap: 10 }}>
+                <button
+                  onClick={() => router.push('/markets')}
                   style={{
-                    flex: '0 0 300px',
-                    maxWidth: 320,
-                    borderLeft: '1px solid #0D0B08',
-                    minHeight: 0,
+                    alignSelf: 'flex-start',
+                    background: 'rgba(250,248,243,0.92)',
+                    border: '1px solid #0D0B08',
+                    ...MONO, fontSize: 11, fontWeight: 700,
+                    cursor: 'pointer', color: '#0D0B08',
+                    padding: '8px 12px',
                   }}
                 >
-                  <TradeTicketPanel
-                    market={displayMarket}
-                    onTakePosition={handleTakePosition}
-                    onSellPosition={handleSellPosition}
-                    onResolveMarket={handleResolveMarket}
-                    onClaimWinnings={handleClaimWinnings}
-                    tokenSymbol="TUSDC"
-                    isHistorical={selectedHistoryRound !== null}
-                    onReturnToLive={() => setSelectedHistoryRound(null)}
-                  />
-                </div>
+                  ← MARKETS
+                </button>
+                <ActiveMarketsPanel currentAssetId={assetId} />
               </div>
-            </div>
+
+              {/* Bottom-left: history dock */}
+              <div style={{ position: 'absolute', bottom: 16, left: 12, zIndex: 20, width: 250 }}>
+                <RoundHistoryPanel
+                  assetId={assetId}
+                  currentRoundId={market.roundId}
+                  selectedRoundId={selectedHistoryRound?.roundId}
+                  onSelectRound={(r) => setSelectedHistoryRound(r)}
+                />
+              </div>
+
+              {/* Right: Buy/Sell ticket attached to the desk */}
+              <div
+                style={{
+                  position: 'absolute',
+                  top: 12,
+                  right: 12,
+                  bottom: 16,
+                  zIndex: 20,
+                  width: 300,
+                  maxWidth: 'min(300px, 34vw)',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  border: '1px solid #0D0B08',
+                  background: 'rgba(250,248,243,0.94)',
+                  overflow: 'auto',
+                }}
+              >
+                <TradeTicketPanel
+                  market={displayMarket}
+                  onTakePosition={handleTakePosition}
+                  onSellPosition={handleSellPosition}
+                  onResolveMarket={handleResolveMarket}
+                  onClaimWinnings={handleClaimWinnings}
+                  tokenSymbol="TUSDC"
+                  isHistorical={selectedHistoryRound !== null}
+                  onReturnToLive={() => setSelectedHistoryRound(null)}
+                />
+              </div>
+
+            </>
           )}
         </div>
       </AppShell>
