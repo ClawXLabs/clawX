@@ -26,7 +26,7 @@ import {
   FUJI_RPC_PUBLIC,
   COLLATERAL_TOKEN_ADDRESS,
 } from '../utils/contract';
-import { usePriceStream } from '../hooks/usePriceStream';
+import { usePriceStream, StreamPrices } from '../hooks/usePriceStream';
 
 /* ─── Public types ───────────────────────────────────────────────── */
 
@@ -264,7 +264,8 @@ const MarketDataContext = createContext<MarketSnapshot>(snapshot);
 
 export function MarketDataProvider({ children }: { children: ReactNode }) {
   const [state, setState] = useState<MarketSnapshot>(snapshot);
-  const { prices, error: streamError } = usePriceStream();
+  const { prices, connected, error: streamError } = usePriceStream();
+  const [polledPrices, setPolledPrices] = useState<StreamPrices>({});
 
   useEffect(() => {
     // Subscribe to singleton updates
@@ -282,12 +283,47 @@ export function MarketDataProvider({ children }: { children: ReactNode }) {
     };
   }, []);
 
+  // Fallback: when the /ws gateway is unavailable (e.g. `npm run dev:ui`
+  // without server.js/Redis), poll /api/prices so charts stay live.
   useEffect(() => {
-    if (!Object.keys(prices).length) return;
+    if (connected) return;
+    let cancelled = false;
+    const poll = async () => {
+      try {
+        const res = await fetch('/api/prices');
+        if (!res.ok) return;
+        const body = await res.json();
+        if (cancelled || !body?.prices) return;
+        const mapped: StreamPrices = {};
+        for (const [symbol, p] of Object.entries<any>(body.prices)) {
+          mapped[symbol] = {
+            symbol,
+            price: Number(p.price),
+            price8: String(p.price8),
+            updatedAt: Number(p.updatedAt),
+          };
+        }
+        setPolledPrices(mapped);
+      } catch {
+        // Offline — keep whatever data we already have.
+      }
+    };
+    poll();
+    const timer = setInterval(poll, PRICE_TICK_MS);
+    return () => {
+      cancelled = true;
+      clearInterval(timer);
+    };
+  }, [connected]);
+
+  const livePrices = connected ? prices : polledPrices;
+
+  useEffect(() => {
+    if (!Object.keys(livePrices).length) return;
     const markets = { ...snapshot.markets };
     let changed = false;
     for (const market of Object.values(markets)) {
-      const tick = prices[market.symbol];
+      const tick = livePrices[market.symbol];
       if (!tick || !Number.isFinite(tick.price) || tick.price <= 0) continue;
       markets[market.assetId] = { ...market, currentPrice: tick.price };
       pushTick(market.assetId, tick.price, tick.updatedAt * 1_000);
@@ -301,11 +337,15 @@ export function MarketDataProvider({ children }: { children: ReactNode }) {
         error: '',
       });
     }
-  }, [prices]);
+  }, [livePrices]);
 
   useEffect(() => {
-    if (streamError && snapshot.ready) notify({ error: streamError });
-  }, [streamError]);
+    // Suppress the "reconnecting" banner while the HTTP polling fallback is
+    // delivering prices — it only matters if we truly have no price source.
+    if (streamError && snapshot.ready && !Object.keys(polledPrices).length) {
+      notify({ error: streamError });
+    }
+  }, [streamError, polledPrices]);
 
   return (
     <MarketDataContext.Provider value={state}>

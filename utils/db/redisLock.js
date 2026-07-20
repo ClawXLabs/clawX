@@ -6,6 +6,10 @@ function sleep(ms) {
 }
 
 export async function acquireRedisLock(key, { ttlMs = 120_000, waitMs = 15_000 } = {}) {
+  // UI-only dev mode has no Redis and runs a single process — no lock needed.
+  if (process.env.CLAWX_UI_ONLY === '1') {
+    return async () => {};
+  }
   const redis = getRedis();
   const token = randomUUID();
   const deadline = Date.now() + waitMs;

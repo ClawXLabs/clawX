@@ -1,6 +1,9 @@
 import { getRedis } from '../db/redis.js';
 
 export async function readCachedPrices(symbols) {
+  // UI-only dev mode (`npm run dev:ui`) runs without Redis — skip the cache
+  // so /api/prices goes straight to the CEX fetch without connection noise.
+  if (process.env.CLAWX_UI_ONLY === '1') return {};
   if (!process.env.REDIS_URL || !symbols?.length) return {};
   try {
     const redis = getRedis();
