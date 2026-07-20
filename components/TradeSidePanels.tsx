@@ -122,11 +122,16 @@ export function ActiveMarketsPanel({ currentAssetId }: ActiveMarketsPanelProps) 
 
   if (!current) {
     return (
-      <div style={{ border: NP.border, background: NP.bg, padding: '12px 16px' }}>
-        <span style={{ ...NP.mono, fontSize: 12, color: '#5A554E' }}>No active markets</span>
+      <div style={{ border: NP.border, background: NP.bg, padding: '10px 12px', width: '100%' }}>
+        <span style={{ ...NP.mono, fontSize: 11, color: '#5A554E' }}>No active markets</span>
       </div>
     );
   }
+
+  const diffPct = current.startPrice > 0
+    ? ((current.currentPrice - current.startPrice) / current.startPrice) * 100
+    : 0;
+  const isUp = diffPct >= 0;
 
   return (
     <div
@@ -134,6 +139,7 @@ export function ActiveMarketsPanel({ currentAssetId }: ActiveMarketsPanelProps) 
       style={{
         position: 'relative',
         width: '100%',
+        maxWidth: 280,
         border: NP.border,
         background: NP.bg,
         zIndex: 45,
@@ -144,17 +150,16 @@ export function ActiveMarketsPanel({ currentAssetId }: ActiveMarketsPanelProps) 
           display: flex;
           flex-direction: column;
           gap: 8px;
-          max-height: min(38vh, 360px);
+          max-height: min(36vh, 320px);
           overflow-y: auto;
           overscroll-behavior: contain;
-          padding: 10px 12px 12px;
+          padding: 10px;
           scrollbar-width: thin;
         }
-        .markets-dock-list::-webkit-scrollbar { width: 6px; }
+        .markets-dock-list::-webkit-scrollbar { width: 5px; }
         .markets-dock-list::-webkit-scrollbar-thumb { background: rgba(13,11,8,0.25); }
       `}} />
 
-      {/* Collapsed overview bar — current market only */}
       <button
         type="button"
         onClick={() => setExpanded((v) => !v)}
@@ -165,36 +170,30 @@ export function ActiveMarketsPanel({ currentAssetId }: ActiveMarketsPanelProps) 
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'space-between',
-          gap: 12,
-          padding: '10px 14px',
+          gap: 8,
+          padding: '10px 12px',
           background: expanded ? 'rgba(13,11,8,0.04)' : 'transparent',
           border: 'none',
-          borderBottom: expanded ? '1px solid rgba(13,11,8,0.15)' : 'none',
+          borderBottom: expanded ? '1px solid rgba(13,11,8,0.12)' : 'none',
           cursor: 'pointer',
           color: NP.ink,
         }}
       >
-        <span style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0, flex: 1 }}>
-          <LayoutGrid size={17} strokeWidth={2.5} />
-          <span style={{ ...NP.serif, fontSize: 15, fontWeight: 900 }}>Overview</span>
-          <span style={{ width: 1, height: 16, background: 'rgba(13,11,8,0.2)', flexShrink: 0 }} />
-          <AssetIconImg symbol={current.symbol} size={20} />
-          <span style={{ ...NP.serif, fontSize: 16, fontWeight: 900 }}>{current.symbol}</span>
-          <span style={{ ...NP.mono, fontSize: 13, fontWeight: 700, color: '#5A554E' }}>
-            {fmtUsd(current.currentPrice)}
+        <span style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0, flex: 1 }}>
+          <LayoutGrid size={15} strokeWidth={2.5} />
+          <AssetIconImg symbol={current.symbol} size={18} />
+          <span style={{ ...NP.serif, fontSize: 14, fontWeight: 900 }}>{current.symbol}</span>
+          <span style={{ ...NP.mono, fontSize: 11, fontWeight: 700, color: isUp ? NP.green : NP.red }}>
+            {isUp ? '▲' : '▼'}{Math.abs(diffPct).toFixed(1)}%
           </span>
-          {marketList.length > 1 && (
-            <span style={{ ...NP.mono, fontSize: 9, fontWeight: 700, color: '#888', letterSpacing: '0.08em' }}>
-              +{marketList.length - 1} MORE
-            </span>
-          )}
         </span>
         <ChevronDown
-          size={18}
+          size={16}
           strokeWidth={2.5}
           style={{
             flexShrink: 0,
             transition: 'transform 0.2s ease',
+            /* Top dock expands downward — chevron points down when closed, up when open */
             transform: expanded ? 'rotate(180deg)' : 'rotate(0deg)',
           }}
         />
@@ -206,14 +205,15 @@ export function ActiveMarketsPanel({ currentAssetId }: ActiveMarketsPanelProps) 
             position: 'absolute',
             left: -1,
             right: -1,
-            bottom: '100%',
+            top: '100%',
             border: NP.border,
-            borderBottom: 'none',
+            borderTop: 'none',
             background: NP.bg,
-            boxShadow: '0 -8px 24px rgba(13,11,8,0.08)',
-            maxHeight: 'min(44vh, 400px)',
+            boxShadow: '0 10px 24px rgba(13,11,8,0.1)',
+            maxHeight: 'min(40vh, 360px)',
             display: 'flex',
             flexDirection: 'column',
+            zIndex: 46,
           }}
         >
           <div className="markets-dock-list">
@@ -336,6 +336,7 @@ export function RoundHistoryPanel({
       style={{
         position: 'relative',
         width: '100%',
+        maxWidth: 280,
         border: NP.border,
         background: NP.bg,
         zIndex: 40,
@@ -346,21 +347,16 @@ export function RoundHistoryPanel({
           display: flex;
           flex-direction: column;
           gap: 8px;
-          max-height: min(42vh, 420px);
+          max-height: min(36vh, 340px);
           overflow-y: auto;
           overscroll-behavior: contain;
-          padding: 10px 12px 12px;
+          padding: 10px;
           scrollbar-width: thin;
         }
-        .history-dock-list::-webkit-scrollbar {
-          width: 6px;
-        }
-        .history-dock-list::-webkit-scrollbar-thumb {
-          background: rgba(13,11,8,0.25);
-        }
+        .history-dock-list::-webkit-scrollbar { width: 5px; }
+        .history-dock-list::-webkit-scrollbar-thumb { background: rgba(13,11,8,0.25); }
       `}} />
 
-      {/* Collapsed bar — click toggles upward expand */}
       <button
         type="button"
         onClick={() => setExpanded((v) => !v)}
@@ -371,28 +367,26 @@ export function RoundHistoryPanel({
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'space-between',
-          gap: 12,
-          padding: '12px 16px',
+          gap: 8,
+          padding: '10px 12px',
           background: expanded ? 'rgba(13,11,8,0.04)' : 'transparent',
           border: 'none',
-          borderBottom: expanded ? '1px solid rgba(13,11,8,0.15)' : 'none',
+          borderBottom: expanded ? '1px solid rgba(13,11,8,0.12)' : 'none',
           cursor: 'pointer',
           color: NP.ink,
         }}
       >
-        <span style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-          <History size={18} strokeWidth={2.5} />
-          <span style={{ ...NP.serif, fontSize: 16, fontWeight: 900, letterSpacing: '-0.01em' }}>
-            History
-          </span>
+        <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <History size={15} strokeWidth={2.5} />
+          <span style={{ ...NP.serif, fontSize: 14, fontWeight: 900 }}>History</span>
           {!loading && historyRounds.length > 0 && (
-            <span style={{ ...NP.mono, fontSize: 10, fontWeight: 700, color: '#5A554E', letterSpacing: '0.08em' }}>
-              {Math.min(6, historyRounds.length)} RECENT
+            <span style={{ ...NP.mono, fontSize: 9, fontWeight: 700, color: '#5A554E' }}>
+              {Math.min(6, historyRounds.length)}
             </span>
           )}
         </span>
         <ChevronDown
-          size={18}
+          size={16}
           strokeWidth={2.5}
           style={{
             transition: 'transform 0.2s ease',
@@ -401,7 +395,6 @@ export function RoundHistoryPanel({
         />
       </button>
 
-      {/* Expands upward visually within the bottom dock stack */}
       {expanded && (
         <div
           style={{
@@ -412,35 +405,33 @@ export function RoundHistoryPanel({
             border: NP.border,
             borderBottom: 'none',
             background: NP.bg,
-            boxShadow: '0 -8px 24px rgba(13,11,8,0.08)',
-            maxHeight: 'min(48vh, 460px)',
+            boxShadow: '0 -10px 24px rgba(13,11,8,0.1)',
+            maxHeight: 'min(40vh, 360px)',
             display: 'flex',
             flexDirection: 'column',
+            zIndex: 41,
           }}
         >
           {loading && (
-            <p style={{ ...NP.mono, fontSize: 12, color: '#5A554E', textAlign: 'center', padding: '18px 12px' }}>
-              Loading historical rounds…
+            <p style={{ ...NP.mono, fontSize: 11, color: '#5A554E', textAlign: 'center', padding: '16px 10px' }}>
+              Loading…
             </p>
           )}
-
           {error && (
-            <p style={{ ...NP.mono, fontSize: 12, color: NP.red, fontWeight: 700, textAlign: 'center', padding: '18px 12px' }}>
+            <p style={{ ...NP.mono, fontSize: 11, color: NP.red, fontWeight: 700, textAlign: 'center', padding: '16px 10px' }}>
               {error}
             </p>
           )}
-
           {!loading && !error && historyRounds.length === 0 && (
-            <p style={{ ...NP.mono, fontSize: 12, color: '#5A554E', textAlign: 'center', padding: '18px 12px' }}>
-              No previous rounds recorded.
+            <p style={{ ...NP.mono, fontSize: 11, color: '#5A554E', textAlign: 'center', padding: '16px 10px' }}>
+              No previous rounds.
             </p>
           )}
-
           {!loading && !error && visibleRounds.length > 0 && (
             <div className="history-dock-list">
               {visibleRounds.map((r) => {
-                const isUp = r.endPrice >= r.startPrice;
-                const diffPct = r.startPrice > 0 ? ((r.endPrice - r.startPrice) / r.startPrice) * 100 : 0;
+                const roundUp = r.endPrice >= r.startPrice;
+                const roundDiff = r.startPrice > 0 ? ((r.endPrice - r.startPrice) / r.startPrice) * 100 : 0;
                 const isSelected = r.roundId === selectedRoundId;
 
                 return (
@@ -449,26 +440,24 @@ export function RoundHistoryPanel({
                     onClick={() => onSelectRound?.(r)}
                     style={{
                       border: isSelected ? `2px solid ${NP.ink}` : '1px solid rgba(13,11,8,0.28)',
-                      padding: '10px 12px',
+                      padding: '9px 10px',
                       display: 'flex',
                       flexDirection: 'column',
-                      gap: 6,
+                      gap: 5,
                       background: isSelected ? 'rgba(13,11,8,0.07)' : 'transparent',
                       cursor: 'pointer',
                       flexShrink: 0,
                     }}
                   >
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                      <span style={{ ...NP.mono, fontSize: 12, fontWeight: 900, color: NP.ink }}>
-                        #{r.roundNumber}
-                      </span>
+                      <span style={{ ...NP.mono, fontSize: 11, fontWeight: 900 }}>#{r.roundNumber}</span>
                       {r.resolved ? (
                         <span
                           style={{
                             ...NP.mono,
-                            fontSize: 10,
+                            fontSize: 9,
                             fontWeight: 900,
-                            padding: '2px 7px',
+                            padding: '2px 6px',
                             background: r.upWins ? NP.green : NP.red,
                             color: '#FAF8F3',
                           }}
@@ -476,50 +465,21 @@ export function RoundHistoryPanel({
                           {r.upWins ? '▲ UP' : '▼ DOWN'}
                         </span>
                       ) : (
-                        <span
-                          style={{
-                            ...NP.mono,
-                            fontSize: 10,
-                            fontWeight: 900,
-                            padding: '2px 7px',
-                            background: '#555',
-                            color: '#FAF8F3',
-                          }}
-                        >
+                        <span style={{ ...NP.mono, fontSize: 9, fontWeight: 900, padding: '2px 6px', background: '#555', color: '#FAF8F3' }}>
                           OPEN
                         </span>
                       )}
                     </div>
-
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end' }}>
-                      <div>
-                        <span style={{ ...NP.mono, fontSize: 9, color: '#5A554E', display: 'block' }}>OPEN</span>
-                        <span style={{ ...NP.mono, fontSize: 13, fontWeight: 700, color: NP.ink }}>
-                          {fmtUsd(r.startPrice)}
-                        </span>
-                      </div>
-                      <div style={{ textAlign: 'right' }}>
-                        <span style={{ ...NP.mono, fontSize: 9, color: '#5A554E', display: 'block' }}>SETTLE</span>
-                        <span style={{ ...NP.mono, fontSize: 13, fontWeight: 700, color: isUp ? NP.green : NP.red }}>
-                          {fmtUsd(r.endPrice)}
-                        </span>
-                      </div>
-                    </div>
-
-                    <div
-                      style={{
-                        display: 'flex',
-                        justifyContent: 'space-between',
-                        alignItems: 'center',
-                        borderTop: '1px dashed rgba(13,11,8,0.18)',
-                        paddingTop: 5,
-                      }}
-                    >
-                      <span style={{ ...NP.mono, fontSize: 10, color: '#5A554E' }}>
-                        Pool <strong style={{ color: NP.ink }}>{r.collateralPool.toFixed(2)}</strong>
+                    <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                      <span style={{ ...NP.mono, fontSize: 11, fontWeight: 700 }}>{fmtUsd(r.startPrice)}</span>
+                      <span style={{ ...NP.mono, fontSize: 11, fontWeight: 700, color: roundUp ? NP.green : NP.red }}>
+                        {fmtUsd(r.endPrice)}
                       </span>
-                      <span style={{ ...NP.mono, fontSize: 11, fontWeight: 700, color: isUp ? NP.green : NP.red }}>
-                        {isUp ? '▲' : '▼'} {Math.abs(diffPct).toFixed(2)}%
+                    </div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', borderTop: '1px dashed rgba(13,11,8,0.15)', paddingTop: 4 }}>
+                      <span style={{ ...NP.mono, fontSize: 9, color: '#5A554E' }}>{r.collateralPool.toFixed(1)} pool</span>
+                      <span style={{ ...NP.mono, fontSize: 10, fontWeight: 700, color: roundUp ? NP.green : NP.red }}>
+                        {roundUp ? '▲' : '▼'}{Math.abs(roundDiff).toFixed(2)}%
                       </span>
                     </div>
                   </div>

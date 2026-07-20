@@ -1,21 +1,13 @@
 import { useEffect, useRef, useState } from 'react';
 import { MarketInfo, PriceTick } from '../contexts/MarketDataContext';
-import { useWallet } from '../contexts/WalletContext';
-import { CONTRACT_ABI, CONTRACT_ADDRESS, FUJI_RPC_PUBLIC } from '../utils/contract';
-import { ethers } from 'ethers';
 import { AssetIconImg } from '../utils/assetIcons';
-import { TrendingUp, TrendingDown, Clock, Archive } from 'lucide-react';
+import { Clock, Archive } from 'lucide-react';
 
 /* ─── Types ──────────────────────────────────────────────────────── */
 
 interface TradingChartProps {
   market: MarketInfo;
   history: PriceTick[];
-  onTakePosition: (id: number, isUp: boolean, amount: string) => Promise<void>;
-  onSellPosition?: (id: number, isUp: boolean, shares: string) => Promise<void>;
-  onResolveMarket: (id: number) => Promise<void>;
-  onClaimWinnings: (id: number) => Promise<void>;
-  tokenSymbol?: string;
   isHistorical?: boolean;
   onReturnToLive?: () => void;
 }
@@ -785,40 +777,22 @@ function PoolBar({ upPool, downPool }: { upPool: number; downPool: number }) {
 export default function TradingChartv2({
   market,
   history,
-  onTakePosition,
-  onSellPosition,
-  onResolveMarket,
-  onClaimWinnings,
-  tokenSymbol = 'TUSDC',
   isHistorical = false,
   onReturnToLive,
 }: TradingChartProps) {
-  const [now, setNow]   = useState(Date.now());
-  const [side, setSide] = useState<'up' | 'down'>('up');
-  const [tradeMode, setTradeMode] = useState<'buy' | 'sell'>('buy');
-  const [amount, setAmount] = useState('');
-  const [busy, setBusy] = useState(false);
-  const containerRef    = useRef<HTMLDivElement>(null);
+  const [now, setNow] = useState(Date.now());
+  const containerRef = useRef<HTMLDivElement>(null);
   const [chartWidth, setChartWidth] = useState(900);
 
-  // Position management
-  const { account } = useWallet();
-  const [upShares, setUpShares] = useState(0);
-  const [downShares, setDownShares] = useState(0);
-  const [sharesLoading, setSharesLoading] = useState(false);
-  const [sellQuote, setSellQuote] = useState(0);
-
-  // Tick clock every second for countdown
   useEffect(() => {
     if (isHistorical) return;
     const t = setInterval(() => setNow(Date.now()), 1000);
     return () => clearInterval(t);
   }, [isHistorical]);
 
-  // Responsive width
   useEffect(() => {
     if (!containerRef.current) return;
-    const ro = new ResizeObserver(entries => {
+    const ro = new ResizeObserver((entries) => {
       const w = entries[0].contentRect.width;
       if (w > 0) setChartWidth(Math.floor(w));
     });
@@ -826,94 +800,15 @@ export default function TradingChartv2({
     return () => ro.disconnect();
   }, []);
 
-  // Fetch user positions (shares)
-  const fetchShares = async () => {
-    if (!account || !market?.roundId) {
-      setUpShares(0);
-      setDownShares(0);
-      return;
-    }
-    try {
-      setSharesLoading(true);
-      const provider = new ethers.JsonRpcProvider(FUJI_RPC_PUBLIC);
-      const contract = new ethers.Contract(CONTRACT_ADDRESS, CONTRACT_ABI, provider);
-      const pos = await contract.getUserPosition(market.roundId, account);
-      setUpShares(Number(ethers.formatUnits(pos.upShares, market.decimals)));
-      setDownShares(Number(ethers.formatUnits(pos.downShares, market.decimals)));
-    } catch (e) {
-      console.error("Failed to fetch shares:", e);
-    } finally {
-      setSharesLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    fetchShares();
-  }, [account, market?.roundId, market?.decimals]);
-
-  // Fetch sell quote dynamically when selling
-  useEffect(() => {
-    if (tradeMode !== 'sell' || !amount || isNaN(Number(amount)) || Number(amount) <= 0 || !market?.roundId) {
-      setSellQuote(0);
-      return;
-    }
-    let active = true;
-    const fetchQuote = async () => {
-      try {
-        const provider = new ethers.JsonRpcProvider(FUJI_RPC_PUBLIC);
-        const contract = new ethers.Contract(CONTRACT_ADDRESS, CONTRACT_ABI, provider);
-        const sharesRaw = ethers.parseUnits(amount, market.decimals);
-        const quote = await contract.quoteSell(market.roundId, side === 'up', sharesRaw);
-        if (active) {
-          setSellQuote(Number(ethers.formatUnits(quote, market.decimals)));
-        }
-      } catch (e) {
-        if (active) setSellQuote(0);
-      }
-    };
-    fetchQuote();
-    return () => { active = false; };
-  }, [tradeMode, amount, side, market?.roundId, market?.decimals]);
-
-  const msLeft    = Math.max(0, market.endTime * 1000 - now);
-  const isOpen    = !market.resolved && msLeft > 0;
+  const msLeft = Math.max(0, market.endTime * 1000 - now);
+  const isOpen = !market.resolved && msLeft > 0;
   const isExpired = !market.resolved && msLeft === 0;
-  const timePct   = Math.min(100, ((300_000 - msLeft) / 300_000) * 100);
 
-  const diffPct   = market.startPrice > 0
+  const diffPct = market.startPrice > 0
     ? ((market.currentPrice - market.startPrice) / market.startPrice) * 100
     : 0;
   const priceIsUp = diffPct >= 0;
 
-  const totalPool = market.upPool + market.downPool || 1;
-  const upPct     = Math.round((market.upPool / totalPool) * 100);
-  const downPct   = 100 - upPct;
-  const mult      = upPct >= 50
-    ? (100 / upPct).toFixed(2)
-    : (100 / downPct).toFixed(2);
-
-  const handleSubmit = async () => {
-    if (!amount || isNaN(Number(amount)) || Number(amount) <= 0) return;
-    setBusy(true);
-    try {
-      if (tradeMode === 'buy') {
-        await onTakePosition(market.assetId, side === 'up', amount);
-      } else {
-        if (onSellPosition) {
-          await onSellPosition(market.assetId, side === 'up', amount);
-        } else {
-          alert("Sell system handler is not configured on this screen.");
-        }
-      }
-      setTimeout(fetchShares, 2500); // re-fetch positions
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  const isDesktop = chartWidth >= 768;
-
-  /* ── HEADER ── */
   const header = (
     <div style={{
       display: 'flex', alignItems: 'center', justifyContent: 'space-between',
@@ -927,8 +822,10 @@ export default function TradingChartv2({
           <span style={{
             padding: '3px 8px', border: '1px solid #8A1C14', background: 'rgba(138,28,20,0.06)',
             ...NP.mono, fontSize: 9, fontWeight: 900, color: '#8A1C14',
+            display: 'inline-flex', alignItems: 'center', gap: 6,
           }}>
-            📜 ARCHIVE VIEW
+            <Archive size={12} strokeWidth={2.5} />
+            ARCHIVE VIEW
           </span>
         )}
         <AssetIconImg symbol={market.symbol} size={28} />
@@ -938,6 +835,19 @@ export default function TradingChartv2({
         <span style={{ ...NP.mono, fontSize: 12, color: '#444', fontWeight: 'bold', letterSpacing: '0.08em' }}>
           ROUND #{market.roundNumber}
         </span>
+        {isHistorical && onReturnToLive && (
+          <button
+            type="button"
+            onClick={onReturnToLive}
+            style={{
+              marginLeft: 8, padding: '6px 10px',
+              background: 'transparent', border: NP.border, cursor: 'pointer',
+              ...NP.mono, fontSize: 10, fontWeight: 900, color: NP.ink,
+            }}
+          >
+            ← LIVE
+          </button>
+        )}
       </div>
       <div style={{ display: 'flex', alignItems: 'center', gap: 20 }}>
         <div style={{ textAlign: 'right' }}>
@@ -961,413 +871,42 @@ export default function TradingChartv2({
     </div>
   );
 
-  /* ── STATS GRID ── */
   const statsGrid = (
     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', borderTop: NP.border }}>
-      {/* 1. Price To Beat */}
       <div style={{ padding: '14px 16px', borderRight: NP.border }}>
         <div style={NP.label}>Price To Beat</div>
         <div style={{ ...NP.mono, fontSize: 14, fontWeight: 900, color: NP.ink, marginTop: 6 }}>
           {fmtUsd(market.startPrice)}
         </div>
       </div>
-
-      {/* 2. Current Price */}
       <div style={{ padding: '14px 16px', borderRight: NP.border }}>
         <div style={NP.label}>Current Price</div>
         <div style={{ ...NP.mono, fontSize: 14, fontWeight: 900, color: priceIsUp ? NP.green : NP.red, marginTop: 6 }}>
           {fmtUsd(market.currentPrice)}
         </div>
       </div>
-
-      {/* 3. Direction */}
       <div style={{
         borderRight: NP.border,
-        display: 'flex',
-        flexDirection: 'column',
-        justifyContent: 'center',
-        alignItems: 'center',
+        display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center',
         background: priceIsUp ? 'rgba(34, 197, 94, 0.08)' : 'rgba(239, 68, 68, 0.08)',
-        minHeight: '62px',
-        padding: '6px 10px'
+        minHeight: 62, padding: '6px 10px',
       }}>
         <div style={{ ...NP.mono, fontSize: 8, fontWeight: 900, color: '#666', letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: 2 }}>
           Direction
         </div>
-        <div style={{
-          ...NP.mono,
-          fontSize: 22,
-          fontWeight: 900,
-          color: priceIsUp ? NP.green : NP.red,
-          textAlign: 'center',
-          letterSpacing: '0.06em',
-          lineHeight: '1'
-        }}>
+        <div style={{ ...NP.mono, fontSize: 22, fontWeight: 900, color: priceIsUp ? NP.green : NP.red }}>
           {priceIsUp ? 'UP' : 'DOWN'}
         </div>
       </div>
-
-      {/* 4. Pool */}
       <div style={{ padding: '14px 16px' }}>
         <div style={NP.label}>Pool</div>
         <div style={{ ...NP.mono, fontSize: 14, fontWeight: 900, color: NP.ink, marginTop: 6 }}>
-          {totalPool.toFixed(2)} {tokenSymbol}
+          {(market.upPool + market.downPool).toFixed(2)} TUSDC
         </div>
       </div>
     </div>
   );
 
-  /* ── ARCHIVE SIDEBAR (Right column in historical mode) ── */
-  const archiveSidebar = (
-    <div style={{
-      display: 'flex', flexDirection: 'column', gap: 20,
-      padding: '22px 20px',
-      background: 'rgba(13,11,8,0.03)',
-      height: '100%',
-    }}>
-      {/* Archive Header */}
-      <div style={{ border: NP.border, padding: '20px 18px', background: NP.bg, textAlign: 'center' }}>
-        {/* <span style={{ fontSize: 24, display: 'block', marginBottom: 10 }}>📜</span> */}
-        <h4 style={{ ...NP.serif, fontSize: 18, fontWeight: 900, color: NP.ink, margin: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
-          <Archive size={18} strokeWidth={2.5} />
-          ARCHIVE DATA
-        </h4>
-        <p style={{ ...NP.mono, fontSize: 9, color: '#666', marginTop: 4 }}>
-          ROUND IS CLOSED AND RESOLVED
-        </p>
-      </div>
-
-      {/* Pools Info */}
-      <div style={{ border: NP.border, padding: '16px 18px', background: NP.bg }}>
-        <span style={{ ...NP.label, display: 'block', marginBottom: 12 }}>FINAL SENTIMENT</span>
-        <PoolBar upPool={market.upPool} downPool={market.downPool} />
-        
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginTop: 16, borderTop: '1px dashed rgba(13,11,8,0.15)', paddingTop: 12 }}>
-          <div>
-            <span style={NP.label}>UP Pool</span>
-            <div style={{ ...NP.mono, fontSize: 12, fontWeight: 'bold', marginTop: 2 }}>
-              {market.upPool.toFixed(2)} TUSDC
-            </div>
-          </div>
-          <div>
-            <span style={NP.label}>DOWN Pool</span>
-            <div style={{ ...NP.mono, fontSize: 12, fontWeight: 'bold', marginTop: 2 }}>
-              {market.downPool.toFixed(2)} TUSDC
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* Settle Details */}
-      <div style={{ border: NP.border, padding: '16px 18px', background: NP.bg, display: 'flex', flexDirection: 'column', gap: 12 }}>
-        <div>
-          <span style={NP.label}>OPENING PRICE</span>
-          <div style={{ ...NP.mono, fontSize: 15, fontWeight: 'bold', color: NP.ink, marginTop: 2 }}>
-            {fmtUsd(market.startPrice)}
-          </div>
-        </div>
-        <div>
-          <span style={NP.label}>SETTLEMENT PRICE</span>
-          <div style={{ ...NP.mono, fontSize: 15, fontWeight: 'bold', color: priceIsUp ? NP.green : NP.red, marginTop: 2 }}>
-            {fmtUsd(market.currentPrice)}
-          </div>
-        </div>
-        <div>
-          <span style={NP.label}>RESOLUTION</span>
-          <div style={{ ...NP.mono, fontSize: 12, fontWeight: 'bold', color: priceIsUp ? NP.green : NP.red, marginTop: 2 }}>
-            {priceIsUp ? '▲ Price went UP' : '▼ Price went DOWN'}
-          </div>
-        </div>
-      </div>
-
-      {/* Return Button */}
-      {onReturnToLive && (
-        <button
-          onClick={onReturnToLive}
-          style={{
-            width: '100%', padding: '16px 0',
-            background: NP.ink, color: '#FAF8F3', border: NP.border,
-            ...NP.mono, fontSize: 12, fontWeight: 900,
-            letterSpacing: '0.12em', textTransform: 'uppercase', cursor: 'pointer',
-            boxShadow: '4px 4px 0px rgba(0,0,0,0.15)',
-            transition: 'all 0.12s',
-          }}
-          onMouseEnter={e => {
-            e.currentTarget.style.transform = 'translate(2px, 2px)';
-            e.currentTarget.style.boxShadow = 'none';
-          }}
-          onMouseLeave={e => {
-            e.currentTarget.style.transform = 'none';
-            e.currentTarget.style.boxShadow = '4px 4px 0px rgba(0,0,0,0.15)';
-          }}
-        >
-          ← Return to Live Desk
-        </button>
-      )}
-    </div>
-  );
-
-  /* ── LIVE EXECUTION SIDEBAR (Right column in normal mode) ── */
-  const sidebar = (
-    <div style={{
-      display: 'flex', flexDirection: 'column', gap: 20,
-      padding: '22px 20px',
-      background: 'rgba(13,11,8,0.02)',
-      height: '100%',
-    }}>
-      {/* Betting card */}
-      <div style={{
-        border: NP.border, padding: '20px 18px', background: NP.bg,
-        display: 'flex', flexDirection: 'column', gap: 16,
-      }}>
-        {/* BUY / SELL Switch */}
-        <div style={{ display: 'flex', border: NP.border, background: 'rgba(13,11,8,0.03)', padding: 2, marginBottom: 4 }}>
-          {(['buy', 'sell'] as const).map(mode => (
-            <button
-              key={mode}
-              onClick={() => {
-                setTradeMode(mode);
-                setAmount('');
-              }}
-              style={{
-                flex: 1, padding: '8px 0',
-                background: tradeMode === mode ? NP.ink : 'transparent',
-                color: tradeMode === mode ? '#FAF8F3' : NP.ink,
-                border: 'none',
-                ...NP.mono, fontSize: 10, fontWeight: 900,
-                letterSpacing: '0.08em', textTransform: 'uppercase',
-                cursor: 'pointer', transition: 'all 0.12s',
-                display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6
-              }}
-            >
-              {mode === 'buy' ? (
-                <>
-                  <TrendingUp size={14} strokeWidth={2.5} />
-                  BUY
-                </>
-              ) : (
-                <>
-                  <TrendingDown size={14} strokeWidth={2.5} />
-                  SELL
-                </>
-              )}
-            </button>
-          ))}
-        </div>
-
-        <div style={{ ...NP.serif, fontSize: 18, fontWeight: 900, borderBottom: NP.border, paddingBottom: 6 }}>
-          {tradeMode === 'buy' ? 'Place Prediction' : 'Sell Share Position'}
-        </div>
-
-        {/* UP / DOWN toggle */}
-        <div style={{ display: 'flex', border: NP.border }}>
-          {(['up', 'down'] as const).map(s => (
-            <button
-              key={s}
-              onClick={() => {
-                setSide(s);
-                if (tradeMode === 'sell') setAmount('');
-              }}
-              style={{
-                flex: 1, padding: '13px 0',
-                background: side === s ? (s === 'up' ? NP.green : NP.red) : 'transparent',
-                color: side === s ? '#FAF8F3' : NP.ink,
-                border: 'none',
-                borderRight: s === 'up' ? '2px solid #0D0B08' : 'none',
-                ...NP.mono, fontSize: 10, fontWeight: 900,
-                letterSpacing: '0.05em', textTransform: 'uppercase',
-                cursor: 'pointer', transition: 'background 0.12s, color 0.12s',
-              }}
-            >
-              {s === 'up' ? `▲ UP (${upPct}%)` : `▼ DOWN (${downPct}%)`}
-            </button>
-          ))}
-        </div>
-
-        {/* Amount */}
-        <div>
-          <div style={{ ...NP.label, marginBottom: 8 }}>
-            {tradeMode === 'buy' ? `AMOUNT (${tokenSymbol})` : `SHARES TO SELL (${side.toUpperCase()})`}
-          </div>
-          <div style={{ display: 'flex', border: NP.border }}>
-            <input
-              type="number" min="0" step="any"
-              value={amount}
-              onChange={e => setAmount(e.target.value)}
-              placeholder="0.00"
-              style={{
-                flex: 1, padding: '12px 14px',
-                background: 'transparent', border: 'none', outline: 'none',
-                ...NP.mono, fontSize: 15, fontWeight: 900, color: NP.ink,
-              }}
-            />
-            <span style={{
-              padding: '12px 14px', borderLeft: NP.border,
-              ...NP.mono, fontSize: 11, fontWeight: 900, color: '#333',
-              display: 'flex', alignItems: 'center',
-            }}>
-              {tradeMode === 'buy' ? tokenSymbol : 'SHARES'}
-            </span>
-          </div>
-          
-          {/* Position details & Max shortcut when selling */}
-          {account && (
-            <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 8, ...NP.mono, fontSize: 9.5 }}>
-              <span style={{ color: '#666' }}>YOUR POSITION:</span>
-              <span
-                onClick={() => {
-                  if (tradeMode === 'sell') {
-                    const maxVal = side === 'up' ? upShares : downShares;
-                    setAmount(maxVal > 0 ? maxVal.toFixed(6) : '0');
-                  }
-                }}
-                style={{
-                  fontWeight: 'bold',
-                  color: NP.ink,
-                  cursor: tradeMode === 'sell' ? 'pointer' : 'default',
-                  textDecoration: tradeMode === 'sell' ? 'underline' : 'none',
-                }}
-              >
-                {side === 'up' ? `${upShares.toFixed(2)} UP Shares` : `${downShares.toFixed(2)} DOWN Shares`}
-              </span>
-            </div>
-          )}
-        </div>
-
-        {/* Presets */}
-        <div style={{ display: 'flex', gap: 8 }}>
-          {(tradeMode === 'buy' ? ['10', '25', '50', '100'] : ['25%', '50%', '75%', '100%']).map(v => (
-            <button
-              key={v}
-              onClick={() => {
-                if (tradeMode === 'buy') {
-                  setAmount(v);
-                } else {
-                  const maxVal = side === 'up' ? upShares : downShares;
-                  const pct = Number(v.replace('%', '')) / 100;
-                  setAmount((maxVal * pct).toFixed(6));
-                }
-              }}
-              style={{
-                flex: 1, padding: '8px 0',
-                background: 'transparent',
-                color: NP.ink,
-                border: NP.border,
-                ...NP.mono, fontSize: 10, fontWeight: 900,
-                cursor: 'pointer', transition: 'all 0.12s',
-              }}
-              onMouseEnter={e => {
-                e.currentTarget.style.background = NP.ink;
-                e.currentTarget.style.color = '#FAF8F3';
-              }}
-              onMouseLeave={e => {
-                e.currentTarget.style.background = 'transparent';
-                e.currentTarget.style.color = NP.ink;
-              }}
-            >
-              {v}
-            </button>
-          ))}
-        </div>
-
-        {/* Estimate & simplified Web2-friendly breakdown panel */}
-        <div style={{
-          border: NP.border,
-          background: 'rgba(13,11,8,0.02)',
-          padding: '12px 14px',
-          display: 'flex',
-          flexDirection: 'column',
-          gap: 10,
-        }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <span style={{ ...NP.label, fontSize: 9 }}>{tradeMode === 'buy' ? 'EST. RETURN' : 'EST. VALUE'}</span>
-            <span style={{ ...NP.mono, fontSize: 15, fontWeight: 900,
-              color: tradeMode === 'buy' ? (side === 'up' ? NP.green : NP.red) : NP.green }}>
-              {tradeMode === 'buy'
-                ? `~${(amount && !isNaN(Number(amount)) ? (Number(amount) * Number(mult)).toFixed(2) : '0.00')} ${tokenSymbol}`
-                : `~${(amount && !isNaN(Number(amount)) ? sellQuote.toFixed(2) : '0.00')} ${tokenSymbol}`}
-            </span>
-          </div>
-
-          <div style={{
-            borderTop: '1px dashed rgba(13,11,8,0.15)',
-            paddingTop: 8,
-            display: 'grid',
-            gridTemplateColumns: '1fr 1fr',
-            gap: '8px 12px',
-            ...NP.mono,
-            fontSize: 9.5,
-          }}>
-            <div style={{ display: 'flex', flexDirection: 'column' }}>
-              <span style={{ color: '#666', fontSize: 8, fontWeight: 'bold', textTransform: 'uppercase' }}>Gas Fees</span>
-              <span style={{ fontWeight: 'bold', color: NP.green }}>$0.00 FREE</span>
-            </div>
-            <div style={{ display: 'flex', flexDirection: 'column' }}>
-              <span style={{ color: '#666', fontSize: 8, fontWeight: 'bold', textTransform: 'uppercase' }}>Price Feed</span>
-              <span style={{ fontWeight: 'bold' }}>FAST ORACLE</span>
-            </div>
-            <div style={{ display: 'flex', flexDirection: 'column' }}>
-              <span style={{ color: '#666', fontSize: 8, fontWeight: 'bold', textTransform: 'uppercase' }}>Pool Size</span>
-              <span style={{ fontWeight: 'bold' }}>{totalPool.toFixed(2)} USDC</span>
-            </div>
-            <div style={{ display: 'flex', flexDirection: 'column' }}>
-              <span style={{ color: '#666', fontSize: 8, fontWeight: 'bold', textTransform: 'uppercase' }}>Est. Tickets</span>
-              <span style={{ fontWeight: 'bold', color: tradeMode === 'buy' ? (side === 'up' ? NP.green : NP.red) : NP.ink }}>
-                {amount && !isNaN(Number(amount)) && Number(amount) > 0 
-                  ? `${Number(amount).toFixed(0)} ${side.toUpperCase()}`
-                  : '0'}
-              </span>
-            </div>
-          </div>
-        </div>
-
-        {/* Action button */}
-        {isOpen ? (
-          <button
-            onClick={handleSubmit}
-            disabled={busy || !amount || Number(amount) <= 0}
-            style={{
-              width: '100%', padding: '14px 0',
-              background: busy || !amount ? '#888' : (tradeMode === 'buy' ? (side === 'up' ? NP.green : NP.red) : NP.ink),
-              color: '#FAF8F3', border: NP.border,
-              ...NP.mono, fontSize: 12, fontWeight: 900,
-              letterSpacing: '0.12em', textTransform: 'uppercase',
-              cursor: busy || !amount ? 'not-allowed' : 'pointer',
-              transition: 'all 0.12s',
-            }}
-          >
-            {busy ? 'SUBMITTING…' : (tradeMode === 'buy' ? `PLACE ${side.toUpperCase()} POSITION →` : `SELL ${side.toUpperCase()} POSITION →`)}
-          </button>
-        ) : isExpired ? (
-          <button
-            onClick={() => onResolveMarket(market.assetId)}
-            style={{
-              width: '100%', padding: '14px 0',
-              background: '#D97706', color: '#FAF8F3', border: NP.border,
-              ...NP.mono, fontSize: 12, fontWeight: 900,
-              letterSpacing: '0.12em', textTransform: 'uppercase', cursor: 'pointer',
-            }}
-          >
-            FINALIZING ROUND…
-          </button>
-        ) : (
-          <button
-            onClick={() => onClaimWinnings(market.assetId)}
-            style={{
-              width: '100%', padding: '14px 0',
-              background: '#1D4ED8', color: '#FAF8F3', border: NP.border,
-              ...NP.mono, fontSize: 12, fontWeight: 900,
-              letterSpacing: '0.12em', textTransform: 'uppercase', cursor: 'pointer',
-            }}
-          >
-            CLAIM WINNINGS →
-          </button>
-        )}
-      </div>
-    </div>
-  );
-
-  /* ── CHART AREA ── */
   const chartArea = (
     <div style={{
       padding: '12px 20px 6px',
@@ -1379,22 +918,11 @@ export default function TradingChartv2({
     }}>
       {!isHistorical && isOpen && (
         <div style={{
-          position: 'absolute',
-          top: 22,
-          right: 92,
-          background: NP.ink,
-          color: '#FAF8F3',
-          border: NP.border,
-          padding: '8px 14px',
-          ...NP.mono,
-          fontSize: 16,
-          fontWeight: 900,
-          boxShadow: '4px 4px 0px rgba(0,0,0,0.2)',
-          zIndex: 20,
-          display: 'flex',
-          alignItems: 'center',
-          gap: 8,
-          borderRadius: 2,
+          position: 'absolute', top: 22, right: 28,
+          background: NP.ink, color: '#FAF8F3', border: NP.border,
+          padding: '8px 14px', ...NP.mono, fontSize: 16, fontWeight: 900,
+          boxShadow: '4px 4px 0px rgba(0,0,0,0.2)', zIndex: 20,
+          display: 'flex', alignItems: 'center', gap: 8,
         }}>
           <Clock size={15} strokeWidth={3} />
           <span>{fmtCountdown(msLeft)}</span>
@@ -1405,8 +933,8 @@ export default function TradingChartv2({
         startPrice={market.startPrice}
         currentPrice={market.currentPrice}
         isUp={priceIsUp}
-        width={isDesktop ? chartWidth - 360 - 44 : chartWidth - 40}
-        height={isDesktop ? 300 : 200}
+        width={Math.max(280, chartWidth - 40)}
+        height={chartWidth >= 768 ? 320 : 220}
         isHistorical={isHistorical}
         historicalSeed={market.roundId}
       />
@@ -1414,27 +942,10 @@ export default function TradingChartv2({
   );
 
   return (
-    <div
-      ref={containerRef}
-      style={{ border: NP.border, background: NP.bg }}
-    >
-      {isDesktop ? (
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 360px', minHeight: 480 }}>
-          <div style={{ display: 'flex', flexDirection: 'column', borderRight: NP.border }}>
-            {header}
-            {chartArea}
-            {statsGrid}
-          </div>
-          <div>{isHistorical ? archiveSidebar : sidebar}</div>
-        </div>
-      ) : (
-        <div style={{ display: 'flex', flexDirection: 'column' }}>
-          {header}
-          {chartArea}
-          {statsGrid}
-          <div style={{ borderTop: NP.border }}>{isHistorical ? archiveSidebar : sidebar}</div>
-        </div>
-      )}
+    <div ref={containerRef} style={{ background: NP.bg, height: '100%', display: 'flex', flexDirection: 'column' }}>
+      {header}
+      {chartArea}
+      {statsGrid}
     </div>
   );
 }

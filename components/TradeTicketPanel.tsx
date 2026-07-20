@@ -214,15 +214,16 @@ export default function TradeTicketPanel({
   return (
     <div
       style={{
-        border: NP.border,
+        border: 'none',
         background: NP.bg,
         padding: '18px 16px',
         display: 'flex',
         flexDirection: 'column',
         gap: 14,
         height: '100%',
-        minWidth: 280,
-        maxWidth: 340,
+        minWidth: 0,
+        width: '100%',
+        boxSizing: 'border-box',
       }}
     >
       <div style={{ display: 'flex', border: NP.border, background: 'rgba(13,11,8,0.03)', padding: 2 }}>
