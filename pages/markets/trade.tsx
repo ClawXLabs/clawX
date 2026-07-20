@@ -320,7 +320,7 @@ export default function MarketsTradePage() {
         <meta name="description" content="Trade 5-minute UP/DOWN markets on Avalanche Fuji." />
       </Head>
       <AppShell>
-        <div style={{ width: '100%', maxWidth: '100%', margin: '0 auto', padding: '24px 32px 64px' }}>
+        <div style={{ width: '100%', maxWidth: '100%', margin: '0 auto', padding: '20px 24px 0' }}>
 
           <button
             onClick={() => router.push('/markets')}
@@ -367,57 +367,19 @@ export default function MarketsTradePage() {
           )}
 
 
-          {/* Happy path — render the 2-column trading layout with stacked panels */}
+          {/* Happy path — chart + bottom docks (overview + history expand upward) */}
           {market && displayMarket && (
             <div
               style={{
-                display: 'grid',
-                gridTemplateColumns: '1fr',
-                gap: 24,
-                alignItems: 'flex-start',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: 16,
                 width: '100%',
+                minHeight: 'calc(100vh - 120px)',
+                paddingBottom: 8,
               }}
-              className="trade-page-grid"
             >
-              <style dangerouslySetInnerHTML={{ __html: `
-                .active-markets-wrapper {
-                  grid-row: 1;
-                }
-                .trading-chart-wrapper {
-                  grid-row: 2;
-                  min-width: 0;
-                }
-                .round-history-wrapper {
-                  grid-row: 3;
-                }
-                
-                @media (min-width: 1200px) {
-                  .trade-page-grid {
-                    grid-template-columns: 310px 1fr !important;
-                    grid-template-rows: auto auto !important;
-                  }
-                  .active-markets-wrapper {
-                    grid-column: 1 !important;
-                    grid-row: 1 !important;
-                  }
-                  .round-history-wrapper {
-                    grid-column: 1 !important;
-                    grid-row: 2 !important;
-                  }
-                  .trading-chart-wrapper {
-                    grid-column: 2 !important;
-                    grid-row: 1 / span 2 !important;
-                  }
-                }
-              `}} />
-
-              {/* Component 1: Active Markets Switcher */}
-              <div className="active-markets-wrapper">
-                <ActiveMarketsPanel currentAssetId={assetId} />
-              </div>
-
-              {/* Component 2: Main Trading Desk */}
-              <div className="trading-chart-wrapper">
+              <div style={{ flex: '1 1 auto', minWidth: 0, minHeight: 0 }}>
                 <TradingChartv2
                   market={displayMarket}
                   history={history}
@@ -431,8 +393,21 @@ export default function MarketsTradePage() {
                 />
               </div>
 
-              {/* Component 3: Previous Rounds History */}
-              <div className="round-history-wrapper">
+              {/* Bottom dock stack — Overview above History; both expand upward */}
+              <div
+                style={{
+                  position: 'sticky',
+                  bottom: 0,
+                  zIndex: 50,
+                  marginTop: 'auto',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: 0,
+                  background: '#FAF8F3',
+                  paddingBottom: 'env(safe-area-inset-bottom, 0px)',
+                }}
+              >
+                <ActiveMarketsPanel currentAssetId={assetId} />
                 <RoundHistoryPanel
                   assetId={assetId}
                   currentRoundId={market.roundId}
