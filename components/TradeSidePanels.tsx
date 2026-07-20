@@ -234,6 +234,8 @@ export interface HistoryRound {
   roundNumber: number;
   startPrice: number;
   endPrice: number;
+  startTime: number; // unix seconds
+  endTime: number;   // unix seconds
   resolved: boolean;
   upWins: boolean;
   collateralPool: number;
@@ -295,6 +297,8 @@ export function RoundHistoryPanel({
               roundNumber: Number(info.roundNumber),
               startPrice: Number(info.startPrice) / 1e8,
               endPrice: Number(info.endPrice) / 1e8,
+              startTime: Number(info.startTime),
+              endTime: Number(info.endTime),
               resolved: Boolean(info.resolved),
               upWins: Boolean(info.upWins),
               collateralPool: Number(ethers.formatUnits(info.collateralPool, 6)),
