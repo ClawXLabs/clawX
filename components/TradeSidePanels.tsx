@@ -273,10 +273,10 @@ export function RoundHistoryPanel({
         const roundIdsRaw: bigint[] = await contract.getAssetRoundIds(assetId);
         const roundIds = roundIdsRaw.map((id) => Number(id));
 
-        // Latest completed rounds — keep a small window for the dock list
+        // All completed rounds for this asset — dock shows ~5 at a time; scroll for the rest
         const completedRoundIds = roundIds
           .filter((id) => id !== currentRoundId)
-          .slice(-12)
+          .slice(-48)
           .reverse();
 
         if (completedRoundIds.length === 0) {
@@ -328,7 +328,7 @@ export function RoundHistoryPanel({
     setExpanded(false);
   }, [assetId]);
 
-  const visibleRounds = historyRounds.slice(0, 6);
+  const HISTORY_VISIBLE = 5; // ~4–6 rows visible; scroll for the rest
 
   return (
     <div
@@ -347,7 +347,8 @@ export function RoundHistoryPanel({
           display: flex;
           flex-direction: column;
           gap: 8px;
-          max-height: min(36vh, 340px);
+          /* ~5 compact rows visible */
+          max-height: calc(${HISTORY_VISIBLE} * 78px);
           overflow-y: auto;
           overscroll-behavior: contain;
           padding: 10px;
@@ -381,7 +382,7 @@ export function RoundHistoryPanel({
           <span style={{ ...NP.serif, fontSize: 14, fontWeight: 900 }}>History</span>
           {!loading && historyRounds.length > 0 && (
             <span style={{ ...NP.mono, fontSize: 9, fontWeight: 700, color: '#5A554E' }}>
-              {Math.min(6, historyRounds.length)}
+              {historyRounds.length}
             </span>
           )}
         </span>
@@ -406,7 +407,6 @@ export function RoundHistoryPanel({
             borderBottom: 'none',
             background: NP.bg,
             boxShadow: '0 -10px 24px rgba(13,11,8,0.1)',
-            maxHeight: 'min(40vh, 360px)',
             display: 'flex',
             flexDirection: 'column',
             zIndex: 41,
@@ -427,9 +427,9 @@ export function RoundHistoryPanel({
               No previous rounds.
             </p>
           )}
-          {!loading && !error && visibleRounds.length > 0 && (
+          {!loading && !error && historyRounds.length > 0 && (
             <div className="history-dock-list">
-              {visibleRounds.map((r) => {
+              {historyRounds.map((r) => {
                 const roundUp = r.endPrice >= r.startPrice;
                 const roundDiff = r.startPrice > 0 ? ((r.endPrice - r.startPrice) / r.startPrice) * 100 : 0;
                 const isSelected = r.roundId === selectedRoundId;

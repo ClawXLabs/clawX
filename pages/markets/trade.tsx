@@ -388,16 +388,17 @@ export default function MarketsTradePage() {
                 />
               </div>
 
-              {/* Right: Buy/Sell ticket */}
+              {/* Right-middle: Buy/Sell ticket */}
               <div
                 style={{
                   position: 'absolute',
-                  top: 12,
+                  top: '50%',
                   right: 12,
+                  transform: 'translateY(-50%)',
                   zIndex: 20,
                   width: 300,
                   maxWidth: 'min(300px, 34vw)',
-                  maxHeight: 'calc(100% - 24px)',
+                  maxHeight: 'calc(100% - 48px)',
                   border: '1px solid #0D0B08',
                   background: 'rgba(250,248,243,0.96)',
                   overflow: 'auto',
