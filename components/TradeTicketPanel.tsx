@@ -138,17 +138,19 @@ export default function TradeTicketPanel({
     return (
       <div
         style={{
-          border: NP.border,
-          background: NP.bg,
-          padding: '20px 18px',
-          display: 'flex',
-          flexDirection: 'column',
-          gap: 14,
-          height: '100%',
-          minWidth: 280,
-        }}
-      >
-        <div style={{ ...NP.serif, fontSize: 18, fontWeight: 900, borderBottom: NP.border, paddingBottom: 8 }}>
+        border: 'none',
+        background: NP.bg,
+        padding: '20px 18px',
+        display: 'flex',
+        flexDirection: 'column',
+        gap: 14,
+        height: '100%',
+        minWidth: 0,
+        width: '100%',
+        boxSizing: 'border-box',
+      }}
+    >
+      <div style={{ ...NP.serif, fontSize: 18, fontWeight: 900, borderBottom: NP.border, paddingBottom: 8 }}>
           Archive Round
         </div>
         <p style={{ ...NP.mono, fontSize: 11, color: '#5A554E', margin: 0, lineHeight: 1.5 }}>
