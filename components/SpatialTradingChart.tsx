@@ -10,6 +10,7 @@ interface SpatialTradingChartProps {
   market: MarketInfo;
   history: PriceTick[];
   isHistorical?: boolean;
+  onReturnToLive?: () => void;
 }
 
 const INK = '#0D0B08';
@@ -24,9 +25,34 @@ const Y_PAD_FRAC = 0.14;
 const DEFAULT_WINDOW_MS = 120_000;
 const MIN_WINDOW_MS = 20_000;
 const MAX_WINDOW_MS = 20 * 60_000;
-const PRICE_SMOOTH = 0.08;
 const RANGE_SMOOTH = 0.06;
 const OPEN_FADE_MS = 900;
+/** Chart playhead lags wall-clock so upcoming ticks are already buffered. */
+const CHART_LAG_MS = 1600;
+const TRAIL_MIN_DIST_FRAC = 0.00003;
+const TRAIL_MIN_MS = 24;
+/** Keep ~3×5m rounds of drawn path per market. */
+const TRAIL_KEEP_MS = 3 * 5 * 60 * 1000;
+
+interface ChartCache {
+  trail: PriceTick[];
+  tip: { t: number; price: number };
+  tipTarget: { t: number; price: number };
+  windowMs: number;
+  panMs: number;
+  followLive: boolean;
+  pMin: number;
+  pMax: number;
+}
+
+/** Survives market switches so each asset keeps its line shape. */
+const chartCacheByAsset = new Map<number, ChartCache>();
+
+function trimTrail(trail: PriceTick[], nowMs: number): PriceTick[] {
+  const cutoff = nowMs - TRAIL_KEEP_MS;
+  const kept = trail.filter((p) => p.t >= cutoff);
+  return kept.length >= 2 ? kept : trail.slice(-120);
+}
 
 function fmtUsd(n: number): string {
   if (!Number.isFinite(n)) return '—';
@@ -46,6 +72,91 @@ function fmtCountdown(ms: number): string {
   const m = Math.floor(totalSec / 60);
   const s = totalSec % 60;
   return `${m}:${String(s).padStart(2, '0')}`;
+}
+
+/** Deterministic 5-minute walk from start → end (smooth, no edge spikes). */
+function buildArchiveTicks(
+  startPrice: number,
+  endPrice: number,
+  seed: number,
+  startTimeMs: number,
+  endTimeMs: number,
+): PriceTick[] {
+  const POINTS = 120;
+  let s = (seed ^ 0x9e3779b9) >>> 0;
+  const rand = () => {
+    s = (Math.imul(1664525, s) + 1013904223) >>> 0;
+    return s / 4294967296;
+  };
+  const duration = Math.max(60_000, endTimeMs - startTimeMs);
+  const totalMove = endPrice - startPrice;
+  // Mild mid-round wobble only — quiet near START/END to avoid spikes
+  const volatility = Math.abs(totalMove) * 0.18 + startPrice * 0.00035;
+  const ticks: PriceTick[] = [];
+  let noise = 0;
+  for (let i = 0; i < POINTS; i++) {
+    const u = i / (POINTS - 1);
+    const t = startTimeMs + u * duration;
+    // Envelope: 0 at ends, 1 in the middle
+    const envelope = Math.sin(u * Math.PI);
+    noise += (rand() - 0.5) * 2 * volatility * 0.22;
+    noise *= 0.92; // mean-revert
+    const linear = startPrice + totalMove * u;
+    // Ease the trend slightly (smooth S-curve) so the path doesn't dash
+    const eased = u * u * (3 - 2 * u);
+    const trend = startPrice + totalMove * (0.35 * u + 0.65 * eased);
+    // Blend a touch of linear so mid noise doesn't dominate
+    const price = trend * 0.85 + linear * 0.15 + noise * envelope * envelope;
+    ticks.push({ t, price });
+  }
+  // Pin ends exactly; keep neighbors close to kill Catmull overshoot
+  ticks[0] = { t: startTimeMs, price: startPrice };
+  ticks[1] = { t: startTimeMs + duration / (POINTS - 1), price: startPrice + totalMove / (POINTS - 1) };
+  ticks[POINTS - 2] = {
+    t: endTimeMs - duration / (POINTS - 1),
+    price: endPrice - totalMove / (POINTS - 1),
+  };
+  ticks[POINTS - 1] = { t: endTimeMs, price: endPrice };
+  return ticks;
+}
+
+function fmtRoundClock(msFromStart: number): string {
+  const totalSec = Math.max(0, Math.floor(msFromStart / 1000));
+  const m = Math.floor(totalSec / 60);
+  const s = totalSec % 60;
+  return `${m}:${String(s).padStart(2, '0')}`;
+}
+
+/** Catmull-Rom sample at time t — uses look-ahead ticks inside the lag buffer. */
+function samplePriceAt(ticks: PriceTick[], t: number): { t: number; price: number } {
+  if (!ticks.length) return { t, price: 0 };
+  if (ticks.length === 1) return { t, price: ticks[0].price };
+  if (t <= ticks[0].t) return { t, price: ticks[0].price };
+  const last = ticks[ticks.length - 1];
+  if (t >= last.t) return { t, price: last.price };
+
+  let i = 0;
+  for (let k = 0; k < ticks.length - 1; k++) {
+    if (ticks[k].t <= t && t <= ticks[k + 1].t) {
+      i = k;
+      break;
+    }
+  }
+  const p0 = ticks[Math.max(0, i - 1)];
+  const p1 = ticks[i];
+  const p2 = ticks[i + 1];
+  const p3 = ticks[Math.min(ticks.length - 1, i + 2)];
+  const span = p2.t - p1.t || 1;
+  const u = Math.max(0, Math.min(1, (t - p1.t) / span));
+  const u2 = u * u;
+  const u3 = u2 * u;
+  const price =
+    0.5 *
+    (2 * p1.price +
+      (-p0.price + p2.price) * u +
+      (2 * p0.price - 5 * p1.price + 4 * p2.price - p3.price) * u2 +
+      (-p0.price + 3 * p1.price - 3 * p2.price + p3.price) * u3);
+  return { t, price };
 }
 
 function strokeSmoothPath(
@@ -78,6 +189,15 @@ interface Engine {
   height: number;
   dpr: number;
   ticks: PriceTick[];
+  /** Settled visual trail (committed waypoints the line has already traversed). */
+  trail: PriceTick[];
+  /** Animated tip that glides toward the latest tick. */
+  tip: { t: number; price: number };
+  tipTarget: { t: number; price: number };
+  /** Wall-clock live price for HUD / numeric readout (not lagged). */
+  livePrice: number;
+  lastFrameMs: number;
+  lastTrailPushMs: number;
   nowMs: number;
   startPrice: number;
   startTimeMs: number;
@@ -87,19 +207,48 @@ interface Engine {
   windowMs: number;
   panMs: number;
   followLive: boolean;
-  displayPrice: number;
   pMin: number;
   pMax: number;
   openFade: number;
   dragging: boolean;
   dragStartX: number;
   dragStartPan: number;
+  /** Archive / history round mode */
+  archive: boolean;
+  archiveTicks: PriceTick[];
+  endPrice: number;
+  roundNumber: number;
+}
+
+function snapshotEngine(e: Engine): ChartCache {
+  return {
+    trail: e.trail.map((p) => ({ ...p })),
+    tip: { ...e.tip },
+    tipTarget: { ...e.tipTarget },
+    windowMs: e.windowMs,
+    panMs: e.panMs,
+    followLive: e.followLive,
+    pMin: e.pMin,
+    pMax: e.pMax,
+  };
+}
+
+function applyCache(e: Engine, cached: ChartCache) {
+  e.trail = cached.trail.map((p) => ({ ...p }));
+  e.tip = { ...cached.tip };
+  e.tipTarget = { ...cached.tipTarget };
+  e.windowMs = cached.windowMs;
+  e.panMs = cached.panMs;
+  e.followLive = cached.followLive;
+  e.pMin = cached.pMin;
+  e.pMax = cached.pMax;
 }
 
 export default function SpatialTradingChart({
   market,
   history,
   isHistorical = false,
+  onReturnToLive,
 }: SpatialTradingChartProps) {
   const wrapRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -108,6 +257,12 @@ export default function SpatialTradingChart({
     height: 0,
     dpr: 1,
     ticks: [],
+    trail: [{ t: Date.now(), price: market.currentPrice }],
+    tip: { t: Date.now() - CHART_LAG_MS, price: market.currentPrice },
+    tipTarget: { t: Date.now() - CHART_LAG_MS, price: market.currentPrice },
+    livePrice: market.currentPrice,
+    lastFrameMs: Date.now(),
+    lastTrailPushMs: Date.now(),
     nowMs: Date.now(),
     startPrice: market.startPrice,
     startTimeMs: market.startTime * 1000,
@@ -117,13 +272,16 @@ export default function SpatialTradingChart({
     windowMs: DEFAULT_WINDOW_MS,
     panMs: 0,
     followLive: true,
-    displayPrice: market.currentPrice,
     pMin: market.currentPrice * 0.998,
     pMax: market.currentPrice * 1.002,
     openFade: 0,
     dragging: false,
     dragStartX: 0,
     dragStartPan: 0,
+    archive: false,
+    archiveTicks: [],
+    endPrice: market.currentPrice,
+    roundNumber: market.roundNumber,
   });
   const [hud, setHud] = useState({
     price: market.currentPrice,
@@ -135,32 +293,135 @@ export default function SpatialTradingChart({
   });
   const [zoomHover, setZoomHover] = useState(false);
   const roundKeyRef = useRef(`${market.roundId}:${market.startPrice}`);
+  const assetIdRef = useRef(market.assetId);
+  const archiveKeyRef = useRef('');
 
   useEffect(() => {
     const e = engineRef.current;
-    e.ticks = history.length
+
+    // ── Archive / history round: full 5-min shape with START & END ──
+    if (isHistorical) {
+      const startMs = market.startTime * 1000;
+      const endMs = market.endTime > market.startTime
+        ? market.endTime * 1000
+        : startMs + 300_000;
+      const archiveKey = `${market.roundId}:${market.startPrice}:${market.currentPrice}:${startMs}`;
+      if (archiveKeyRef.current !== archiveKey) {
+        archiveKeyRef.current = archiveKey;
+        e.archive = true;
+        e.archiveTicks = buildArchiveTicks(
+          market.startPrice,
+          market.currentPrice,
+          market.roundId || 42,
+          startMs,
+          endMs,
+        );
+        e.ticks = e.archiveTicks;
+        e.trail = e.archiveTicks.map((p) => ({ ...p }));
+        e.tip = { ...e.archiveTicks[e.archiveTicks.length - 1] };
+        e.tipTarget = { ...e.tip };
+        e.livePrice = market.currentPrice;
+        e.endPrice = market.currentPrice;
+        e.startPrice = market.startPrice;
+        e.startTimeMs = startMs;
+        e.endTimeMs = endMs;
+        e.windowMs = (endMs - startMs) * 1.12;
+        e.panMs = 0;
+        e.followLive = false;
+        e.openFade = 1;
+        e.symbol = market.symbol;
+        e.color = market.color || INK;
+        e.roundNumber = market.roundNumber;
+        let lo = Infinity;
+        let hi = -Infinity;
+        for (const p of e.archiveTicks) {
+          lo = Math.min(lo, p.price);
+          hi = Math.max(hi, p.price);
+        }
+        const span = Math.max(hi - lo, market.startPrice * 0.001);
+        e.pMin = lo - span * 0.14;
+        e.pMax = hi + span * 0.14;
+      }
+      return;
+    }
+
+    // Leaving archive — resume live trail
+    if (e.archive) {
+      e.archive = false;
+      archiveKeyRef.current = '';
+      e.followLive = true;
+      e.panMs = 0;
+      e.windowMs = DEFAULT_WINDOW_MS;
+      e.trail = [];
+    }
+
+    const nextTicks = history.length
       ? [...history]
       : [{ t: Date.now(), price: market.currentPrice }];
-    const last = e.ticks[e.ticks.length - 1];
+    const last = nextTicks[nextTicks.length - 1];
     if (!last || Math.abs(last.price - market.currentPrice) > 1e-12 || Date.now() - last.t > 800) {
-      e.ticks.push({ t: Date.now(), price: market.currentPrice });
-      if (e.ticks.length > 1200) e.ticks = e.ticks.slice(-900);
+      nextTicks.push({ t: Date.now(), price: market.currentPrice });
     }
+    e.ticks = nextTicks.length > 2000 ? nextTicks.slice(-1800) : nextTicks;
+
+    const tipSrc = e.ticks[e.ticks.length - 1];
+    if (tipSrc) {
+      e.livePrice = tipSrc.price;
+    }
+
     e.startPrice = market.startPrice;
     e.startTimeMs = market.startTime * 1000;
     e.endTimeMs = market.endTime * 1000;
+    e.endPrice = market.currentPrice;
     e.symbol = market.symbol;
     e.color = market.color || INK;
+    e.roundNumber = market.roundNumber;
+
+    // Market switch — persist previous trail, restore this asset's shape
+    if (assetIdRef.current !== market.assetId) {
+      chartCacheByAsset.set(assetIdRef.current, snapshotEngine(e));
+      assetIdRef.current = market.assetId;
+      roundKeyRef.current = `${market.roundId}:${market.startPrice}`;
+
+      const cached = chartCacheByAsset.get(market.assetId);
+      if (cached && cached.trail.length >= 2) {
+        applyCache(e, cached);
+        e.trail = trimTrail(e.trail, Date.now());
+      } else {
+        const seed = e.ticks.filter((p) => p.t >= Date.now() - TRAIL_KEEP_MS);
+        e.trail = (seed.length >= 2 ? seed : e.ticks.slice(-120)).map((p) => ({ ...p }));
+        const end = e.trail[e.trail.length - 1] || { t: Date.now() - CHART_LAG_MS, price: market.currentPrice };
+        e.tip = { t: end.t, price: end.price };
+        e.tipTarget = { ...e.tip };
+        e.windowMs = DEFAULT_WINDOW_MS;
+        e.panMs = 0;
+        e.followLive = true;
+      }
+      e.openFade = 0;
+      return;
+    }
 
     const roundKey = `${market.roundId}:${market.startPrice}`;
     if (roundKeyRef.current !== roundKey) {
       roundKeyRef.current = roundKey;
       e.openFade = 0;
-      e.windowMs = DEFAULT_WINDOW_MS;
-      e.panMs = 0;
-      e.followLive = true;
     }
-  }, [history, market.currentPrice, market.startPrice, market.startTime, market.endTime, market.symbol, market.color, market.roundId]);
+
+    if (e.trail.length < 2 && e.ticks.length >= 2) {
+      const seed = e.ticks.filter((p) => p.t >= Date.now() - TRAIL_KEEP_MS);
+      e.trail = (seed.length >= 2 ? seed : e.ticks.slice(-120)).map((p) => ({ ...p }));
+      const end = e.trail[e.trail.length - 1];
+      e.tip = { t: end.t, price: end.price };
+      e.tipTarget = { ...e.tip };
+    }
+  }, [history, market.assetId, market.currentPrice, market.startPrice, market.startTime, market.endTime, market.symbol, market.color, market.roundId, market.roundNumber, isHistorical]);
+
+  // Persist trail when leaving the page / unmounting
+  useEffect(() => {
+    return () => {
+      chartCacheByAsset.set(assetIdRef.current, snapshotEngine(engineRef.current));
+    };
+  }, []);
 
   useEffect(() => {
     const wrap = wrapRef.current;
@@ -196,9 +457,25 @@ export default function SpatialTradingChart({
       ev.preventDefault();
       const e = engineRef.current;
       const factor = ev.deltaY > 0 ? 1.12 : 0.89;
-      const next = Math.min(MAX_WINDOW_MS, Math.max(MIN_WINDOW_MS, e.windowMs * factor));
       const rect = wrap.getBoundingClientRect();
       const xFrac = (ev.clientX - rect.left) / (rect.width || 1);
+
+      if (e.archive) {
+        const duration = Math.max(60_000, e.endTimeMs - e.startTimeMs);
+        const mid = (e.startTimeMs + e.endTimeMs) / 2;
+        const viewW = Math.max(duration * 1.06, e.windowMs);
+        const center = mid + e.panMs;
+        const tMin = center - viewW / 2;
+        const tAtCursor = tMin + xFrac * viewW;
+        const next = Math.min(MAX_WINDOW_MS, Math.max(duration * 1.06, viewW * factor));
+        e.windowMs = next;
+        const newTMin = tAtCursor - xFrac * next;
+        const newCenter = newTMin + next / 2;
+        e.panMs = newCenter - mid;
+        return;
+      }
+
+      const next = Math.min(MAX_WINDOW_MS, Math.max(MIN_WINDOW_MS, e.windowMs * factor));
       const center = e.followLive ? e.nowMs : e.nowMs + e.panMs;
       const tMin = center - e.windowMs * 0.55;
       const tAtCursor = tMin + xFrac * e.windowMs;
@@ -224,6 +501,12 @@ export default function SpatialTradingChart({
 
   const setZoomMs = useCallback((ms: number) => {
     const e = engineRef.current;
+    if (e.archive) {
+      const duration = Math.max(60_000, e.endTimeMs - e.startTimeMs);
+      // Archive: zoom out freely, but not tighter than the full round
+      e.windowMs = Math.min(MAX_WINDOW_MS, Math.max(duration * 1.06, ms));
+      return;
+    }
     e.windowMs = Math.min(MAX_WINDOW_MS, Math.max(MIN_WINDOW_MS, ms));
   }, []);
 
@@ -236,33 +519,77 @@ export default function SpatialTradingChart({
     const bandH = Math.max(1, bandBot - bandTop);
 
     const now = e.nowMs;
-    const center = e.followLive ? now : now + e.panMs;
-    const tMin = center - e.windowMs * (e.followLive ? 0.62 : 0.5);
-    const tMax = tMin + e.windowMs;
+    let tMin: number;
+    let tMax: number;
 
-    const visible = e.ticks.filter((p) => p.t >= tMin - 2_000 && p.t <= tMax + 2_000);
+    if (e.archive) {
+      // Zoomable around the round — never tighter than ~full 5m so START+END stay reachable when zoomed out
+      const duration = Math.max(60_000, e.endTimeMs - e.startTimeMs);
+      const mid = (e.startTimeMs + e.endTimeMs) / 2;
+      const minView = duration * 1.06;
+      const viewW = Math.max(minView, e.windowMs);
+      const center = mid + e.panMs;
+      tMin = center - viewW / 2;
+      tMax = center + viewW / 2;
+      // Keep the round mostly in frame when panning
+      const slack = viewW * 0.15;
+      if (tMin > e.startTimeMs - slack) {
+        const d = tMin - (e.startTimeMs - slack);
+        tMin -= d;
+        tMax -= d;
+      }
+      if (tMax < e.endTimeMs + slack) {
+        const d = (e.endTimeMs + slack) - tMax;
+        tMin += d;
+        tMax += d;
+      }
+    } else {
+      const chartNow = now - CHART_LAG_MS;
+      const center = e.followLive ? chartNow : now + e.panMs;
+      tMin = center - e.windowMs * (e.followLive ? 0.62 : 0.5);
+      tMax = tMin + e.windowMs;
+    }
+
+    const series = e.archive ? e.archiveTicks : e.ticks;
+    const visible = series.filter((p) => p.t >= tMin - 2_000 && p.t <= tMax + 2_000);
     let rawMin = Infinity;
     let rawMax = -Infinity;
     for (const p of visible) {
       rawMin = Math.min(rawMin, p.price);
       rawMax = Math.max(rawMax, p.price);
     }
+    if (!e.archive) {
+      for (const p of e.trail) {
+        if (p.t < tMin - 2_000 || p.t > tMax + 2_000) continue;
+        rawMin = Math.min(rawMin, p.price);
+        rawMax = Math.max(rawMax, p.price);
+      }
+    }
     if (!Number.isFinite(rawMin) || !Number.isFinite(rawMax) || rawMin === rawMax) {
-      const mid = e.displayPrice || e.startPrice || 1;
+      const mid = e.tip.price || e.startPrice || 1;
       rawMin = mid * 0.998;
       rawMax = mid * 1.002;
     }
-    rawMin = Math.min(rawMin, e.startPrice, e.displayPrice);
-    rawMax = Math.max(rawMax, e.startPrice, e.displayPrice);
+    rawMin = Math.min(rawMin, e.startPrice, e.endPrice, e.tip.price);
+    rawMax = Math.max(rawMax, e.startPrice, e.endPrice, e.tip.price);
+    if (!e.archive) {
+      rawMin = Math.min(rawMin, e.livePrice);
+      rawMax = Math.max(rawMax, e.livePrice);
+    }
     const span = Math.max(rawMax - rawMin, (e.startPrice || 1) * 0.0015);
     const targetMin = rawMin - span * Y_PAD_FRAC;
     const targetMax = rawMax + span * Y_PAD_FRAC;
 
-    e.pMin += (targetMin - e.pMin) * RANGE_SMOOTH;
-    e.pMax += (targetMax - e.pMax) * RANGE_SMOOTH;
-    if (!Number.isFinite(e.pMin) || !Number.isFinite(e.pMax) || e.pMin >= e.pMax) {
+    if (e.archive) {
       e.pMin = targetMin;
       e.pMax = targetMax;
+    } else {
+      e.pMin += (targetMin - e.pMin) * RANGE_SMOOTH;
+      e.pMax += (targetMax - e.pMax) * RANGE_SMOOTH;
+      if (!Number.isFinite(e.pMin) || !Number.isFinite(e.pMax) || e.pMin >= e.pMax) {
+        e.pMin = targetMin;
+        e.pMax = targetMax;
+      }
     }
 
     const timeToX = (t: number) => {
@@ -295,11 +622,41 @@ export default function SpatialTradingChart({
       }
 
       e.nowMs = Date.now();
-      const tip = e.ticks[e.ticks.length - 1] || { t: e.nowMs, price: e.startPrice };
-      e.displayPrice += (tip.price - e.displayPrice) * PRICE_SMOOTH;
-      if (e.openFade < 1) e.openFade = Math.min(1, e.openFade + 16 / OPEN_FADE_MS);
+      e.lastFrameMs = e.nowMs;
 
       const lineColor = e.color || INK;
+      const archive = e.archive;
+
+      if (!archive) {
+        const latest = e.ticks[e.ticks.length - 1];
+        if (latest) e.livePrice = latest.price;
+
+        // Lagged playhead: sample along buffered ticks with Catmull-Rom look-ahead
+        const chartNow = e.nowMs - CHART_LAG_MS;
+        const sampled = samplePriceAt(e.ticks, chartNow);
+        e.tip = sampled;
+        e.tipTarget = sampled;
+
+        const lastTrail = e.trail[e.trail.length - 1];
+        const priceBase = Math.abs(e.tip.price) || 1;
+        const movedEnough =
+          !lastTrail ||
+          Math.abs(e.tip.price - lastTrail.price) / priceBase > TRAIL_MIN_DIST_FRAC ||
+          Math.abs(e.tip.t - lastTrail.t) > 80;
+        if (movedEnough && e.nowMs - e.lastTrailPushMs >= TRAIL_MIN_MS) {
+          e.trail.push({ t: e.tip.t, price: e.tip.price });
+          e.lastTrailPushMs = e.nowMs;
+          e.trail = trimTrail(e.trail, e.nowMs);
+        }
+      } else {
+        e.livePrice = e.endPrice;
+        e.tip = e.archiveTicks[e.archiveTicks.length - 1]
+          ? { ...e.archiveTicks[e.archiveTicks.length - 1] }
+          : e.tip;
+      }
+
+      if (e.openFade < 1) e.openFade = Math.min(1, e.openFade + 16 / OPEN_FADE_MS);
+
       const s = scales();
       const { W, H, bandTop, bandBot, timeToX, priceToY, pMin, pMax, tMin, tMax } = s;
 
@@ -327,7 +684,7 @@ export default function SpatialTradingChart({
         ctx.fillText(fmtUsd(p), 10, y);
       }
 
-      // Round open — dashed, market-colored
+      // Round open / START — dashed
       const openY = priceToY(e.startPrice);
       const openAlpha = 0.35 + 0.65 * e.openFade;
       ctx.save();
@@ -344,20 +701,40 @@ export default function SpatialTradingChart({
       ctx.fillStyle = lineColor;
       ctx.textAlign = 'left';
       ctx.textBaseline = 'bottom';
-      ctx.fillText(`ROUND OPEN  ${fmtUsd(e.startPrice)}`, 78, openY - 4);
+      ctx.fillText(
+        archive ? `START  ${fmtUsd(e.startPrice)}` : `ROUND OPEN  ${fmtUsd(e.startPrice)}`,
+        78,
+        openY - 4,
+      );
       ctx.restore();
 
-      const ptsRaw = e.ticks.filter((p) => p.t >= tMin - 1_000 && p.t <= Math.min(e.nowMs + 50, tMax + 1_000));
-      const drawPts: { x: number; y: number }[] = ptsRaw.map((p) => ({
+      if (archive) {
+        const endY = priceToY(e.endPrice);
+        ctx.save();
+        ctx.strokeStyle = e.endPrice >= e.startPrice ? GREEN : RED;
+        ctx.lineWidth = 1.5;
+        ctx.setLineDash([7, 6]);
+        ctx.beginPath();
+        ctx.moveTo(0, endY);
+        ctx.lineTo(W, endY);
+        ctx.stroke();
+        ctx.setLineDash([]);
+        ctx.font = '700 10px "Courier New", monospace';
+        ctx.fillStyle = e.endPrice >= e.startPrice ? GREEN : RED;
+        ctx.textAlign = 'right';
+        ctx.textBaseline = 'bottom';
+        ctx.fillText(`END  ${fmtUsd(e.endPrice)}`, W - 78, endY - 4);
+        ctx.restore();
+      }
+
+      const pathSrc = archive ? e.archiveTicks : e.trail;
+      const trailPts = pathSrc.filter((p) => p.t >= tMin - 1_000 && p.t <= tMax + 1_000);
+      const drawPts: { x: number; y: number }[] = trailPts.map((p) => ({
         x: timeToX(p.t),
         y: priceToY(p.price),
       }));
-      if (drawPts.length >= 1) {
-        const tipT = Math.min(tip.t, e.nowMs);
-        drawPts[drawPts.length - 1] = {
-          x: timeToX(tipT),
-          y: priceToY(e.displayPrice),
-        };
+      if (!archive) {
+        drawPts.push({ x: timeToX(e.tip.t), y: priceToY(e.tip.price) });
       }
 
       if (drawPts.length >= 2) {
@@ -365,18 +742,64 @@ export default function SpatialTradingChart({
         ctx.lineWidth = 2.75;
         ctx.lineJoin = 'round';
         ctx.lineCap = 'round';
-        strokeSmoothPath(ctx, drawPts, 0.38);
+        strokeSmoothPath(ctx, drawPts, archive ? 0.22 : 0.42);
         ctx.stroke();
-
         ctx.strokeStyle = lineColor;
         ctx.globalAlpha = 0.12;
         ctx.lineWidth = 8;
-        strokeSmoothPath(ctx, drawPts, 0.38);
+        strokeSmoothPath(ctx, drawPts, archive ? 0.22 : 0.42);
         ctx.stroke();
         ctx.globalAlpha = 1;
       }
 
-      if (drawPts.length >= 1) {
+      if (archive && e.archiveTicks.length >= 2) {
+        const startPt = e.archiveTicks[0];
+        const endPt = e.archiveTicks[e.archiveTicks.length - 1];
+        const sx = timeToX(startPt.t);
+        const sy = priceToY(startPt.price);
+        const ex = timeToX(endPt.t);
+        const ey = priceToY(endPt.price);
+
+        ctx.strokeStyle = 'rgba(13,11,8,0.2)';
+        ctx.lineWidth = 1;
+        ctx.setLineDash([3, 4]);
+        ctx.beginPath();
+        ctx.moveTo(sx + 0.5, bandTop);
+        ctx.lineTo(sx + 0.5, bandBot);
+        ctx.moveTo(ex + 0.5, bandTop);
+        ctx.lineTo(ex + 0.5, bandBot);
+        ctx.stroke();
+        ctx.setLineDash([]);
+
+        ctx.fillStyle = PAPER;
+        ctx.strokeStyle = lineColor;
+        ctx.lineWidth = 2.5;
+        ctx.beginPath();
+        ctx.arc(sx, sy, 8, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.stroke();
+        ctx.fillStyle = lineColor;
+        ctx.font = '900 11px "Courier New", monospace';
+        ctx.textAlign = 'left';
+        ctx.textBaseline = 'bottom';
+        ctx.fillText('START', sx + 12, sy - 8);
+
+        const endColor = e.endPrice >= e.startPrice ? GREEN : RED;
+        ctx.fillStyle = PAPER;
+        ctx.strokeStyle = endColor;
+        ctx.lineWidth = 2.5;
+        ctx.beginPath();
+        ctx.arc(ex, ey, 9, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.stroke();
+        ctx.fillStyle = endColor;
+        ctx.beginPath();
+        ctx.arc(ex, ey, 3.5, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.font = '900 11px "Courier New", monospace';
+        ctx.textAlign = 'right';
+        ctx.fillText('END', ex - 12, ey - 8);
+      } else if (drawPts.length >= 1) {
         const node = drawPts[drawPts.length - 1];
         ctx.fillStyle = PAPER;
         ctx.strokeStyle = lineColor;
@@ -391,41 +814,53 @@ export default function SpatialTradingChart({
         ctx.fill();
 
         ctx.textAlign = 'right';
+        const liveY = priceToY(e.livePrice);
         ctx.fillStyle = lineColor;
-        ctx.font = '900 13px "Courier New", monospace';
-        ctx.fillText(fmtUsd(e.displayPrice), W - 12, node.y);
-        ctx.font = '700 10px "Courier New", monospace';
-        ctx.fillStyle = e.displayPrice >= e.startPrice ? GREEN : RED;
-        const pct = e.startPrice > 0 ? ((e.displayPrice - e.startPrice) / e.startPrice) * 100 : 0;
-        ctx.fillText(`${pct >= 0 ? '▲' : '▼'} ${Math.abs(pct).toFixed(3)}%`, W - 12, node.y + 16);
+        ctx.font = '900 15px "Courier New", monospace';
+        ctx.fillText(fmtUsd(e.livePrice), W - 12, liveY);
+        ctx.font = '700 11px "Courier New", monospace';
+        ctx.fillStyle = e.livePrice >= e.startPrice ? GREEN : RED;
+        const pct = e.startPrice > 0 ? ((e.livePrice - e.startPrice) / e.startPrice) * 100 : 0;
+        ctx.fillText(`${pct >= 0 ? '▲' : '▼'} ${Math.abs(pct).toFixed(3)}%`, W - 12, liveY + 16);
       }
 
       ctx.fillStyle = 'rgba(13,11,8,0.5)';
       ctx.font = '700 10px "Courier New", monospace';
       ctx.textAlign = 'center';
       ctx.textBaseline = 'top';
-      const marks = 5;
-      for (let i = 0; i <= marks; i++) {
-        const t = tMin + ((tMax - tMin) * i) / marks;
-        ctx.fillText(fmtClock(t), timeToX(t), H - 18);
+      if (archive) {
+        for (let m = 0; m <= 5; m++) {
+          const t = e.startTimeMs + m * 60_000;
+          if (t > e.endTimeMs + 500) break;
+          ctx.fillText(fmtRoundClock(t - e.startTimeMs), timeToX(t), H - 18);
+        }
+        ctx.fillStyle = INK;
+        ctx.font = '900 10px "Courier New", monospace';
+        ctx.fillText('5 MIN ROUND', W / 2, 10);
+      } else {
+        const marks = 5;
+        for (let i = 0; i <= marks; i++) {
+          const t = tMin + ((tMax - tMin) * i) / marks;
+          ctx.fillText(fmtClock(t), timeToX(t), H - 18);
+        }
       }
 
-      if (isHistorical) {
-        ctx.fillStyle = 'rgba(138,28,20,0.08)';
+      if (archive) {
+        ctx.fillStyle = 'rgba(138,28,20,0.06)';
         ctx.fillRect(0, 0, W, H);
         ctx.fillStyle = RED;
-        ctx.font = '900 14px "Courier New", monospace';
+        ctx.font = '900 13px "Courier New", monospace';
         ctx.textAlign = 'center';
-        ctx.fillText('ARCHIVE VIEW', W / 2, 28);
+        ctx.fillText(`ARCHIVE  ·  ROUND #${e.roundNumber}`, W / 2, 28);
       }
 
       if (e.nowMs - lastHud > 160) {
         lastHud = e.nowMs;
         const zoom = DEFAULT_WINDOW_MS / e.windowMs;
         setHud({
-          price: e.displayPrice,
+          price: archive ? e.endPrice : e.livePrice,
           now: e.nowMs,
-          zoom: `${zoom >= 1 ? zoom.toFixed(1) : zoom.toFixed(2)}×`,
+          zoom: archive ? '5m' : `${zoom >= 1 ? zoom.toFixed(1) : zoom.toFixed(2)}×`,
           followLive: e.followLive,
           windowMs: e.windowMs,
           msLeft: Math.max(0, e.endTimeMs - e.nowMs),
@@ -443,7 +878,7 @@ export default function SpatialTradingChart({
     const e = engineRef.current;
     e.dragging = true;
     e.dragStartX = ev.clientX;
-    e.dragStartPan = e.followLive ? 0 : e.panMs;
+    e.dragStartPan = e.archive || !e.followLive ? e.panMs : 0;
     (ev.target as HTMLElement).setPointerCapture?.(ev.pointerId);
   };
 
@@ -452,6 +887,12 @@ export default function SpatialTradingChart({
     if (!e.dragging || e.width < 2) return;
     const dx = ev.clientX - e.dragStartX;
     if (Math.abs(dx) < 3) return;
+    if (e.archive) {
+      const duration = Math.max(60_000, e.endTimeMs - e.startTimeMs);
+      const viewW = Math.max(duration * 1.06, e.windowMs);
+      e.panMs = e.dragStartPan - (dx / e.width) * viewW;
+      return;
+    }
     e.followLive = false;
     e.panMs = e.dragStartPan - (dx / e.width) * e.windowMs;
   };
@@ -463,16 +904,22 @@ export default function SpatialTradingChart({
   const lineColor = market.color || INK;
   const live = hud.followLive;
 
-  // Slider: right = zoom in (small window), left = zoom out (large window)
+  // Slider: right = zoom in, left = zoom out (archive floor = full round)
   const zoomSliderVal = (() => {
-    const logMin = Math.log(MIN_WINDOW_MS);
+    const eMin = isHistorical
+      ? Math.max(60_000, (market.endTime - market.startTime) * 1000 || 300_000) * 1.06
+      : MIN_WINDOW_MS;
+    const logMin = Math.log(eMin);
     const logMax = Math.log(MAX_WINDOW_MS);
-    const logCur = Math.log(hud.windowMs);
-    return 100 - ((logCur - logMin) / (logMax - logMin)) * 100;
+    const logCur = Math.log(Math.max(eMin, hud.windowMs));
+    return 100 - ((logCur - logMin) / (logMax - logMin || 1)) * 100;
   })();
 
   const onZoomSlider = (val: number) => {
-    const logMin = Math.log(MIN_WINDOW_MS);
+    const eMin = isHistorical
+      ? Math.max(60_000, (market.endTime - market.startTime) * 1000 || 300_000) * 1.06
+      : MIN_WINDOW_MS;
+    const logMin = Math.log(eMin);
     const logMax = Math.log(MAX_WINDOW_MS);
     const inverted = 100 - val;
     setZoomMs(Math.exp(logMin + (inverted / 100) * (logMax - logMin)));
@@ -496,44 +943,72 @@ export default function SpatialTradingChart({
     >
       <canvas ref={canvasRef} style={{ display: 'block', width: '100%', height: '100%' }} />
 
-      {/* LIVE indicator — bright red + LIVE text */}
-      <button
-        type="button"
-        onClick={goLive}
-        title={live ? 'Following live price' : 'Click to return to live'}
-        aria-label={live ? 'Live' : 'Return to live'}
-        style={{
-          position: 'absolute',
-          top: 14,
-          left: '50%',
-          transform: 'translateX(-50%)',
-          zIndex: 6,
-          display: 'flex',
-          alignItems: 'center',
-          gap: 8,
-          padding: '4px 8px',
-          border: 'none',
-          background: 'transparent',
-          cursor: live ? 'default' : 'pointer',
-          fontFamily: '"Courier New", monospace',
-          fontSize: 11,
-          fontWeight: 900,
-          letterSpacing: '0.14em',
-          color: live ? INK : 'rgba(13,11,8,0.4)',
-        }}
-      >
-        <span
+      {/* LIVE indicator — hidden in archive */}
+      {!isHistorical && (
+        <button
+          type="button"
+          onClick={goLive}
+          title={live ? 'Following live price' : 'Click to return to live'}
+          aria-label={live ? 'Live' : 'Return to live'}
           style={{
-            width: 12,
-            height: 12,
-            borderRadius: '50%',
-            background: live ? LIVE_RED : LIVE_RED_FADED,
-            boxShadow: live ? '0 0 0 3px rgba(255,59,48,0.28)' : 'none',
-            flexShrink: 0,
+            position: 'absolute',
+            top: 14,
+            left: '50%',
+            transform: 'translateX(-50%)',
+            zIndex: 6,
+            display: 'flex',
+            alignItems: 'center',
+            gap: 8,
+            padding: '4px 8px',
+            border: 'none',
+            background: 'transparent',
+            cursor: live ? 'default' : 'pointer',
+            fontFamily: '"Courier New", monospace',
+            fontSize: 11,
+            fontWeight: 900,
+            letterSpacing: '0.14em',
+            color: live ? INK : 'rgba(13,11,8,0.4)',
           }}
-        />
-        LIVE
-      </button>
+        >
+          <span
+            style={{
+              width: 12,
+              height: 12,
+              borderRadius: '50%',
+              background: live ? LIVE_RED : LIVE_RED_FADED,
+              boxShadow: live ? '0 0 0 3px rgba(255,59,48,0.28)' : 'none',
+              flexShrink: 0,
+            }}
+          />
+          LIVE
+        </button>
+      )}
+
+      {/* Archive: return to live market */}
+      {isHistorical && onReturnToLive && (
+        <button
+          type="button"
+          onClick={onReturnToLive}
+          style={{
+            position: 'absolute',
+            top: 14,
+            left: '50%',
+            transform: 'translateX(-50%)',
+            zIndex: 6,
+            padding: '8px 16px',
+            border: `1px solid ${INK}`,
+            background: PAPER,
+            cursor: 'pointer',
+            fontFamily: '"Courier New", monospace',
+            fontSize: 11,
+            fontWeight: 900,
+            letterSpacing: '0.1em',
+            color: INK,
+          }}
+        >
+          ← LIVE MARKET
+        </button>
+      )}
 
       {/* Market timer — top right, no box */}
       <div
@@ -573,34 +1048,56 @@ export default function SpatialTradingChart({
       <div
         style={{
           position: 'absolute',
-          bottom: 28,
+          bottom: 24,
           left: '50%',
           transform: 'translateX(-50%)',
           border: `1px solid ${INK}`,
           background: PAPER,
-          padding: '8px 14px',
+          padding: '14px 22px',
           fontFamily: '"Courier New", monospace',
-          fontSize: 11,
-          fontWeight: 700,
           zIndex: 5,
           pointerEvents: 'none',
           display: 'flex',
-          gap: 14,
-          alignItems: 'center',
+          gap: 18,
+          alignItems: 'baseline',
         }}
       >
         <span
           style={{
-            width: 10,
-            height: 10,
+            width: 12,
+            height: 12,
             borderRadius: '50%',
             background: lineColor,
             flexShrink: 0,
+            alignSelf: 'center',
           }}
         />
-        <span>{market.symbol}</span>
-        <span style={{ fontWeight: 900, color: lineColor }}>{fmtUsd(hud.price)}</span>
-        <span style={{ color: '#5A554E' }}>{fmtClock(hud.now)}</span>
+        <span style={{ fontSize: 14, fontWeight: 700, letterSpacing: '0.06em' }}>{market.symbol}</span>
+        {isHistorical ? (
+          <>
+            <span style={{ fontSize: 12, fontWeight: 700, color: '#5A554E' }}>
+              START {fmtUsd(market.startPrice)}
+            </span>
+            <span style={{ fontSize: 12, color: '#5A554E' }}>→</span>
+            <span
+              style={{
+                fontSize: 22,
+                fontWeight: 900,
+                color: market.currentPrice >= market.startPrice ? GREEN : RED,
+              }}
+            >
+              END {fmtUsd(market.currentPrice)}
+            </span>
+            <span style={{ fontSize: 12, fontWeight: 700, color: '#5A554E' }}>#{market.roundNumber}</span>
+          </>
+        ) : (
+          <>
+            <span style={{ fontSize: 26, fontWeight: 900, color: lineColor, letterSpacing: '-0.02em' }}>
+              {fmtUsd(hud.price)}
+            </span>
+            <span style={{ fontSize: 13, fontWeight: 700, color: '#5A554E' }}>{fmtClock(hud.now)}</span>
+          </>
+        )}
       </div>
 
       {/* Bottom-right zoom — square value; expands with slider on hover */}

@@ -71,7 +71,7 @@ const ASSET_META: Record<string, { color: string }> = {
   NEAR: { color: '#00C08B' },
 };
 
-const HISTORY_MAX   = 300;
+const HISTORY_MAX   = 600;  // ~3×5m rounds at 3s ticks
 const PREFILL_TICKS = 60;   // synthetic ticks seeded at startup
 const PRICE_TICK_MS = 3_000;
 const CHAIN_POLL_MS = 12_000;
