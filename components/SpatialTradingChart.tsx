@@ -1,11 +1,7 @@
 /**
  * SpatialTradingChart
- * ───────────────────
- * Canvas price chart: ticks live in mutable refs + rAF (60fps),
- * not React state — so sub-second updates never thrash the render tree.
- *
- * Viewport: current time locked ~35% from the left (History | Future).
- * Line / tip color comes from the market’s own brand color.
+ * Canvas price chart with rAF render loop, smooth Catmull-Rom path,
+ * wheel zoom + drag/button pan, and a dashed round-open price line.
  */
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { MarketInfo, PriceTick } from '../contexts/MarketDataContext';
@@ -20,12 +16,14 @@ const INK = '#0D0B08';
 const PAPER = '#FAF8F3';
 const GREEN = '#1E5E3A';
 const RED = '#8A1C14';
-const NOW_FRAC = 0.35;
-const HISTORY_WINDOW_MS = 90_000;
-const FUTURE_WINDOW_MS = 180_000;
-const Y_PAD_FRAC = 0.12;
-/** Small inset so labels don’t clip the edge — not the old 30% ridge margins. */
-const EDGE = 28;
+const EDGE = 32;
+const Y_PAD_FRAC = 0.14;
+const DEFAULT_WINDOW_MS = 120_000;
+const MIN_WINDOW_MS = 20_000;
+const MAX_WINDOW_MS = 20 * 60_000;
+const PRICE_SMOOTH = 0.08;   // tip lerp per frame (~smooth wave)
+const RANGE_SMOOTH = 0.06;   // Y-axis ease
+const OPEN_FADE_MS = 900;
 
 function fmtUsd(n: number): string {
   if (!Number.isFinite(n)) return '—';
@@ -39,6 +37,32 @@ function fmtClock(ms: number): string {
   return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}:${String(d.getSeconds()).padStart(2, '0')}`;
 }
 
+/** Catmull-Rom → cubic Bezier on canvas */
+function strokeSmoothPath(
+  ctx: CanvasRenderingContext2D,
+  pts: { x: number; y: number }[],
+  tension = 0.35,
+) {
+  if (pts.length < 2) return;
+  ctx.beginPath();
+  ctx.moveTo(pts[0].x, pts[0].y);
+  if (pts.length === 2) {
+    ctx.lineTo(pts[1].x, pts[1].y);
+    return;
+  }
+  for (let i = 0; i < pts.length - 1; i++) {
+    const p0 = pts[i === 0 ? 0 : i - 1];
+    const p1 = pts[i];
+    const p2 = pts[i + 1];
+    const p3 = pts[i + 2 < pts.length ? i + 2 : pts.length - 1];
+    const cp1x = p1.x + (p2.x - p0.x) * tension;
+    const cp1y = p1.y + (p2.y - p0.y) * tension;
+    const cp2x = p2.x - (p3.x - p1.x) * tension;
+    const cp2y = p2.y - (p3.y - p1.y) * tension;
+    ctx.bezierCurveTo(cp1x, cp1y, cp2x, cp2y, p2.x, p2.y);
+  }
+}
+
 interface Engine {
   width: number;
   height: number;
@@ -46,8 +70,21 @@ interface Engine {
   ticks: PriceTick[];
   nowMs: number;
   startPrice: number;
+  startTimeMs: number;
   symbol: string;
   color: string;
+  /** Visible time window width */
+  windowMs: number;
+  /** Shift of window center vs live (negative = look left / older) */
+  panMs: number;
+  followLive: boolean;
+  displayPrice: number;
+  pMin: number;
+  pMax: number;
+  openFade: number; // 0→1
+  dragging: boolean;
+  dragStartX: number;
+  dragStartPan: number;
 }
 
 export default function SpatialTradingChart({
@@ -64,10 +101,27 @@ export default function SpatialTradingChart({
     ticks: [],
     nowMs: Date.now(),
     startPrice: market.startPrice,
+    startTimeMs: market.startTime * 1000,
     symbol: market.symbol,
     color: market.color || INK,
+    windowMs: DEFAULT_WINDOW_MS,
+    panMs: 0,
+    followLive: true,
+    displayPrice: market.currentPrice,
+    pMin: market.currentPrice * 0.998,
+    pMax: market.currentPrice * 1.002,
+    openFade: 0,
+    dragging: false,
+    dragStartX: 0,
+    dragStartPan: 0,
   });
-  const [hud, setHud] = useState({ price: market.currentPrice, now: Date.now() });
+  const [hud, setHud] = useState({
+    price: market.currentPrice,
+    now: Date.now(),
+    zoom: '1×',
+    followLive: true,
+  });
+  const roundKeyRef = useRef(`${market.roundId}:${market.startPrice}`);
 
   useEffect(() => {
     const e = engineRef.current;
@@ -77,12 +131,23 @@ export default function SpatialTradingChart({
     const last = e.ticks[e.ticks.length - 1];
     if (!last || Math.abs(last.price - market.currentPrice) > 1e-12 || Date.now() - last.t > 800) {
       e.ticks.push({ t: Date.now(), price: market.currentPrice });
-      if (e.ticks.length > 800) e.ticks = e.ticks.slice(-600);
+      if (e.ticks.length > 1200) e.ticks = e.ticks.slice(-900);
     }
     e.startPrice = market.startPrice;
+    e.startTimeMs = market.startTime * 1000;
     e.symbol = market.symbol;
     e.color = market.color || INK;
-  }, [history, market.currentPrice, market.startPrice, market.symbol, market.color]);
+
+    const roundKey = `${market.roundId}:${market.startPrice}`;
+    if (roundKeyRef.current !== roundKey) {
+      roundKeyRef.current = roundKey;
+      e.openFade = 0;
+      // Soft reset zoom/pan on new round open
+      e.windowMs = DEFAULT_WINDOW_MS;
+      e.panMs = 0;
+      e.followLive = true;
+    }
+  }, [history, market.currentPrice, market.startPrice, market.startTime, market.symbol, market.color, market.roundId]);
 
   useEffect(() => {
     const wrap = wrapRef.current;
@@ -110,51 +175,99 @@ export default function SpatialTradingChart({
     return () => ro.disconnect();
   }, []);
 
+  // Wheel zoom + drag pan on the wrap (non-passive wheel)
+  useEffect(() => {
+    const wrap = wrapRef.current;
+    if (!wrap) return;
+
+    const onWheel = (ev: WheelEvent) => {
+      ev.preventDefault();
+      const e = engineRef.current;
+      const factor = ev.deltaY > 0 ? 1.12 : 0.89;
+      const next = Math.min(MAX_WINDOW_MS, Math.max(MIN_WINDOW_MS, e.windowMs * factor));
+      // Zoom around cursor time
+      const rect = wrap.getBoundingClientRect();
+      const xFrac = (ev.clientX - rect.left) / (rect.width || 1);
+      const center = (e.followLive ? e.nowMs : e.nowMs + e.panMs);
+      const tMin = center - e.windowMs * 0.55;
+      const tAtCursor = tMin + xFrac * e.windowMs;
+      e.windowMs = next;
+      const newTMin = tAtCursor - xFrac * next;
+      const newCenter = newTMin + next * 0.55;
+      if (e.followLive) {
+        // stay live unless user zooms while already panned
+        e.panMs = 0;
+      } else {
+        e.panMs = newCenter - e.nowMs;
+      }
+    };
+
+    wrap.addEventListener('wheel', onWheel, { passive: false });
+    return () => wrap.removeEventListener('wheel', onWheel);
+  }, []);
+
+  const goLive = useCallback(() => {
+    const e = engineRef.current;
+    e.followLive = true;
+    e.panMs = 0;
+  }, []);
+
+  const panBy = useCallback((dir: -1 | 1) => {
+    const e = engineRef.current;
+    e.followLive = false;
+    e.panMs += dir * e.windowMs * 0.35;
+  }, []);
+
   const scales = useCallback(() => {
     const e = engineRef.current;
     const W = e.width;
     const H = e.height;
-    const nowX = W * NOW_FRAC;
     const bandTop = EDGE;
     const bandBot = H - EDGE;
     const bandH = Math.max(1, bandBot - bandTop);
 
     const now = e.nowMs;
-    const tMin = now - HISTORY_WINDOW_MS;
-    const tMax = now + FUTURE_WINDOW_MS;
+    const center = e.followLive ? now : now + e.panMs;
+    // Slight bias so live tip sits a bit right of center when following
+    const tMin = center - e.windowMs * (e.followLive ? 0.62 : 0.5);
+    const tMax = tMin + e.windowMs;
 
-    const visible = e.ticks.filter((p) => p.t >= tMin - 5_000 && p.t <= now + 1_000);
-    let pMin = Infinity;
-    let pMax = -Infinity;
+    const visible = e.ticks.filter((p) => p.t >= tMin - 2_000 && p.t <= tMax + 2_000);
+    let rawMin = Infinity;
+    let rawMax = -Infinity;
     for (const p of visible) {
-      pMin = Math.min(pMin, p.price);
-      pMax = Math.max(pMax, p.price);
+      rawMin = Math.min(rawMin, p.price);
+      rawMax = Math.max(rawMax, p.price);
     }
-    if (!Number.isFinite(pMin) || !Number.isFinite(pMax) || pMin === pMax) {
-      const mid = e.ticks[e.ticks.length - 1]?.price || e.startPrice || 1;
-      pMin = mid * 0.998;
-      pMax = mid * 1.002;
+    if (!Number.isFinite(rawMin) || !Number.isFinite(rawMax) || rawMin === rawMax) {
+      const mid = e.displayPrice || e.startPrice || 1;
+      rawMin = mid * 0.998;
+      rawMax = mid * 1.002;
     }
-    pMin = Math.min(pMin, e.startPrice);
-    pMax = Math.max(pMax, e.startPrice);
-    const span = pMax - pMin || 1;
-    pMin -= span * Y_PAD_FRAC;
-    pMax += span * Y_PAD_FRAC;
+    rawMin = Math.min(rawMin, e.startPrice, e.displayPrice);
+    rawMax = Math.max(rawMax, e.startPrice, e.displayPrice);
+    const span = Math.max(rawMax - rawMin, (e.startPrice || 1) * 0.0015);
+    const targetMin = rawMin - span * Y_PAD_FRAC;
+    const targetMax = rawMax + span * Y_PAD_FRAC;
+
+    // Ease Y range for smooth open / updates
+    e.pMin += (targetMin - e.pMin) * RANGE_SMOOTH;
+    e.pMax += (targetMax - e.pMax) * RANGE_SMOOTH;
+    if (!Number.isFinite(e.pMin) || !Number.isFinite(e.pMax) || e.pMin >= e.pMax) {
+      e.pMin = targetMin;
+      e.pMax = targetMax;
+    }
 
     const timeToX = (t: number) => {
-      if (t <= now) {
-        const u = (t - tMin) / (now - tMin || 1);
-        return u * nowX;
-      }
-      const u = (t - now) / (tMax - now || 1);
-      return nowX + u * (W - nowX);
+      const u = (t - tMin) / (tMax - tMin || 1);
+      return u * W;
     };
     const priceToY = (p: number) => {
-      const u = (p - pMin) / (pMax - pMin || 1);
+      const u = (p - e.pMin) / (e.pMax - e.pMin || 1);
       return bandBot - u * bandH;
     };
 
-    return { W, H, nowX, bandTop, bandBot, tMin, tMax, now, pMin, pMax, timeToX, priceToY };
+    return { W, H, bandTop, bandBot, tMin, tMax, now, timeToX, priceToY, pMin: e.pMin, pMax: e.pMax };
   }, []);
 
   useEffect(() => {
@@ -176,73 +289,21 @@ export default function SpatialTradingChart({
 
       e.nowMs = Date.now();
       const tip = e.ticks[e.ticks.length - 1] || { t: e.nowMs, price: e.startPrice };
-      const lineColor = e.color || INK;
+      // Smooth tip — wavy instead of snappy
+      e.displayPrice += (tip.price - e.displayPrice) * PRICE_SMOOTH;
+      // Soft open of round line
+      if (e.openFade < 1) e.openFade = Math.min(1, e.openFade + 16 / OPEN_FADE_MS);
 
+      const lineColor = e.color || INK;
       const s = scales();
-      const { W, H, nowX, bandTop, bandBot, timeToX, priceToY, pMin, pMax, tMin, tMax } = s;
+      const { W, H, bandTop, bandBot, timeToX, priceToY, pMin, pMax, tMin, tMax } = s;
 
       ctx.setTransform(e.dpr, 0, 0, e.dpr, 0, 0);
       ctx.clearRect(0, 0, W, H);
-
       ctx.fillStyle = PAPER;
       ctx.fillRect(0, 0, W, H);
 
-      // Future zone wash
-      ctx.fillStyle = 'rgba(13,11,8,0.03)';
-      ctx.fillRect(nowX, 0, W - nowX, H);
-
-      // Now vertical
-      ctx.strokeStyle = INK;
-      ctx.lineWidth = 1.5;
-      ctx.setLineDash([]);
-      ctx.beginPath();
-      ctx.moveTo(nowX + 0.5, 0);
-      ctx.lineTo(nowX + 0.5, H);
-      ctx.stroke();
-
-      // Open price reference
-      const openY = priceToY(e.startPrice);
-      ctx.strokeStyle = 'rgba(13,11,8,0.35)';
-      ctx.setLineDash([4, 4]);
-      ctx.beginPath();
-      ctx.moveTo(0, openY);
-      ctx.lineTo(W, openY);
-      ctx.stroke();
-      ctx.setLineDash([]);
-
-      // Price line
-      const pts = e.ticks.filter((p) => p.t >= tMin && p.t <= e.nowMs + 50);
-      if (pts.length >= 2) {
-        ctx.strokeStyle = lineColor;
-        ctx.lineWidth = 3;
-        ctx.lineJoin = 'round';
-        ctx.lineCap = 'round';
-        ctx.beginPath();
-        pts.forEach((p, i) => {
-          const x = timeToX(p.t);
-          const y = priceToY(p.price);
-          if (i === 0) ctx.moveTo(x, y);
-          else ctx.lineTo(x, y);
-        });
-        ctx.stroke();
-      }
-
-      // Leading node
-      const nodeX = timeToX(Math.min(tip.t, e.nowMs));
-      const nodeY = priceToY(tip.price);
-      ctx.fillStyle = PAPER;
-      ctx.strokeStyle = lineColor;
-      ctx.lineWidth = 3;
-      ctx.beginPath();
-      ctx.arc(nodeX, nodeY, 10, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.stroke();
-      ctx.fillStyle = lineColor;
-      ctx.beginPath();
-      ctx.arc(nodeX, nodeY, 3.5, 0, Math.PI * 2);
-      ctx.fill();
-
-      // Left gutter — price labels
+      // Soft horizontal grid
       ctx.font = '700 11px "Courier New", monospace';
       ctx.textAlign = 'left';
       ctx.textBaseline = 'middle';
@@ -251,39 +312,105 @@ export default function SpatialTradingChart({
         const p = pMin + ((pMax - pMin) * i) / priceSteps;
         const y = priceToY(p);
         if (y < bandTop - 2 || y > bandBot + 2) continue;
-        ctx.fillStyle = 'rgba(13,11,8,0.55)';
-        ctx.fillText(fmtUsd(p), 10, y);
-        ctx.strokeStyle = 'rgba(13,11,8,0.08)';
+        ctx.strokeStyle = 'rgba(13,11,8,0.07)';
+        ctx.lineWidth = 1;
+        ctx.setLineDash([]);
         ctx.beginPath();
         ctx.moveTo(72, y);
         ctx.lineTo(W - 72, y);
         ctx.stroke();
+        ctx.fillStyle = 'rgba(13,11,8,0.5)';
+        ctx.fillText(fmtUsd(p), 10, y);
       }
 
-      // Right gutter — live price
-      ctx.textAlign = 'right';
-      ctx.fillStyle = lineColor;
-      ctx.font = '900 13px "Courier New", monospace';
-      ctx.fillText(fmtUsd(tip.price), W - 12, nodeY);
+      // Round open — dashed horizontal (eased in)
+      const openY = priceToY(e.startPrice);
+      const openAlpha = 0.25 + 0.55 * e.openFade;
+      ctx.save();
+      ctx.globalAlpha = openAlpha;
+      ctx.strokeStyle = INK;
+      ctx.lineWidth = 1.25;
+      ctx.setLineDash([7, 6]);
+      ctx.beginPath();
+      ctx.moveTo(0, openY);
+      ctx.lineTo(W, openY);
+      ctx.stroke();
+      ctx.setLineDash([]);
       ctx.font = '700 10px "Courier New", monospace';
-      ctx.fillStyle = tip.price >= e.startPrice ? GREEN : RED;
-      const pct = e.startPrice > 0 ? ((tip.price - e.startPrice) / e.startPrice) * 100 : 0;
-      ctx.fillText(`${pct >= 0 ? '▲' : '▼'} ${Math.abs(pct).toFixed(3)}%`, W - 12, nodeY + 16);
+      ctx.fillStyle = INK;
+      ctx.textAlign = 'left';
+      ctx.textBaseline = 'bottom';
+      ctx.fillText(`ROUND OPEN  ${fmtUsd(e.startPrice)}`, 78, openY - 4);
+      ctx.restore();
 
-      // Time ticks
-      ctx.fillStyle = 'rgba(13,11,8,0.55)';
+      // Smooth price path (history within window + synthetic tip at displayPrice)
+      const ptsRaw = e.ticks.filter((p) => p.t >= tMin - 1_000 && p.t <= Math.min(e.nowMs + 50, tMax + 1_000));
+      const drawPts: { x: number; y: number }[] = ptsRaw.map((p) => ({
+        x: timeToX(p.t),
+        y: priceToY(p.price),
+      }));
+      // Replace last point Y with smoothed display price for fluid tip motion
+      if (drawPts.length >= 1) {
+        const tipT = Math.min(tip.t, e.nowMs);
+        drawPts[drawPts.length - 1] = {
+          x: timeToX(tipT),
+          y: priceToY(e.displayPrice),
+        };
+      }
+
+      if (drawPts.length >= 2) {
+        ctx.strokeStyle = lineColor;
+        ctx.lineWidth = 2.75;
+        ctx.lineJoin = 'round';
+        ctx.lineCap = 'round';
+        strokeSmoothPath(ctx, drawPts, 0.38);
+        ctx.stroke();
+
+        // Soft under-glow for wave feel
+        ctx.strokeStyle = lineColor;
+        ctx.globalAlpha = 0.12;
+        ctx.lineWidth = 8;
+        strokeSmoothPath(ctx, drawPts, 0.38);
+        ctx.stroke();
+        ctx.globalAlpha = 1;
+      }
+
+      // Leading node (smoothed)
+      if (drawPts.length >= 1) {
+        const node = drawPts[drawPts.length - 1];
+        ctx.fillStyle = PAPER;
+        ctx.strokeStyle = lineColor;
+        ctx.lineWidth = 2.75;
+        ctx.beginPath();
+        ctx.arc(node.x, node.y, 9, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.stroke();
+        ctx.fillStyle = lineColor;
+        ctx.beginPath();
+        ctx.arc(node.x, node.y, 3.2, 0, Math.PI * 2);
+        ctx.fill();
+
+        // Right live readout
+        ctx.textAlign = 'right';
+        ctx.fillStyle = lineColor;
+        ctx.font = '900 13px "Courier New", monospace';
+        ctx.fillText(fmtUsd(e.displayPrice), W - 12, node.y);
+        ctx.font = '700 10px "Courier New", monospace';
+        ctx.fillStyle = e.displayPrice >= e.startPrice ? GREEN : RED;
+        const pct = e.startPrice > 0 ? ((e.displayPrice - e.startPrice) / e.startPrice) * 100 : 0;
+        ctx.fillText(`${pct >= 0 ? '▲' : '▼'} ${Math.abs(pct).toFixed(3)}%`, W - 12, node.y + 16);
+      }
+
+      // Time ticks along bottom
+      ctx.fillStyle = 'rgba(13,11,8,0.5)';
       ctx.font = '700 10px "Courier New", monospace';
       ctx.textAlign = 'center';
       ctx.textBaseline = 'top';
-      for (const t of [tMin, e.nowMs, tMax]) {
+      const marks = 5;
+      for (let i = 0; i <= marks; i++) {
+        const t = tMin + ((tMax - tMin) * i) / marks;
         ctx.fillText(fmtClock(t), timeToX(t), H - 18);
       }
-      ctx.fillStyle = INK;
-      ctx.font = '900 10px "Courier New", monospace';
-      ctx.fillText('NOW', nowX, 10);
-      ctx.fillStyle = 'rgba(13,11,8,0.45)';
-      ctx.fillText('HISTORY', nowX * 0.45, 10);
-      ctx.fillText('FUTURE', nowX + (W - nowX) * 0.55, 10);
 
       if (isHistorical) {
         ctx.fillStyle = 'rgba(138,28,20,0.08)';
@@ -294,9 +421,15 @@ export default function SpatialTradingChart({
         ctx.fillText('ARCHIVE VIEW', W / 2, 28);
       }
 
-      if (e.nowMs - lastHud > 200) {
+      if (e.nowMs - lastHud > 160) {
         lastHud = e.nowMs;
-        setHud({ price: tip.price, now: e.nowMs });
+        const zoom = DEFAULT_WINDOW_MS / e.windowMs;
+        setHud({
+          price: e.displayPrice,
+          now: e.nowMs,
+          zoom: `${zoom >= 1 ? zoom.toFixed(1) : zoom.toFixed(2)}×`,
+          followLive: e.followLive,
+        });
       }
 
       raf = requestAnimationFrame(draw);
@@ -305,6 +438,27 @@ export default function SpatialTradingChart({
     raf = requestAnimationFrame(draw);
     return () => cancelAnimationFrame(raf);
   }, [isHistorical, scales]);
+
+  const onPointerDown = (ev: React.PointerEvent) => {
+    const e = engineRef.current;
+    e.dragging = true;
+    e.dragStartX = ev.clientX;
+    e.dragStartPan = e.panMs;
+    e.followLive = false;
+    (ev.target as HTMLElement).setPointerCapture?.(ev.pointerId);
+  };
+
+  const onPointerMove = (ev: React.PointerEvent) => {
+    const e = engineRef.current;
+    if (!e.dragging || e.width < 2) return;
+    const dx = ev.clientX - e.dragStartX;
+    // Drag right → look left (older)
+    e.panMs = e.dragStartPan - (dx / e.width) * e.windowMs;
+  };
+
+  const onPointerUp = () => {
+    engineRef.current.dragging = false;
+  };
 
   const lineColor = market.color || INK;
 
@@ -317,9 +471,68 @@ export default function SpatialTradingChart({
         background: PAPER,
         overflow: 'hidden',
         userSelect: 'none',
+        touchAction: 'none',
+        cursor: 'grab',
       }}
     >
       <canvas ref={canvasRef} style={{ display: 'block', width: '100%', height: '100%' }} />
+
+      {/* Pan / zoom controls */}
+      <div
+        style={{
+          position: 'absolute',
+          top: 12,
+          left: '50%',
+          transform: 'translateX(-50%)',
+          display: 'flex',
+          gap: 0,
+          border: `1px solid ${INK}`,
+          background: PAPER,
+          zIndex: 6,
+        }}
+      >
+        <button
+          type="button"
+          onClick={() => panBy(-1)}
+          title="Look left (older)"
+          style={ctrlBtn}
+        >
+          ←
+        </button>
+        <button
+          type="button"
+          onClick={goLive}
+          title="Jump to live"
+          style={{
+            ...ctrlBtn,
+            borderLeft: `1px solid ${INK}`,
+            borderRight: `1px solid ${INK}`,
+            background: hud.followLive ? INK : PAPER,
+            color: hud.followLive ? PAPER : INK,
+            minWidth: 64,
+          }}
+        >
+          LIVE
+        </button>
+        <button
+          type="button"
+          onClick={() => panBy(1)}
+          title="Look right (ahead)"
+          style={ctrlBtn}
+        >
+          →
+        </button>
+      </div>
+
+      {/* Interaction layer for drag pan */}
+      <div
+        onPointerDown={onPointerDown}
+        onPointerMove={onPointerMove}
+        onPointerUp={onPointerUp}
+        onPointerCancel={onPointerUp}
+        onDoubleClick={goLive}
+        style={{ position: 'absolute', inset: 0, zIndex: 1 }}
+      />
 
       <div
         style={{
@@ -352,7 +565,21 @@ export default function SpatialTradingChart({
         <span>{market.symbol}</span>
         <span style={{ fontWeight: 900, color: lineColor }}>{fmtUsd(hud.price)}</span>
         <span style={{ color: '#5A554E' }}>{fmtClock(hud.now)}</span>
+        <span style={{ color: '#5A554E' }}>ZOOM {hud.zoom}</span>
+        <span style={{ color: '#888', fontSize: 9 }}>scroll · drag · ←→</span>
       </div>
     </div>
   );
 }
+
+const ctrlBtn: React.CSSProperties = {
+  padding: '8px 14px',
+  border: 'none',
+  background: 'transparent',
+  color: INK,
+  fontFamily: '"Courier New", monospace',
+  fontSize: 12,
+  fontWeight: 900,
+  cursor: 'pointer',
+  minWidth: 40,
+};

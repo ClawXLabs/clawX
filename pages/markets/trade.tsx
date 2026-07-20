@@ -388,19 +388,21 @@ export default function MarketsTradePage() {
                 />
               </div>
 
-              {/* Right: Buy/Sell ticket — height follows content */}
+              {/* Center: Buy/Sell ticket */}
               <div
                 style={{
                   position: 'absolute',
-                  top: 12,
-                  right: 12,
+                  top: '50%',
+                  left: '50%',
+                  transform: 'translate(-50%, -50%)',
                   zIndex: 20,
                   width: 300,
-                  maxWidth: 'min(300px, 34vw)',
-                  maxHeight: 'calc(100% - 24px)',
+                  maxWidth: 'min(300px, 90vw)',
+                  maxHeight: 'calc(100% - 48px)',
                   border: '1px solid #0D0B08',
-                  background: 'rgba(250,248,243,0.94)',
+                  background: 'rgba(250,248,243,0.96)',
                   overflow: 'auto',
+                  boxShadow: '0 8px 28px rgba(13,11,8,0.12)',
                 }}
               >
                 <TradeTicketPanel
