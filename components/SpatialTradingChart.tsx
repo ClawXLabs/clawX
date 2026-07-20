@@ -1,7 +1,7 @@
 /**
  * SpatialTradingChart
  * Canvas price chart with rAF render loop, smooth Catmull-Rom path,
- * wheel zoom + drag/button pan, and a dashed round-open price line.
+ * wheel zoom + drag pan, single LIVE toggle, and hover zoom slider.
  */
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { MarketInfo, PriceTick } from '../contexts/MarketDataContext';
@@ -16,13 +16,16 @@ const INK = '#0D0B08';
 const PAPER = '#FAF8F3';
 const GREEN = '#1E5E3A';
 const RED = '#8A1C14';
+/** Bright live indicator (not the dark chart red) */
+const LIVE_RED = '#FF3B30';
+const LIVE_RED_FADED = 'rgba(255,59,48,0.28)';
 const EDGE = 32;
 const Y_PAD_FRAC = 0.14;
 const DEFAULT_WINDOW_MS = 120_000;
 const MIN_WINDOW_MS = 20_000;
 const MAX_WINDOW_MS = 20 * 60_000;
-const PRICE_SMOOTH = 0.08;   // tip lerp per frame (~smooth wave)
-const RANGE_SMOOTH = 0.06;   // Y-axis ease
+const PRICE_SMOOTH = 0.08;
+const RANGE_SMOOTH = 0.06;
 const OPEN_FADE_MS = 900;
 
 function fmtUsd(n: number): string {
@@ -37,7 +40,14 @@ function fmtClock(ms: number): string {
   return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}:${String(d.getSeconds()).padStart(2, '0')}`;
 }
 
-/** Catmull-Rom → cubic Bezier on canvas */
+function fmtCountdown(ms: number): string {
+  if (ms <= 0) return '0:00';
+  const totalSec = Math.ceil(ms / 1000);
+  const m = Math.floor(totalSec / 60);
+  const s = totalSec % 60;
+  return `${m}:${String(s).padStart(2, '0')}`;
+}
+
 function strokeSmoothPath(
   ctx: CanvasRenderingContext2D,
   pts: { x: number; y: number }[],
@@ -71,17 +81,16 @@ interface Engine {
   nowMs: number;
   startPrice: number;
   startTimeMs: number;
+  endTimeMs: number;
   symbol: string;
   color: string;
-  /** Visible time window width */
   windowMs: number;
-  /** Shift of window center vs live (negative = look left / older) */
   panMs: number;
   followLive: boolean;
   displayPrice: number;
   pMin: number;
   pMax: number;
-  openFade: number; // 0→1
+  openFade: number;
   dragging: boolean;
   dragStartX: number;
   dragStartPan: number;
@@ -102,6 +111,7 @@ export default function SpatialTradingChart({
     nowMs: Date.now(),
     startPrice: market.startPrice,
     startTimeMs: market.startTime * 1000,
+    endTimeMs: market.endTime * 1000,
     symbol: market.symbol,
     color: market.color || INK,
     windowMs: DEFAULT_WINDOW_MS,
@@ -120,7 +130,10 @@ export default function SpatialTradingChart({
     now: Date.now(),
     zoom: '1×',
     followLive: true,
+    windowMs: DEFAULT_WINDOW_MS,
+    msLeft: Math.max(0, market.endTime * 1000 - Date.now()),
   });
+  const [zoomHover, setZoomHover] = useState(false);
   const roundKeyRef = useRef(`${market.roundId}:${market.startPrice}`);
 
   useEffect(() => {
@@ -135,6 +148,7 @@ export default function SpatialTradingChart({
     }
     e.startPrice = market.startPrice;
     e.startTimeMs = market.startTime * 1000;
+    e.endTimeMs = market.endTime * 1000;
     e.symbol = market.symbol;
     e.color = market.color || INK;
 
@@ -142,12 +156,11 @@ export default function SpatialTradingChart({
     if (roundKeyRef.current !== roundKey) {
       roundKeyRef.current = roundKey;
       e.openFade = 0;
-      // Soft reset zoom/pan on new round open
       e.windowMs = DEFAULT_WINDOW_MS;
       e.panMs = 0;
       e.followLive = true;
     }
-  }, [history, market.currentPrice, market.startPrice, market.startTime, market.symbol, market.color, market.roundId]);
+  }, [history, market.currentPrice, market.startPrice, market.startTime, market.endTime, market.symbol, market.color, market.roundId]);
 
   useEffect(() => {
     const wrap = wrapRef.current;
@@ -175,7 +188,6 @@ export default function SpatialTradingChart({
     return () => ro.disconnect();
   }, []);
 
-  // Wheel zoom + drag pan on the wrap (non-passive wheel)
   useEffect(() => {
     const wrap = wrapRef.current;
     if (!wrap) return;
@@ -185,17 +197,15 @@ export default function SpatialTradingChart({
       const e = engineRef.current;
       const factor = ev.deltaY > 0 ? 1.12 : 0.89;
       const next = Math.min(MAX_WINDOW_MS, Math.max(MIN_WINDOW_MS, e.windowMs * factor));
-      // Zoom around cursor time
       const rect = wrap.getBoundingClientRect();
       const xFrac = (ev.clientX - rect.left) / (rect.width || 1);
-      const center = (e.followLive ? e.nowMs : e.nowMs + e.panMs);
+      const center = e.followLive ? e.nowMs : e.nowMs + e.panMs;
       const tMin = center - e.windowMs * 0.55;
       const tAtCursor = tMin + xFrac * e.windowMs;
       e.windowMs = next;
       const newTMin = tAtCursor - xFrac * next;
       const newCenter = newTMin + next * 0.55;
       if (e.followLive) {
-        // stay live unless user zooms while already panned
         e.panMs = 0;
       } else {
         e.panMs = newCenter - e.nowMs;
@@ -212,10 +222,9 @@ export default function SpatialTradingChart({
     e.panMs = 0;
   }, []);
 
-  const panBy = useCallback((dir: -1 | 1) => {
+  const setZoomMs = useCallback((ms: number) => {
     const e = engineRef.current;
-    e.followLive = false;
-    e.panMs += dir * e.windowMs * 0.35;
+    e.windowMs = Math.min(MAX_WINDOW_MS, Math.max(MIN_WINDOW_MS, ms));
   }, []);
 
   const scales = useCallback(() => {
@@ -228,7 +237,6 @@ export default function SpatialTradingChart({
 
     const now = e.nowMs;
     const center = e.followLive ? now : now + e.panMs;
-    // Slight bias so live tip sits a bit right of center when following
     const tMin = center - e.windowMs * (e.followLive ? 0.62 : 0.5);
     const tMax = tMin + e.windowMs;
 
@@ -250,7 +258,6 @@ export default function SpatialTradingChart({
     const targetMin = rawMin - span * Y_PAD_FRAC;
     const targetMax = rawMax + span * Y_PAD_FRAC;
 
-    // Ease Y range for smooth open / updates
     e.pMin += (targetMin - e.pMin) * RANGE_SMOOTH;
     e.pMax += (targetMax - e.pMax) * RANGE_SMOOTH;
     if (!Number.isFinite(e.pMin) || !Number.isFinite(e.pMax) || e.pMin >= e.pMax) {
@@ -289,9 +296,7 @@ export default function SpatialTradingChart({
 
       e.nowMs = Date.now();
       const tip = e.ticks[e.ticks.length - 1] || { t: e.nowMs, price: e.startPrice };
-      // Smooth tip — wavy instead of snappy
       e.displayPrice += (tip.price - e.displayPrice) * PRICE_SMOOTH;
-      // Soft open of round line
       if (e.openFade < 1) e.openFade = Math.min(1, e.openFade + 16 / OPEN_FADE_MS);
 
       const lineColor = e.color || INK;
@@ -303,7 +308,6 @@ export default function SpatialTradingChart({
       ctx.fillStyle = PAPER;
       ctx.fillRect(0, 0, W, H);
 
-      // Soft horizontal grid
       ctx.font = '700 11px "Courier New", monospace';
       ctx.textAlign = 'left';
       ctx.textBaseline = 'middle';
@@ -323,13 +327,13 @@ export default function SpatialTradingChart({
         ctx.fillText(fmtUsd(p), 10, y);
       }
 
-      // Round open — dashed horizontal (eased in)
+      // Round open — dashed, market-colored
       const openY = priceToY(e.startPrice);
-      const openAlpha = 0.25 + 0.55 * e.openFade;
+      const openAlpha = 0.35 + 0.65 * e.openFade;
       ctx.save();
       ctx.globalAlpha = openAlpha;
-      ctx.strokeStyle = INK;
-      ctx.lineWidth = 1.25;
+      ctx.strokeStyle = lineColor;
+      ctx.lineWidth = 1.5;
       ctx.setLineDash([7, 6]);
       ctx.beginPath();
       ctx.moveTo(0, openY);
@@ -337,19 +341,17 @@ export default function SpatialTradingChart({
       ctx.stroke();
       ctx.setLineDash([]);
       ctx.font = '700 10px "Courier New", monospace';
-      ctx.fillStyle = INK;
+      ctx.fillStyle = lineColor;
       ctx.textAlign = 'left';
       ctx.textBaseline = 'bottom';
       ctx.fillText(`ROUND OPEN  ${fmtUsd(e.startPrice)}`, 78, openY - 4);
       ctx.restore();
 
-      // Smooth price path (history within window + synthetic tip at displayPrice)
       const ptsRaw = e.ticks.filter((p) => p.t >= tMin - 1_000 && p.t <= Math.min(e.nowMs + 50, tMax + 1_000));
       const drawPts: { x: number; y: number }[] = ptsRaw.map((p) => ({
         x: timeToX(p.t),
         y: priceToY(p.price),
       }));
-      // Replace last point Y with smoothed display price for fluid tip motion
       if (drawPts.length >= 1) {
         const tipT = Math.min(tip.t, e.nowMs);
         drawPts[drawPts.length - 1] = {
@@ -366,7 +368,6 @@ export default function SpatialTradingChart({
         strokeSmoothPath(ctx, drawPts, 0.38);
         ctx.stroke();
 
-        // Soft under-glow for wave feel
         ctx.strokeStyle = lineColor;
         ctx.globalAlpha = 0.12;
         ctx.lineWidth = 8;
@@ -375,7 +376,6 @@ export default function SpatialTradingChart({
         ctx.globalAlpha = 1;
       }
 
-      // Leading node (smoothed)
       if (drawPts.length >= 1) {
         const node = drawPts[drawPts.length - 1];
         ctx.fillStyle = PAPER;
@@ -390,7 +390,6 @@ export default function SpatialTradingChart({
         ctx.arc(node.x, node.y, 3.2, 0, Math.PI * 2);
         ctx.fill();
 
-        // Right live readout
         ctx.textAlign = 'right';
         ctx.fillStyle = lineColor;
         ctx.font = '900 13px "Courier New", monospace';
@@ -401,7 +400,6 @@ export default function SpatialTradingChart({
         ctx.fillText(`${pct >= 0 ? '▲' : '▼'} ${Math.abs(pct).toFixed(3)}%`, W - 12, node.y + 16);
       }
 
-      // Time ticks along bottom
       ctx.fillStyle = 'rgba(13,11,8,0.5)';
       ctx.font = '700 10px "Courier New", monospace';
       ctx.textAlign = 'center';
@@ -429,6 +427,8 @@ export default function SpatialTradingChart({
           now: e.nowMs,
           zoom: `${zoom >= 1 ? zoom.toFixed(1) : zoom.toFixed(2)}×`,
           followLive: e.followLive,
+          windowMs: e.windowMs,
+          msLeft: Math.max(0, e.endTimeMs - e.nowMs),
         });
       }
 
@@ -443,8 +443,7 @@ export default function SpatialTradingChart({
     const e = engineRef.current;
     e.dragging = true;
     e.dragStartX = ev.clientX;
-    e.dragStartPan = e.panMs;
-    e.followLive = false;
+    e.dragStartPan = e.followLive ? 0 : e.panMs;
     (ev.target as HTMLElement).setPointerCapture?.(ev.pointerId);
   };
 
@@ -452,7 +451,8 @@ export default function SpatialTradingChart({
     const e = engineRef.current;
     if (!e.dragging || e.width < 2) return;
     const dx = ev.clientX - e.dragStartX;
-    // Drag right → look left (older)
+    if (Math.abs(dx) < 3) return;
+    e.followLive = false;
     e.panMs = e.dragStartPan - (dx / e.width) * e.windowMs;
   };
 
@@ -461,6 +461,25 @@ export default function SpatialTradingChart({
   };
 
   const lineColor = market.color || INK;
+  const live = hud.followLive;
+
+  // Slider: right = zoom in (small window), left = zoom out (large window)
+  const zoomSliderVal = (() => {
+    const logMin = Math.log(MIN_WINDOW_MS);
+    const logMax = Math.log(MAX_WINDOW_MS);
+    const logCur = Math.log(hud.windowMs);
+    return 100 - ((logCur - logMin) / (logMax - logMin)) * 100;
+  })();
+
+  const onZoomSlider = (val: number) => {
+    const logMin = Math.log(MIN_WINDOW_MS);
+    const logMax = Math.log(MAX_WINDOW_MS);
+    const inverted = 100 - val;
+    setZoomMs(Math.exp(logMin + (inverted / 100) * (logMax - logMin)));
+  };
+
+  const timerCritical = hud.msLeft < 60_000;
+  const timerWarn = hud.msLeft < 120_000;
 
   return (
     <div
@@ -477,54 +496,71 @@ export default function SpatialTradingChart({
     >
       <canvas ref={canvasRef} style={{ display: 'block', width: '100%', height: '100%' }} />
 
-      {/* Pan / zoom controls */}
+      {/* LIVE indicator — bright red + LIVE text */}
+      <button
+        type="button"
+        onClick={goLive}
+        title={live ? 'Following live price' : 'Click to return to live'}
+        aria-label={live ? 'Live' : 'Return to live'}
+        style={{
+          position: 'absolute',
+          top: 14,
+          left: '50%',
+          transform: 'translateX(-50%)',
+          zIndex: 6,
+          display: 'flex',
+          alignItems: 'center',
+          gap: 8,
+          padding: '4px 8px',
+          border: 'none',
+          background: 'transparent',
+          cursor: live ? 'default' : 'pointer',
+          fontFamily: '"Courier New", monospace',
+          fontSize: 11,
+          fontWeight: 900,
+          letterSpacing: '0.14em',
+          color: live ? INK : 'rgba(13,11,8,0.4)',
+        }}
+      >
+        <span
+          style={{
+            width: 12,
+            height: 12,
+            borderRadius: '50%',
+            background: live ? LIVE_RED : LIVE_RED_FADED,
+            boxShadow: live ? '0 0 0 3px rgba(255,59,48,0.28)' : 'none',
+            flexShrink: 0,
+          }}
+        />
+        LIVE
+      </button>
+
+      {/* Market timer — top right, no box */}
       <div
         style={{
           position: 'absolute',
-          top: 12,
-          left: '50%',
-          transform: 'translateX(-50%)',
-          display: 'flex',
-          gap: 0,
-          border: `1px solid ${INK}`,
-          background: PAPER,
+          top: 16,
+          right: 20,
           zIndex: 6,
+          pointerEvents: 'none',
+          fontFamily: '"Courier New", monospace',
+          fontSize: 18,
+          fontWeight: 900,
+          letterSpacing: '0.06em',
+          color: isHistorical
+            ? '#5A554E'
+            : hud.msLeft <= 0
+              ? RED
+              : timerCritical
+                ? LIVE_RED
+                : timerWarn
+                  ? '#D97706'
+                  : INK,
         }}
       >
-        <button
-          type="button"
-          onClick={() => panBy(-1)}
-          title="Look left (older)"
-          style={ctrlBtn}
-        >
-          ←
-        </button>
-        <button
-          type="button"
-          onClick={goLive}
-          title="Jump to live"
-          style={{
-            ...ctrlBtn,
-            borderLeft: `1px solid ${INK}`,
-            borderRight: `1px solid ${INK}`,
-            background: hud.followLive ? INK : PAPER,
-            color: hud.followLive ? PAPER : INK,
-            minWidth: 64,
-          }}
-        >
-          LIVE
-        </button>
-        <button
-          type="button"
-          onClick={() => panBy(1)}
-          title="Look right (ahead)"
-          style={ctrlBtn}
-        >
-          →
-        </button>
+        {isHistorical ? 'ARCHIVE' : hud.msLeft <= 0 ? 'SETTLE' : fmtCountdown(hud.msLeft)}
       </div>
 
-      {/* Interaction layer for drag pan */}
       <div
         onPointerDown={onPointerDown}
         onPointerMove={onPointerMove}
@@ -565,21 +601,52 @@ export default function SpatialTradingChart({
         <span>{market.symbol}</span>
         <span style={{ fontWeight: 900, color: lineColor }}>{fmtUsd(hud.price)}</span>
         <span style={{ color: '#5A554E' }}>{fmtClock(hud.now)}</span>
-        <span style={{ color: '#5A554E' }}>ZOOM {hud.zoom}</span>
-        <span style={{ color: '#888', fontSize: 9 }}>scroll · drag · ←→</span>
+      </div>
+
+      {/* Bottom-right zoom — square value; expands with slider on hover */}
+      <div
+        onMouseEnter={() => setZoomHover(true)}
+        onMouseLeave={() => setZoomHover(false)}
+        style={{
+          position: 'absolute',
+          bottom: 28,
+          right: 16,
+          zIndex: 6,
+          border: `1px solid ${INK}`,
+          background: PAPER,
+          width: zoomHover ? 168 : 52,
+          height: zoomHover ? 72 : 52,
+          padding: zoomHover ? '10px 12px' : 0,
+          boxSizing: 'border-box',
+          fontFamily: '"Courier New", monospace',
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: zoomHover ? 'stretch' : 'center',
+          justifyContent: zoomHover ? 'flex-start' : 'center',
+          transition: 'width 0.15s ease, height 0.15s ease, padding 0.15s ease',
+          overflow: 'hidden',
+        }}
+      >
+        {!zoomHover ? (
+          <span style={{ fontSize: 12, fontWeight: 900, color: INK }}>{hud.zoom}</span>
+        ) : (
+          <>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
+              <span style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.1em', color: '#5A554E' }}>ZOOM</span>
+              <span style={{ fontSize: 12, fontWeight: 900, color: INK }}>{hud.zoom}</span>
+            </div>
+            <input
+              type="range"
+              min={0}
+              max={100}
+              step={0.5}
+              value={zoomSliderVal}
+              onChange={(ev) => onZoomSlider(Number(ev.target.value))}
+              style={{ width: '100%', marginTop: 10, cursor: 'pointer', accentColor: lineColor }}
+            />
+          </>
+        )}
       </div>
     </div>
   );
 }
-
-const ctrlBtn: React.CSSProperties = {
-  padding: '8px 14px',
-  border: 'none',
-  background: 'transparent',
-  color: INK,
-  fontFamily: '"Courier New", monospace',
-  fontSize: 12,
-  fontWeight: 900,
-  cursor: 'pointer',
-  minWidth: 40,
-};
