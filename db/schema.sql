@@ -98,3 +98,154 @@ CREATE TABLE IF NOT EXISTS settlement_log (
   end_price TEXT,
   settled_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
+
+-- ── Admin / platform control plane (shared with clawX-admin) ──────────────
+
+CREATE TABLE IF NOT EXISTS platform_config (
+  id TEXT PRIMARY KEY DEFAULT 'default',
+  faucet_amount_tusdc NUMERIC NOT NULL DEFAULT 300,
+  faucet_cooldown_sec INTEGER NOT NULL DEFAULT 86400,
+  faucet_paused BOOLEAN NOT NULL DEFAULT false,
+  trading_paused BOOLEAN NOT NULL DEFAULT false,
+  agents_paused BOOLEAN NOT NULL DEFAULT false,
+  claims_paused BOOLEAN NOT NULL DEFAULT false,
+  maintenance_message TEXT NOT NULL DEFAULT '',
+  announcement TEXT NOT NULL DEFAULT '',
+  announcement_published_at TIMESTAMPTZ,
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+INSERT INTO platform_config (id) VALUES ('default')
+  ON CONFLICT (id) DO NOTHING;
+
+CREATE TABLE IF NOT EXISTS ranking_config (
+  id TEXT PRIMARY KEY DEFAULT 'default',
+  xp_per_trade INTEGER NOT NULL DEFAULT 2,
+  xp_per_win INTEGER NOT NULL DEFAULT 5,
+  xp_streak_per_day INTEGER NOT NULL DEFAULT 10,
+  xp_streak_cap INTEGER NOT NULL DEFAULT 100,
+  xp_twitter INTEGER NOT NULL DEFAULT 50,
+  xp_telegram INTEGER NOT NULL DEFAULT 50,
+  trade_milestones JSONB NOT NULL DEFAULT '[{"trades":10,"xp":25},{"trades":50,"xp":100},{"trades":100,"xp":250},{"trades":500,"xp":1000}]'::jsonb,
+  winrate_milestones JSONB NOT NULL DEFAULT '[{"rate":50,"xp":50},{"rate":60,"xp":100},{"rate":70,"xp":200}]'::jsonb,
+  level_xp_step INTEGER NOT NULL DEFAULT 500,
+  sort_primary TEXT NOT NULL DEFAULT 'xp',
+  sort_secondary TEXT NOT NULL DEFAULT 'txCount',
+  ledger_included BOOLEAN NOT NULL DEFAULT true,
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+INSERT INTO ranking_config (id) VALUES ('default')
+  ON CONFLICT (id) DO NOTHING;
+
+CREATE TABLE IF NOT EXISTS xp_ledger (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  wallet TEXT NOT NULL,
+  amount INTEGER NOT NULL,
+  reason TEXT NOT NULL,
+  source_type TEXT NOT NULL DEFAULT 'admin',
+  source_id TEXT,
+  admin_id TEXT,
+  meta JSONB NOT NULL DEFAULT '{}'::jsonb,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_xp_ledger_wallet ON xp_ledger(wallet, created_at DESC);
+
+CREATE TABLE IF NOT EXISTS wallet_limits (
+  wallet TEXT PRIMARY KEY,
+  tx_limit INTEGER,
+  tx_unlimited BOOLEAN NOT NULL DEFAULT true,
+  faucet_blocked BOOLEAN NOT NULL DEFAULT false,
+  relayer_blocked BOOLEAN NOT NULL DEFAULT false,
+  admin_notes TEXT NOT NULL DEFAULT '',
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_by TEXT
+);
+
+CREATE TABLE IF NOT EXISTS support_tickets (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  wallet TEXT NOT NULL,
+  category TEXT NOT NULL DEFAULT 'transaction',
+  status TEXT NOT NULL DEFAULT 'open',
+  subject TEXT NOT NULL DEFAULT '',
+  description TEXT NOT NULL DEFAULT '',
+  tx_hash TEXT,
+  round_id BIGINT,
+  action TEXT,
+  error_message TEXT,
+  request_payload JSONB NOT NULL DEFAULT '{}'::jsonb,
+  response_payload JSONB NOT NULL DEFAULT '{}'::jsonb,
+  admin_notes TEXT NOT NULL DEFAULT '',
+  resolved_by TEXT,
+  resolved_at TIMESTAMPTZ,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_tickets_status ON support_tickets(status, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_tickets_wallet ON support_tickets(wallet, created_at DESC);
+
+CREATE TABLE IF NOT EXISTS campaigns (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  slug TEXT NOT NULL UNIQUE,
+  title TEXT NOT NULL,
+  description TEXT NOT NULL DEFAULT '',
+  type TEXT NOT NULL DEFAULT 'social_submission',
+  status TEXT NOT NULL DEFAULT 'draft',
+  platform TEXT NOT NULL DEFAULT 'x',
+  start_at TIMESTAMPTZ,
+  end_at TIMESTAMPTZ,
+  score_xp_map JSONB NOT NULL DEFAULT '{"1":10,"2":25,"3":50,"4":100,"5":200}'::jsonb,
+  rules JSONB NOT NULL DEFAULT '{}'::jsonb,
+  created_by TEXT,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_campaigns_status ON campaigns(status, start_at DESC);
+
+CREATE TABLE IF NOT EXISTS campaign_submissions (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  campaign_id UUID NOT NULL REFERENCES campaigns(id) ON DELETE CASCADE,
+  wallet TEXT NOT NULL,
+  post_url TEXT NOT NULL,
+  platform_handle TEXT,
+  status TEXT NOT NULL DEFAULT 'pending',
+  admin_score INTEGER,
+  admin_note TEXT,
+  reviewed_by TEXT,
+  reviewed_at TIMESTAMPTZ,
+  xp_awarded INTEGER,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  UNIQUE (campaign_id, wallet, post_url)
+);
+CREATE INDEX IF NOT EXISTS idx_campaign_subs_status
+  ON campaign_submissions(status, created_at DESC);
+
+CREATE TABLE IF NOT EXISTS admin_users (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  email TEXT NOT NULL UNIQUE,
+  password_hash TEXT NOT NULL,
+  display_name TEXT NOT NULL DEFAULT 'Admin',
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  last_login_at TIMESTAMPTZ
+);
+
+CREATE TABLE IF NOT EXISTS admin_sessions (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  admin_id UUID NOT NULL REFERENCES admin_users(id) ON DELETE CASCADE,
+  token_hash TEXT NOT NULL UNIQUE,
+  expires_at TIMESTAMPTZ NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_admin_sessions_token ON admin_sessions(token_hash);
+CREATE INDEX IF NOT EXISTS idx_admin_sessions_expires ON admin_sessions(expires_at);
+
+CREATE TABLE IF NOT EXISTS admin_audit_log (
+  id BIGSERIAL PRIMARY KEY,
+  admin_id TEXT,
+  admin_email TEXT,
+  action TEXT NOT NULL,
+  target_wallet TEXT,
+  meta JSONB NOT NULL DEFAULT '{}'::jsonb,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_admin_audit_created ON admin_audit_log(created_at DESC);
