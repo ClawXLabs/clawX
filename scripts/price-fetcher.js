@@ -101,13 +101,35 @@ async function main() {
         data: serializablePrices(prices),
         updatedAt: Math.floor(Date.now() / 1_000),
       };
-      await Promise.all([
-        upsertCandles(pool, prices),
-        ...Object.entries(payload.data).map(([symbol, tick]) =>
-          redis.set(`price:${symbol}`, JSON.stringify(tick), 'EX', 10)
-        ),
-        redis.publish('prices:live', JSON.stringify(payload)),
-      ]);
+
+      // Always publish live prices to Redis first — never block the stream on candle DB writes.
+      try {
+        await Promise.all([
+          ...Object.entries(payload.data).map(([symbol, tick]) =>
+            redis.set(`price:${symbol}`, JSON.stringify(tick), 'EX', 10)
+          ),
+          redis.publish('prices:live', JSON.stringify(payload)),
+        ]);
+      } catch (redisErr) {
+        console.error('[price-fetcher] Redis publish failed:', redisErr.message || redisErr);
+      }
+
+      const stamp = new Date().toISOString().slice(11, 19);
+      const line = Object.entries(payload.data)
+        .sort(([a], [b]) => a.localeCompare(b))
+        .map(([symbol, tick]) => {
+          const n = Number(tick.price);
+          const shown = n >= 1000 ? n.toFixed(2) : n >= 1 ? n.toFixed(4) : n.toFixed(6);
+          return `${symbol}=$${shown}`;
+        })
+        .join('  ');
+      console.log(`[price-fetcher] ${stamp}  ${line}`);
+
+      try {
+        await upsertCandles(pool, prices);
+      } catch (pgErr) {
+        console.error('[price-fetcher] Candle upsert failed (prices still published):', pgErr.message || pgErr);
+      }
     } catch (error) {
       console.error('[price-fetcher] Tick failed:', error.message || error);
     }

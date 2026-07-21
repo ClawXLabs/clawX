@@ -1,0 +1,21 @@
+#!/usr/bin/env bash
+# Shim so Node scripts can call `aws` when the CLI is only available via Docker.
+set -euo pipefail
+REGION="${AWS_REGION:-${AWS_DEFAULT_REGION:-ap-south-1}}"
+ROOT="$(cd "$(dirname "$0")/../../../.." && pwd)"
+AWS_CLI_IMAGE="${AWS_CLI_IMAGE:-public.ecr.aws/aws-cli/aws-cli:latest}"
+
+if [ -x "/c/Program Files/Amazon/AWSCLIV2/aws.exe" ]; then
+  exec "/c/Program Files/Amazon/AWSCLIV2/aws.exe" "$@"
+fi
+if command -v aws >/dev/null 2>&1 && [ "$(command -v aws)" != "$0" ]; then
+  exec "$(command -v aws)" "$@"
+fi
+
+exec docker run --rm \
+  -e AWS_ACCESS_KEY_ID -e AWS_SECRET_ACCESS_KEY -e AWS_SESSION_TOKEN \
+  -e AWS_DEFAULT_REGION="$REGION" -e AWS_REGION="$REGION" \
+  -e AWS_PROFILE \
+  -v "${HOME}/.aws:/root/.aws:ro" \
+  -v "${ROOT}:/work" -w /work \
+  "$AWS_CLI_IMAGE" "$@"

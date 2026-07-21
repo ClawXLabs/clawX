@@ -9,6 +9,8 @@ const ASSET_CONFIG = {
 };
 
 const REQUEST_TIMEOUT_MS = 2500;
+/** Gate.io often 403s by region — fail fast so ticks aren't blocked. */
+const GATE_TIMEOUT_MS = 900;
 /** Short TTL so settlement + chart can reuse a fresh median without re-hitting CEX APIs. */
 const PRICE_CACHE_MS = 30000;
 const priceCache = new Map();
@@ -95,7 +97,7 @@ async function fetchFastPrice(symbol, options = {}) {
     trySource('gate', async () => {
       const data = await fetchJson(
         `https://api.gateio.ws/api/v4/spot/tickers?currency_pair=${config.gate}`,
-        timeoutMs
+        GATE_TIMEOUT_MS
       );
       return Array.isArray(data) ? data[0]?.last : data.last;
     }),

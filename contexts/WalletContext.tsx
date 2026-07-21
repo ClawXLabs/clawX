@@ -56,6 +56,10 @@ export function WalletProvider({ children }: WalletProviderProps) {
 
   // Auto-restore session on mount
   useEffect(() => {
+    if (typeof window !== 'undefined' && !window.isSecureContext) {
+      setIsRestoring(false);
+      return;
+    }
     const eth = getMetaMaskEthereum();
     if (!eth) {
       setIsRestoring(false);

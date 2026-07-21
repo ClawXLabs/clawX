@@ -6,7 +6,8 @@ export function useTheme() {
   const [theme, setTheme] = useState<Theme>('light');
 
   useEffect(() => {
-    const stored = localStorage.getItem('cp-theme') as Theme | null;
+    let stored: Theme | null = null;
+    try { stored = localStorage.getItem('cp-theme') as Theme | null; } catch { /* restricted storage */ }
     const preferred = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
     const initial = stored ?? preferred;
     setTheme(initial);
@@ -17,7 +18,7 @@ export function useTheme() {
     setTheme((prev) => {
       const next: Theme = prev === 'light' ? 'dark' : 'light';
       document.documentElement.classList.toggle('dark', next === 'dark');
-      localStorage.setItem('cp-theme', next);
+      try { localStorage.setItem('cp-theme', next); } catch { /* restricted storage */ }
       return next;
     });
   };

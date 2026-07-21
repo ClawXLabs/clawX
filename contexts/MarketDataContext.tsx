@@ -101,6 +101,10 @@ let contract: ethers.Contract | null = null;
 let decimals = 6;
 let started = false;    // true once bootstrap() has been called
 
+// Latest CEX ticks (module-level) so fetchChain can stamp them even if prices
+// arrived before markets existed — and so we don't depend on unstable React objects.
+let latestLivePrices: StreamPrices = {};
+
 /* ─── Helpers ────────────────────────────────────────────────────── */
 
 function pushTick(assetId: number, price: number, t = Date.now()) {
@@ -113,6 +117,38 @@ function pushTick(assetId: number, price: number, t = Date.now()) {
   if (hist.length > HISTORY_MAX) {
     snapshot.history[assetId] = hist.slice(-HISTORY_MAX);
   }
+}
+
+/** Apply cached CEX prices onto the current markets snapshot. Returns true if anything changed. */
+function applyLivePricesToSnapshot(prices: StreamPrices = latestLivePrices): boolean {
+  const symbols = Object.keys(prices);
+  if (!symbols.length) return false;
+
+  const bySymbol: StreamPrices = {};
+  for (const [symbol, tick] of Object.entries(prices)) {
+    bySymbol[symbol.trim().toUpperCase()] = tick;
+  }
+
+  const markets = { ...snapshot.markets };
+  let changed = false;
+  for (const market of Object.values(markets)) {
+    const tick = bySymbol[String(market.symbol || '').trim().toUpperCase()];
+    if (!tick || !Number.isFinite(tick.price) || tick.price <= 0) continue;
+    if (market.currentPrice === tick.price) continue;
+    markets[market.assetId] = { ...market, currentPrice: tick.price };
+    const tickMs = tick.updatedAt > 1e12 ? tick.updatedAt : tick.updatedAt * 1_000;
+    pushTick(market.assetId, tick.price, tickMs);
+    changed = true;
+  }
+  if (!changed) return false;
+
+  notify({
+    markets,
+    history: { ...snapshot.history },
+    lastUpdated: Date.now(),
+    error: '',
+  });
+  return true;
 }
 
 function seedHistory(assetId: number, startPrice: number, currentPrice: number, startTime: number) {
@@ -167,7 +203,8 @@ async function fetchChain() {
       const asset  = await contract.getAsset(assetId);
       const roundId = Number(asset.currentRoundId);
       if (roundId === 0) continue;
-      const sym = String(asset.symbol ?? '').trim();
+      const sym = String(asset.symbol ?? '').trim().toUpperCase();
+      if (!sym) continue;
       assetMap.push({ assetId, symbol: sym, roundId });
     }
     if (assetMap.length === 0) {
@@ -189,7 +226,13 @@ async function fetchChain() {
 
       const startPrice  = Number(round.startPrice)  / 1e8;
       const chainPrice  = Number(round.currentPrice) / 1e8;
-      const currentPrice = snapshot.markets[assetId]?.currentPrice || chainPrice;
+      const liveTick = latestLivePrices[symbol];
+      const livePrice = liveTick && Number.isFinite(liveTick.price) && liveTick.price > 0
+        ? liveTick.price
+        : 0;
+      const currentPrice = livePrice
+        || snapshot.markets[assetId]?.currentPrice
+        || chainPrice;
       const startTime   = Number(round.startTime);
 
       seedHistory(assetId, startPrice, currentPrice, startTime);
@@ -210,6 +253,8 @@ async function fetchChain() {
       };
     }
 
+    // Publish markets (with any already-known CEX ticks), then re-apply cache
+    // so a prices-before-markets race still lands on the next tick.
     notify({
       markets:     newMarkets,
       history:     { ...snapshot.history },
@@ -218,6 +263,7 @@ async function fetchChain() {
       ready:       true,
       error:       '',
     });
+    applyLivePricesToSnapshot();
   } catch (err: any) {
     const msg = err?.shortMessage || err?.message || 'Chain fetch failed';
     console.error('[MarketData] chain fetch error:', msg);
@@ -283,10 +329,10 @@ export function MarketDataProvider({ children }: { children: ReactNode }) {
     };
   }, []);
 
-  // Fallback: when the /ws gateway is unavailable (e.g. `npm run dev:ui`
-  // without server.js/Redis), poll /api/prices so charts stay live.
+  // Always poll /api/prices as a backup. If the WebSocket connects but never
+  // delivers ticks (empty snapshot / brief Redis blip), the markets page used
+  // to freeze on stale chain prices because polling stopped when connected=true.
   useEffect(() => {
-    if (connected) return;
     let cancelled = false;
     const poll = async () => {
       try {
@@ -296,8 +342,9 @@ export function MarketDataProvider({ children }: { children: ReactNode }) {
         if (cancelled || !body?.prices) return;
         const mapped: StreamPrices = {};
         for (const [symbol, p] of Object.entries<any>(body.prices)) {
-          mapped[symbol] = {
-            symbol,
+          const key = String(symbol).trim().toUpperCase();
+          mapped[key] = {
+            symbol: key,
             price: Number(p.price),
             price8: String(p.price8),
             updatedAt: Number(p.updatedAt),
@@ -314,30 +361,27 @@ export function MarketDataProvider({ children }: { children: ReactNode }) {
       cancelled = true;
       clearInterval(timer);
     };
-  }, [connected]);
+  }, []);
 
-  const livePrices = connected ? prices : polledPrices;
-
+  // Merge WS + HTTP poll into the module cache, then apply only when a price changes.
   useEffect(() => {
-    if (!Object.keys(livePrices).length) return;
-    const markets = { ...snapshot.markets };
-    let changed = false;
-    for (const market of Object.values(markets)) {
-      const tick = livePrices[market.symbol];
-      if (!tick || !Number.isFinite(tick.price) || tick.price <= 0) continue;
-      markets[market.assetId] = { ...market, currentPrice: tick.price };
-      pushTick(market.assetId, tick.price, tick.updatedAt * 1_000);
-      changed = true;
+    const merged: StreamPrices = { ...polledPrices };
+    for (const [symbol, tick] of Object.entries(prices)) {
+      const key = symbol.trim().toUpperCase();
+      const existing = merged[key] || merged[symbol];
+      if (!existing || Number(tick.updatedAt) >= Number(existing.updatedAt)) {
+        merged[key] = { ...tick, symbol: key };
+      }
     }
-    if (changed) {
-      notify({
-        markets,
-        history: { ...snapshot.history },
-        lastUpdated: Date.now(),
-        error: '',
-      });
+    // Normalize poll keys too
+    const normalized: StreamPrices = {};
+    for (const [symbol, tick] of Object.entries(merged)) {
+      const key = symbol.trim().toUpperCase();
+      normalized[key] = { ...tick, symbol: key };
     }
-  }, [livePrices]);
+    latestLivePrices = normalized;
+    applyLivePricesToSnapshot(normalized);
+  }, [polledPrices, prices]);
 
   useEffect(() => {
     // Suppress the "reconnecting" banner while the HTTP polling fallback is

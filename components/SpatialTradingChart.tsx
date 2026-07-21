@@ -21,11 +21,25 @@ const RED = '#8A1C14';
 const LIVE_RED = '#FF3B30';
 const LIVE_RED_FADED = 'rgba(255,59,48,0.28)';
 const EDGE = 32;
-const Y_PAD_FRAC = 0.14;
+const Y_PAD_FRAC = 0.18;
 const DEFAULT_WINDOW_MS = 120_000;
 const MIN_WINDOW_MS = 20_000;
 const MAX_WINDOW_MS = 20 * 60_000;
-const RANGE_SMOOTH = 0.06;
+/**
+ * Auto-zoom (Y): tighten quickly on quiet markets so tiny moves fill the
+ * band; open more gently on spikes so the frame doesn't flicker.
+ */
+const RANGE_SMOOTH_IN = 0.22;
+const RANGE_SMOOTH_OUT = 0.08;
+/** Floor span as a fraction of mid price — small enough that quiet ticks still read. */
+const MIN_SPAN_FRAC = 0.00012;
+/** Soft ceiling before we treat action as "big" and let the pad breathe more. */
+const COMFORT_SPAN_FRAC = 0.004;
+/**
+ * Per-frame ease for tip PRICE only. Tip TIME is always wall-clock forward —
+ * never allowed to decrease — so the drawn path cannot reverse on X.
+ */
+const TIP_EASE = 0.28;
 const OPEN_FADE_MS = 900;
 /** Chart playhead lags wall-clock so upcoming ticks are already buffered. */
 const CHART_LAG_MS = 1600;
@@ -33,6 +47,8 @@ const TRAIL_MIN_DIST_FRAC = 0.00003;
 const TRAIL_MIN_MS = 24;
 /** Keep ~3×5m rounds of drawn path per market. */
 const TRAIL_KEEP_MS = 3 * 5 * 60 * 1000;
+/** Live path tension — lower than archive to avoid Bezier X/Y "hooks" that look like reverse. */
+const LIVE_PATH_TENSION = 0.28;
 
 interface ChartCache {
   trail: PriceTick[];
@@ -52,6 +68,80 @@ function trimTrail(trail: PriceTick[], nowMs: number): PriceTick[] {
   const cutoff = nowMs - TRAIL_KEEP_MS;
   const kept = trail.filter((p) => p.t >= cutoff);
   return kept.length >= 2 ? kept : trail.slice(-120);
+}
+
+/**
+ * Guarantees the tick buffer used for Catmull-Rom sampling is strictly
+ * ordered and non-regressing in time.
+ *
+ * Upstream data (the `history` prop) can arrive re-ordered, re-windowed,
+ * or with a duplicate/near-duplicate timestamp on reconnect. Feeding that
+ * straight into the interpolator is what causes the visible "snap back"
+ * glitch: the segment lookup in samplePriceAt() assumes ascending time,
+ * so a single out-of-order point can make it pick the wrong neighbors for
+ * a frame or two and the tip briefly jumps to a stale/incorrect price.
+ */
+function sanitizeTicks(raw: PriceTick[]): PriceTick[] {
+  if (raw.length <= 1) return raw;
+  const sorted = [...raw].sort((a, b) => a.t - b.t);
+  const clean: PriceTick[] = [];
+  for (const p of sorted) {
+    const prev = clean[clean.length - 1];
+    if (!prev) {
+      clean.push(p);
+      continue;
+    }
+    if (p.t === prev.t) {
+      // Same instant reported twice (e.g. a corrected re-send) — keep the newest value.
+      clean[clean.length - 1] = p;
+      continue;
+    }
+    if (p.t < prev.t) continue; // shouldn't happen post-sort, guard anyway
+    clean.push(p);
+  }
+  return clean;
+}
+
+/**
+ * Append-only merge into the engine tick buffer.
+ * Replacing the whole array from `history` every poll was a major snap source:
+ * upstream can re-window / correct past stamps, which changes Catmull samples
+ * under the lag playhead and makes the tip jump. We only extend forward
+ * (and may refresh the newest point).
+ */
+function mergeTicksForward(
+  existing: PriceTick[],
+  incoming: PriceTick[],
+  livePrice: number,
+): PriceTick[] {
+  const clean = sanitizeTicks(incoming);
+  if (!existing.length) {
+    const base = clean.length ? [...clean] : [];
+    const last = base[base.length - 1];
+    const stamp = Math.max(Date.now(), last ? last.t + 1 : Date.now());
+    if (!last || Math.abs(last.price - livePrice) > 1e-12) {
+      base.push({ t: stamp, price: livePrice });
+    }
+    return base;
+  }
+
+  const out = existing.length > 2000 ? existing.slice(-1800) : existing.slice();
+  let lastT = out[out.length - 1].t;
+  for (const p of clean) {
+    if (p.t < lastT) continue;
+    if (p.t === lastT) {
+      out[out.length - 1] = { t: p.t, price: p.price };
+      continue;
+    }
+    out.push(p);
+    lastT = p.t;
+  }
+
+  const last = out[out.length - 1];
+  if (Math.abs(last.price - livePrice) > 1e-12) {
+    out.push({ t: Math.max(Date.now(), last.t + 1), price: livePrice });
+  }
+  return out.length > 2000 ? out.slice(-1800) : out;
 }
 
 function fmtUsd(n: number): string {
@@ -127,7 +217,7 @@ function fmtRoundClock(msFromStart: number): string {
   return `${m}:${String(s).padStart(2, '0')}`;
 }
 
-/** Catmull-Rom sample at time t — uses look-ahead ticks inside the lag buffer. */
+/** Catmull-Rom sample at time t — clamped to the local segment so overshoot can't yank the tip. */
 function samplePriceAt(ticks: PriceTick[], t: number): { t: number; price: number } {
   if (!ticks.length) return { t, price: 0 };
   if (ticks.length === 1) return { t, price: ticks[0].price };
@@ -156,7 +246,11 @@ function samplePriceAt(ticks: PriceTick[], t: number): { t: number; price: numbe
       (-p0.price + p2.price) * u +
       (2 * p0.price - 5 * p1.price + 4 * p2.price - p3.price) * u2 +
       (-p0.price + 3 * p1.price - 3 * p2.price + p3.price) * u3);
-  return { t, price };
+  // Clamp to the segment endpoints — Catmull overshoot is what made the
+  // tip briefly reverse or spike when neighbor spacing was uneven.
+  const lo = Math.min(p1.price, p2.price);
+  const hi = Math.max(p1.price, p2.price);
+  return { t, price: Math.max(lo, Math.min(hi, price)) };
 }
 
 function strokeSmoothPath(
@@ -353,16 +447,15 @@ export default function SpatialTradingChart({
       e.panMs = 0;
       e.windowMs = DEFAULT_WINDOW_MS;
       e.trail = [];
+      e.ticks = [];
+      e.tip = { t: Date.now() - CHART_LAG_MS, price: market.currentPrice };
+      e.tipTarget = { ...e.tip };
+      e.pMin = market.currentPrice * (1 - MIN_SPAN_FRAC * 4);
+      e.pMax = market.currentPrice * (1 + MIN_SPAN_FRAC * 4);
     }
 
-    const nextTicks = history.length
-      ? [...history]
-      : [{ t: Date.now(), price: market.currentPrice }];
-    const last = nextTicks[nextTicks.length - 1];
-    if (!last || Math.abs(last.price - market.currentPrice) > 1e-12 || Date.now() - last.t > 800) {
-      nextTicks.push({ t: Date.now(), price: market.currentPrice });
-    }
-    e.ticks = nextTicks.length > 2000 ? nextTicks.slice(-1800) : nextTicks;
+    // Append-only tick merge — never rewrite past samples under the playhead.
+    e.ticks = mergeTicksForward(e.ticks, history, market.currentPrice);
 
     const tipSrc = e.ticks[e.ticks.length - 1];
     if (tipSrc) {
@@ -387,7 +480,10 @@ export default function SpatialTradingChart({
       if (cached && cached.trail.length >= 2) {
         applyCache(e, cached);
         e.trail = trimTrail(e.trail, Date.now());
+        // Fresh tick buffer for the new asset (don't carry previous asset's ticks)
+        e.ticks = mergeTicksForward([], history, market.currentPrice);
       } else {
+        e.ticks = mergeTicksForward([], history, market.currentPrice);
         const seed = e.ticks.filter((p) => p.t >= Date.now() - TRAIL_KEEP_MS);
         e.trail = (seed.length >= 2 ? seed : e.ticks.slice(-120)).map((p) => ({ ...p }));
         const end = e.trail[e.trail.length - 1] || { t: Date.now() - CHART_LAG_MS, price: market.currentPrice };
@@ -396,6 +492,8 @@ export default function SpatialTradingChart({
         e.windowMs = DEFAULT_WINDOW_MS;
         e.panMs = 0;
         e.followLive = true;
+        e.pMin = market.currentPrice * (1 - MIN_SPAN_FRAC * 4);
+        e.pMax = market.currentPrice * (1 + MIN_SPAN_FRAC * 4);
       }
       e.openFade = 0;
       return;
@@ -405,6 +503,12 @@ export default function SpatialTradingChart({
     if (roundKeyRef.current !== roundKey) {
       roundKeyRef.current = roundKey;
       e.openFade = 0;
+      // New round: keep forward motion but re-anchor trail from open
+      const openT = market.startTime * 1000;
+      e.trail = [{ t: openT, price: market.startPrice }];
+      e.tip = { t: Math.max(openT, Date.now() - CHART_LAG_MS), price: market.currentPrice };
+      e.tipTarget = { ...e.tip };
+      e.ticks = mergeTicksForward([], history, market.currentPrice);
     }
 
     if (e.trail.length < 2 && e.ticks.length >= 2) {
@@ -550,7 +654,7 @@ export default function SpatialTradingChart({
       tMax = tMin + e.windowMs;
     }
 
-    const series = e.archive ? e.archiveTicks : e.ticks;
+    const series = e.archive ? e.archiveTicks : e.trail;
     const visible = series.filter((p) => p.t >= tMin - 2_000 && p.t <= tMax + 2_000);
     let rawMin = Infinity;
     let rawMax = -Infinity;
@@ -559,33 +663,40 @@ export default function SpatialTradingChart({
       rawMax = Math.max(rawMax, p.price);
     }
     if (!e.archive) {
-      for (const p of e.trail) {
-        if (p.t < tMin - 2_000 || p.t > tMax + 2_000) continue;
-        rawMin = Math.min(rawMin, p.price);
-        rawMax = Math.max(rawMax, p.price);
-      }
+      rawMin = Math.min(rawMin, e.tip.price);
+      rawMax = Math.max(rawMax, e.tip.price);
+    } else {
+      rawMin = Math.min(rawMin, e.startPrice, e.endPrice);
+      rawMax = Math.max(rawMax, e.startPrice, e.endPrice);
     }
     if (!Number.isFinite(rawMin) || !Number.isFinite(rawMax) || rawMin === rawMax) {
       const mid = e.tip.price || e.startPrice || 1;
-      rawMin = mid * 0.998;
-      rawMax = mid * 1.002;
+      rawMin = mid * (1 - MIN_SPAN_FRAC);
+      rawMax = mid * (1 + MIN_SPAN_FRAC);
     }
-    rawMin = Math.min(rawMin, e.startPrice, e.endPrice, e.tip.price);
-    rawMax = Math.max(rawMax, e.startPrice, e.endPrice, e.tip.price);
-    if (!e.archive) {
-      rawMin = Math.min(rawMin, e.livePrice);
-      rawMax = Math.max(rawMax, e.livePrice);
-    }
-    const span = Math.max(rawMax - rawMin, (e.startPrice || 1) * 0.0015);
-    const targetMin = rawMin - span * Y_PAD_FRAC;
-    const targetMax = rawMax + span * Y_PAD_FRAC;
+
+    const mid = (rawMin + rawMax) / 2;
+    const natural = Math.max(rawMax - rawMin, Math.abs(mid) * MIN_SPAN_FRAC);
+    // Quiet → keep span tight so small moves fill the band (zoom in).
+    // Busy → expand with the natural range (zoom out). Extra pad when
+    // action exceeds the comfort band so spikes don't hug the edges.
+    const comfort = Math.abs(mid) * COMFORT_SPAN_FRAC;
+    const busyPad = natural > comfort ? Y_PAD_FRAC * 1.35 : Y_PAD_FRAC;
+    const span = natural;
+    const targetMin = mid - span / 2 - span * busyPad;
+    const targetMax = mid + span / 2 + span * busyPad;
 
     if (e.archive) {
       e.pMin = targetMin;
       e.pMax = targetMax;
     } else {
-      e.pMin += (targetMin - e.pMin) * RANGE_SMOOTH;
-      e.pMax += (targetMax - e.pMax) * RANGE_SMOOTH;
+      // Auto-zoom: react quickly when the visible range is shrinking
+      // (quiet market → tighten in so small moves read as material),
+      // ease more gently when it's growing (a spike → widen out smoothly).
+      const zoomingIn = (targetMax - targetMin) < (e.pMax - e.pMin);
+      const smooth = zoomingIn ? RANGE_SMOOTH_IN : RANGE_SMOOTH_OUT;
+      e.pMin += (targetMin - e.pMin) * smooth;
+      e.pMax += (targetMax - e.pMax) * smooth;
       if (!Number.isFinite(e.pMin) || !Number.isFinite(e.pMax) || e.pMin >= e.pMax) {
         e.pMin = targetMin;
         e.pMax = targetMax;
@@ -631,19 +742,32 @@ export default function SpatialTradingChart({
         const latest = e.ticks[e.ticks.length - 1];
         if (latest) e.livePrice = latest.price;
 
-        // Lagged playhead: sample along buffered ticks with Catmull-Rom look-ahead
+        // Lagged playhead: sample along buffered ticks. Tip TIME only moves
+        // forward with the wall clock — never allowed to decrease — so the
+        // path cannot reverse on X even if upstream ticks jitter.
         const chartNow = e.nowMs - CHART_LAG_MS;
-        const sampled = samplePriceAt(e.ticks, chartNow);
-        e.tip = sampled;
+        const sampleAt = Math.max(chartNow, e.tip.t);
+        const sampled = samplePriceAt(e.ticks, sampleAt);
         e.tipTarget = sampled;
+
+        const prevPrice = e.tip.price;
+        const easedPrice = Number.isFinite(prevPrice)
+          ? prevPrice + (sampled.price - prevPrice) * TIP_EASE
+          : sampled.price;
+        // Strictly non-decreasing tip time (X always advances or holds).
+        const nextT = Math.max(e.tip.t, chartNow, sampled.t);
+        e.tip = { t: nextT, price: easedPrice };
 
         const lastTrail = e.trail[e.trail.length - 1];
         const priceBase = Math.abs(e.tip.price) || 1;
         const movedEnough =
           !lastTrail ||
           Math.abs(e.tip.price - lastTrail.price) / priceBase > TRAIL_MIN_DIST_FRAC ||
-          Math.abs(e.tip.t - lastTrail.t) > 80;
-        if (movedEnough && e.nowMs - e.lastTrailPushMs >= TRAIL_MIN_MS) {
+          e.tip.t - lastTrail.t > 80;
+        // Only commit trail points that move forward in time — this is what
+        // ultimately prevents the drawn line from ever redrawing backward.
+        const movesForward = !lastTrail || e.tip.t > lastTrail.t;
+        if (movedEnough && movesForward && e.nowMs - e.lastTrailPushMs >= TRAIL_MIN_MS) {
           e.trail.push({ t: e.tip.t, price: e.tip.price });
           e.lastTrailPushMs = e.nowMs;
           e.trail = trimTrail(e.trail, e.nowMs);
@@ -729,12 +853,24 @@ export default function SpatialTradingChart({
 
       const pathSrc = archive ? e.archiveTicks : e.trail;
       const trailPts = pathSrc.filter((p) => p.t >= tMin - 1_000 && p.t <= tMax + 1_000);
-      const drawPts: { x: number; y: number }[] = trailPts.map((p) => ({
-        x: timeToX(p.t),
-        y: priceToY(p.price),
-      }));
+      const drawPts: { x: number; y: number }[] = [];
+      for (const p of trailPts) {
+        // Trail must already be time-sorted; skip any regressive point defensively.
+        const prev = drawPts[drawPts.length - 1];
+        const x = timeToX(p.t);
+        if (prev && x < prev.x) continue;
+        drawPts.push({ x, y: priceToY(p.price) });
+      }
       if (!archive) {
-        drawPts.push({ x: timeToX(e.tip.t), y: priceToY(e.tip.price) });
+        const tipX = timeToX(e.tip.t);
+        const tipY = priceToY(e.tip.price);
+        const prev = drawPts[drawPts.length - 1];
+        // Never let the tip draw left of the last committed point.
+        if (!prev || tipX >= prev.x) {
+          drawPts.push({ x: tipX, y: tipY });
+        } else {
+          drawPts.push({ x: prev.x, y: tipY });
+        }
       }
 
       if (drawPts.length >= 2) {
@@ -742,12 +878,12 @@ export default function SpatialTradingChart({
         ctx.lineWidth = 2.75;
         ctx.lineJoin = 'round';
         ctx.lineCap = 'round';
-        strokeSmoothPath(ctx, drawPts, archive ? 0.22 : 0.42);
+        strokeSmoothPath(ctx, drawPts, archive ? 0.22 : LIVE_PATH_TENSION);
         ctx.stroke();
         ctx.strokeStyle = lineColor;
         ctx.globalAlpha = 0.12;
         ctx.lineWidth = 8;
-        strokeSmoothPath(ctx, drawPts, archive ? 0.22 : 0.42);
+        strokeSmoothPath(ctx, drawPts, archive ? 0.22 : LIVE_PATH_TENSION);
         ctx.stroke();
         ctx.globalAlpha = 1;
       }

@@ -2,13 +2,14 @@ import type { NextApiRequest, NextApiResponse } from 'next';
 import { ASSET_CONFIG, fetchFastPrices } from '../../utils/fastPrice';
 import { readCachedPrices } from '../../utils/prices/redisPrices';
 
-/* Fallback prices used when all CEX sources are unreachable (e.g. local dev, network issues) */
+/* Fallback prices used when all CEX sources are unreachable (e.g. local dev, network issues).
+   Keep these close to recent spot so a degraded mode doesn't look "broken" vs live markets. */
 const FALLBACK_PRICES: Record<string, number> = {
-  AVAX: 25.0,
-  BNB: 600.0,
-  BTC: 65000.0,
-  ETH: 3500.0,
-  NEAR: 7.0,
+  AVAX: 6.5,
+  BNB: 570,
+  BTC: 65000,
+  ETH: 1900,
+  NEAR: 2.0,
 };
 
 function serializePrices(prices: Record<string, any>) {
