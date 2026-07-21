@@ -7,7 +7,7 @@ set -euo pipefail
 
 ACCOUNT_ID="$(aws sts get-caller-identity --query Account --output text | tr -d '\r')"
 REGION="${AWS_REGION:-ap-south-1}"
-REPO="${GITHUB_REPO:-crucie/clawX}"
+REPO="${GITHUB_REPO:-ClawXLabs/clawX}"
 ROLE_NAME="${GITHUB_DEPLOY_ROLE_NAME:-clawx-github-deploy}"
 OIDC_URL="https://token.actions.githubusercontent.com"
 OIDC_ARN="arn:aws:iam::${ACCOUNT_ID}:oidc-provider/token.actions.githubusercontent.com"

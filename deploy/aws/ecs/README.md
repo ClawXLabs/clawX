@@ -101,6 +101,8 @@ chmod +x deploy/aws/ecs/setup-github-oidc.sh
 
 Role ARN: `arn:aws:iam::123209654070:role/clawx-github-deploy`
 
+GitHub repo: **`ClawXLabs/clawX`** (set `GITHUB_REPO` if different).
+
 3. Log into GitHub CLI and set secret + `NEXT_PUBLIC_*` Variables:
 
 ```bash
