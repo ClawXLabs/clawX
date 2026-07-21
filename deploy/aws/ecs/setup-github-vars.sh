@@ -4,7 +4,7 @@
 #   ./deploy/aws/ecs/setup-github-vars.sh
 set -euo pipefail
 
-REPO="${GITHUB_REPO:-crucie/clawX}"
+REPO="${GITHUB_REPO:-ClawXLabs/clawX}"
 ROLE_ARN="${AWS_DEPLOY_ROLE_ARN:-arn:aws:iam::123209654070:role/clawx-github-deploy}"
 
 export PATH="/c/Program Files/GitHub CLI:${PATH:-}"
