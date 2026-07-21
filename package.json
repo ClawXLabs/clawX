@@ -21,7 +21,12 @@
     "dev": "node server.js",
     "dev:ui": "node scripts/dev-ui.js",
     "build": "next build",
-    "start": "node server.js"
+    "start": "node server.js",
+    "deploy:aws": "bash deploy/aws/ecs/deploy.sh",
+    "deploy:aws:stack": "bash deploy/aws/ecs/deploy.sh stack",
+    "deploy:aws:images": "bash deploy/aws/ecs/deploy.sh images",
+    "deploy:aws:sync": "bash deploy/aws/ecs/deploy.sh sync-env",
+    "deploy:aws:smoke": "bash deploy/aws/ecs/deploy.sh smoke"
   },
   "devDependencies": {
     "@nomicfoundation/hardhat-toolbox": "^4.0.0",

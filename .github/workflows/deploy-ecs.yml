@@ -1,0 +1,78 @@
+name: Deploy ClawX to ECS
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'pages/**'
+      - 'components/**'
+      - 'contexts/**'
+      - 'hooks/**'
+      - 'utils/**'
+      - 'scripts/**'
+      - 'server.js'
+      - 'package.json'
+      - 'package-lock.json'
+      - 'deploy/docker/**'
+      - 'deploy/aws/ecs/**'
+
+env:
+  AWS_REGION: ap-south-1
+  PROJECT_NAME: clawx
+  IMAGE_TAG: ${{ github.sha }}
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Login to Amazon ECR
+        id: ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build and push images
+        env:
+          REGISTRY: ${{ steps.ecr.outputs.registry }}
+        run: |
+          set -euo pipefail
+          for pair in \
+            "web:deploy/docker/Dockerfile.web" \
+            "price-fetcher:deploy/docker/Dockerfile.price-fetcher" \
+            "keeper:deploy/docker/Dockerfile.keeper" \
+            "agent-scheduler:deploy/docker/Dockerfile.agent-scheduler" \
+            "agent-worker:deploy/docker/Dockerfile.agent-worker"
+          do
+            name="${pair%%:*}"
+            file="${pair##*:}"
+            image="$REGISTRY/$PROJECT_NAME/$name:$IMAGE_TAG"
+            latest="$REGISTRY/$PROJECT_NAME/$name:latest"
+            docker build -f "$file" -t "$image" -t "$latest" .
+            docker push "$image"
+            docker push "$latest"
+          done
+
+      - name: Force ECS redeploy
+        run: |
+          CLUSTER="${PROJECT_NAME}-prod"
+          for svc in web price-fetcher keeper agent-scheduler agent-workers; do
+            aws ecs update-service \
+              --cluster "$CLUSTER" \
+              --service "$svc" \
+              --force-new-deployment \
+              --region "$AWS_REGION" >/dev/null
+            echo "Redeployed $svc"
+          done

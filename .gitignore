@@ -1,10 +1,19 @@
 # Dependencies
 node_modules/
 
-# Env and secrets
+# Env and secrets — never commit filled values
 .env
-.env.local
-.env.*.local
+.env.*
+!.env.example
+!.env.*.example
+deploy/aws/.env.aws
+deploy/aws/.env.production
+**/.env.aws
+**/credentials.json
+**/*secret*
+!**/*.example
+!**/.env.production.example
+!**/.env.aws.example
 
 # Next
 .next/
@@ -24,3 +33,18 @@ data/wallet-profiles.json
 # OS
 .DS_Store
 Thumbs.db
+
+# Local debug / session logs
+debug-*.log
+*.log
+
+# AWS CLI installer leftovers (do not commit)
+/aws/
+awscliv2.zip
+awscliv2.sig
+
+# ECS deploy artifacts (generated; may contain secrets)
+deploy/aws/ecs/outputs.json
+deploy/aws/ecs/.secret-payload.json
+deploy/aws/ecs/.task-*.json
+deploy/aws/ecs/.db-init-*.json

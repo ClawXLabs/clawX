@@ -1,0 +1,62 @@
+# ClawX web — Next.js + custom WebSocket gateway (server.js)
+FROM node:20-alpine AS deps
+WORKDIR /app
+COPY package.json package-lock.json ./
+RUN npm ci
+
+FROM node:20-alpine AS builder
+WORKDIR /app
+ENV NEXT_TELEMETRY_DISABLED=1
+COPY --from=deps /app/node_modules ./node_modules
+COPY package.json package-lock.json next.config.js tsconfig.json ./
+COPY pages ./pages
+COPY components ./components
+COPY contexts ./contexts
+COPY hooks ./hooks
+COPY utils ./utils
+COPY styles ./styles
+COPY public ./public
+COPY db ./db
+COPY server.js ./
+# Build-time public env placeholders (overridden at runtime by ECS)
+ARG NEXT_PUBLIC_CONTRACT_ADDRESS=
+ARG NEXT_PUBLIC_TUSDC_ADDRESS=
+ARG NEXT_PUBLIC_COLLATERAL_TOKEN_ADDRESS=
+ARG NEXT_PUBLIC_FUJI_RPC_URL=
+ARG NEXT_PUBLIC_TRADE_RELAY=true
+ARG NEXT_PUBLIC_WS_URL=
+ARG NEXT_PUBLIC_CHAIN_ID=43113
+ENV NEXT_PUBLIC_CONTRACT_ADDRESS=$NEXT_PUBLIC_CONTRACT_ADDRESS \
+    NEXT_PUBLIC_TUSDC_ADDRESS=$NEXT_PUBLIC_TUSDC_ADDRESS \
+    NEXT_PUBLIC_COLLATERAL_TOKEN_ADDRESS=$NEXT_PUBLIC_COLLATERAL_TOKEN_ADDRESS \
+    NEXT_PUBLIC_FUJI_RPC_URL=$NEXT_PUBLIC_FUJI_RPC_URL \
+    NEXT_PUBLIC_TRADE_RELAY=$NEXT_PUBLIC_TRADE_RELAY \
+    NEXT_PUBLIC_WS_URL=$NEXT_PUBLIC_WS_URL \
+    NEXT_PUBLIC_CHAIN_ID=$NEXT_PUBLIC_CHAIN_ID
+RUN npm run build
+
+FROM node:20-alpine AS runner
+WORKDIR /app
+ENV NODE_ENV=production \
+    NEXT_TELEMETRY_DISABLED=1 \
+    PORT=3000 \
+    HOST=0.0.0.0
+RUN addgroup -g 1001 -S nodejs && adduser -S nextjs -u 1001
+COPY --from=deps /app/node_modules ./node_modules
+COPY --from=builder /app/.next ./.next
+COPY --from=builder /app/public ./public
+COPY --from=builder /app/package.json ./package.json
+COPY --from=builder /app/next.config.js ./next.config.js
+COPY --from=builder /app/server.js ./server.js
+COPY --from=builder /app/pages ./pages
+COPY --from=builder /app/utils ./utils
+COPY --from=builder /app/components ./components
+COPY --from=builder /app/contexts ./contexts
+COPY --from=builder /app/hooks ./hooks
+COPY --from=builder /app/styles ./styles
+COPY --from=builder /app/db ./db
+USER nextjs
+EXPOSE 3000
+HEALTHCHECK --interval=30s --timeout=5s --start-period=60s --retries=3 \
+  CMD node -e "require('http').get('http://127.0.0.1:3000/api/health',r=>process.exit(r.statusCode===200?0:1)).on('error',()=>process.exit(1))"
+CMD ["node", "server.js"]
