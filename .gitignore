@@ -48,3 +48,4 @@ deploy/aws/ecs/outputs.json
 deploy/aws/ecs/.secret-payload.json
 deploy/aws/ecs/.task-*.json
 deploy/aws/ecs/.db-init-*.json
+deploy/aws/ecs/.oidc-*.json

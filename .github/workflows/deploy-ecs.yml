@@ -11,16 +11,20 @@ on:
       - 'hooks/**'
       - 'utils/**'
       - 'scripts/**'
+      - 'db/**'
       - 'server.js'
       - 'package.json'
       - 'package-lock.json'
+      - 'next.config.js'
       - 'deploy/docker/**'
       - 'deploy/aws/ecs/**'
+      - '.github/workflows/deploy-ecs.yml'
 
 env:
   AWS_REGION: ap-south-1
   PROJECT_NAME: clawx
   IMAGE_TAG: ${{ github.sha }}
+  APP_SMOKE_URL: https://app.clawxlab.xyz
 
 jobs:
   build-and-deploy:
@@ -47,6 +51,13 @@ jobs:
       - name: Build and push images
         env:
           REGISTRY: ${{ steps.ecr.outputs.registry }}
+          NEXT_PUBLIC_CONTRACT_ADDRESS: ${{ vars.NEXT_PUBLIC_CONTRACT_ADDRESS }}
+          NEXT_PUBLIC_TUSDC_ADDRESS: ${{ vars.NEXT_PUBLIC_TUSDC_ADDRESS }}
+          NEXT_PUBLIC_COLLATERAL_TOKEN_ADDRESS: ${{ vars.NEXT_PUBLIC_COLLATERAL_TOKEN_ADDRESS }}
+          NEXT_PUBLIC_FUJI_RPC_URL: ${{ vars.NEXT_PUBLIC_FUJI_RPC_URL }}
+          NEXT_PUBLIC_TRADE_RELAY: ${{ vars.NEXT_PUBLIC_TRADE_RELAY }}
+          NEXT_PUBLIC_WS_URL: ${{ vars.NEXT_PUBLIC_WS_URL }}
+          NEXT_PUBLIC_CHAIN_ID: ${{ vars.NEXT_PUBLIC_CHAIN_ID }}
         run: |
           set -euo pipefail
           for pair in \
@@ -60,7 +71,19 @@ jobs:
             file="${pair##*:}"
             image="$REGISTRY/$PROJECT_NAME/$name:$IMAGE_TAG"
             latest="$REGISTRY/$PROJECT_NAME/$name:latest"
-            docker build -f "$file" -t "$image" -t "$latest" .
+            if [ "$name" = "web" ]; then
+              docker build -f "$file" \
+                --build-arg "NEXT_PUBLIC_CONTRACT_ADDRESS=${NEXT_PUBLIC_CONTRACT_ADDRESS:-}" \
+                --build-arg "NEXT_PUBLIC_TUSDC_ADDRESS=${NEXT_PUBLIC_TUSDC_ADDRESS:-}" \
+                --build-arg "NEXT_PUBLIC_COLLATERAL_TOKEN_ADDRESS=${NEXT_PUBLIC_COLLATERAL_TOKEN_ADDRESS:-}" \
+                --build-arg "NEXT_PUBLIC_FUJI_RPC_URL=${NEXT_PUBLIC_FUJI_RPC_URL:-}" \
+                --build-arg "NEXT_PUBLIC_TRADE_RELAY=${NEXT_PUBLIC_TRADE_RELAY:-true}" \
+                --build-arg "NEXT_PUBLIC_WS_URL=${NEXT_PUBLIC_WS_URL:-}" \
+                --build-arg "NEXT_PUBLIC_CHAIN_ID=${NEXT_PUBLIC_CHAIN_ID:-43113}" \
+                -t "$image" -t "$latest" .
+            else
+              docker build -f "$file" -t "$image" -t "$latest" .
+            fi
             docker push "$image"
             docker push "$latest"
           done
@@ -76,3 +99,20 @@ jobs:
               --region "$AWS_REGION" >/dev/null
             echo "Redeployed $svc"
           done
+
+      - name: Smoke health check
+        run: |
+          set -euo pipefail
+          URL="${APP_SMOKE_URL}/api/health"
+          echo "Waiting for $URL ..."
+          for i in $(seq 1 24); do
+            if curl -fsS --max-time 10 "$URL" | grep -q '"ok":true'; then
+              echo "Smoke OK"
+              curl -fsS --max-time 10 "$URL"
+              exit 0
+            fi
+            echo "Attempt $i/24 — not ready yet"
+            sleep 10
+          done
+          echo "Smoke check failed after ~4 minutes"
+          exit 1
