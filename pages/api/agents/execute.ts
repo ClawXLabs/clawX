@@ -11,6 +11,7 @@ import {
   getWalletLimits,
   checkTxLimit,
 } from '../../../utils/agents/walletLimits';
+import { resolveMarketTradeSize } from '../../../utils/agents/marketCaps';
 
 const MARKET_ABI = [
   'function owner() view returns (address)',
@@ -65,14 +66,19 @@ export default async function handler(req, res) {
       txUsed: txGate.buys,
     });
   }
+  const sized = resolveMarketTradeSize(enrollment, symbol);
+  if (!sized.ok) {
+    return res.status(400).json({ error: sized.error });
+  }
+  const tradeSizeTusdc = sized.tradeSizeTusdc;
+
   if (!limits.agent_spend_unlimited) {
     const spendCap = Number(limits.agent_spend_limit_tusdc);
     if (!Number.isFinite(spendCap) || spendCap <= 0) {
       return res.status(403).json({ error: 'Agent spending is disabled for this wallet' });
     }
     const volume = await getAgentBuyVolumeTusdc(user);
-    const nextTrade = Number(enrollment.tradeSizeTusdc || 0);
-    if (volume + nextTrade > spendCap + 1e-9) {
+    if (volume + tradeSizeTusdc > spendCap + 1e-9) {
       return res.status(403).json({
         error: `Agent spend limit reached (${spendCap} TUSDC)`,
         spentTusdc: volume,
@@ -109,7 +115,7 @@ export default async function handler(req, res) {
     return res.status(400).json({ error: delegateCheck.error });
   }
 
-  const amountIn = BigInt(enrollment.tradeSizeRaw || '0');
+  const amountIn = ethers.parseUnits(String(tradeSizeTusdc), 6);
   const spent = BigInt(enrollment.delegateSpentRaw || '0');
   const max = BigInt(enrollment.delegateMaxRaw || '0');
   if (amountIn <= 0n || spent + amountIn > max) {
@@ -143,7 +149,7 @@ export default async function handler(req, res) {
       action: 'BUY',
       side: isUp ? 'UP' : 'DOWN',
       symbol,
-      amountTusdc: enrollment.tradeSizeTusdc,
+      amountTusdc: tradeSizeTusdc,
       hash: tx.hash,
       roundId: Number(roundId),
       agentId: enrollment.agentId,
