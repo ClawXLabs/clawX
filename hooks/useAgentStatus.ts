@@ -13,6 +13,7 @@ export interface TradeRow {
   amountTusdc: number;
   hash?: string;
   roundId?: number;
+  assetId?: number;
   outcome?: 'win' | 'loss' | 'pending' | null;
   settledAt?: number;
   outcomeNote?: string;
@@ -49,6 +50,7 @@ export interface PendingSettlement {
   hash: string;
   placedAt: number;
   waitingSec: number;
+  assetId?: number;
 }
 
 export interface MatchRow {
@@ -62,6 +64,7 @@ export interface MatchRow {
   at: number | string;
   settledAt?: number;
   outcomeNote?: string;
+  assetId?: number;
 }
 
 export interface AgentStatusData {
@@ -70,7 +73,13 @@ export interface AgentStatusData {
   agent?: { id?: string; name: string; emoji: string; handle: string; color: string };
   aum?: number;
   returnPct?: number;
-  openPositions?: Array<{ roundId: string; symbol: string; roundNumber: number; side: string }>;
+  openPositions?: Array<{
+    roundId: string | number;
+    symbol: string;
+    roundNumber: number;
+    side: string;
+    assetId?: number;
+  }>;
   tradeLog?: TradeRow[];
   enrichedTradeLog?: TradeRow[];
   matchHistory?: MatchRow[];

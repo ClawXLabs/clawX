@@ -1,4 +1,6 @@
+import Link from 'next/link';
 import type { MatchRow } from '../../hooks/useAgentStatus';
+import { marketTradePath } from '../../utils/marketLink';
 
 const SNOWTRACE = 'https://testnet.snowtrace.io/tx/';
 
@@ -53,7 +55,21 @@ export default function MatchHistoryPanel({ open, filter, matches, onClose }: Ma
                 <li key={`${m.roundId}-${m.side}-${m.at}`} style={{ border: '1px solid rgba(13,11,8,0.15)', padding: '12px 14px' }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
                     <span style={{ ...S.mono, fontSize: 12, fontWeight: 700, color: '#0D0B08' }}>
-                      {m.symbol} · {m.side} · R#{m.roundId}
+                      {(() => {
+                        const href = marketTradePath({
+                          assetId: m.assetId,
+                          symbol: m.symbol,
+                          roundId: m.roundId,
+                        });
+                        const label = `${m.symbol} · ${m.side} · R#${m.roundId}`;
+                        return href ? (
+                          <Link href={href} style={{ color: '#0D0B08', textDecoration: 'underline', textUnderlineOffset: 3 }}>
+                            {label} ↗
+                          </Link>
+                        ) : (
+                          label
+                        );
+                      })()}
                     </span>
                     <span style={{
                       ...S.mono, fontSize: 9, fontWeight: 700,

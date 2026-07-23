@@ -1,4 +1,6 @@
+import Link from 'next/link';
 import type { PendingSettlement } from '../../hooks/useAgentStatus';
+import { marketTradePath } from '../../utils/marketLink';
 
 const SNOWTRACE = 'https://testnet.snowtrace.io/tx/';
 
@@ -43,7 +45,21 @@ export default function PendingSettlementsPanel({ items }: PendingSettlementsPan
         >
           <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
             <span style={{ ...S.mono, fontSize: 12, fontWeight: 700, color: '#0D0B08' }}>
-              {item.symbol} · {item.side} · R#{item.roundId}
+              {(() => {
+                const href = marketTradePath({
+                  assetId: item.assetId,
+                  symbol: item.symbol,
+                  roundId: item.roundId,
+                });
+                const label = `${item.symbol} · ${item.side} · R#${item.roundId}`;
+                return href ? (
+                  <Link href={href} style={{ color: '#0D0B08', textDecoration: 'underline', textUnderlineOffset: 3 }}>
+                    {label} ↗
+                  </Link>
+                ) : (
+                  label
+                );
+              })()}
             </span>
             <span style={{ ...S.mono, fontSize: 9, fontWeight: 700, color: '#F69D39', letterSpacing: '0.1em' }}>
               SETTLEMENT PENDING
