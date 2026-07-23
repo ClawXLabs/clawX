@@ -6,8 +6,10 @@ import type { AgentData } from './AgentCard';
 import AgentIcon from './AgentIcon';
 import AgentBadgeRow from './AgentBadgeRow';
 import AgentSwitchModal from './AgentSwitchModal';
+import AgentFeed from './AgentFeed';
 import { useAgentEnrollment } from '../../hooks/useAgentEnrollment';
 import { clearAgentStatusCache } from '../../hooks/useAgentStatus';
+import { useAgentFeedBroadcast } from '../../hooks/useAgentFeedBroadcast';
 import { readBrowserCache, writeBrowserCache } from '../../utils/browserCache';
 import { marketTradePath } from '../../utils/marketLink';
 
@@ -45,6 +47,7 @@ function redBtn(solid = true): React.CSSProperties {
 export default function AgentsLobby() {
   const router = useRouter();
   const { enrolled, status, account, refresh } = useAgentEnrollment(4000);
+  const { messages: feed, connected, error: feedError } = useAgentFeedBroadcast({ limit: 50 });
   const [agents, setAgents] = useState<AgentData[]>([]);
   const [loading, setLoading] = useState(true);
   const [pausing, setPausing] = useState(false);
@@ -463,6 +466,10 @@ export default function AgentsLobby() {
           No active agent — pick a badge above to deploy.
         </section>
       ) : null}
+
+      <div style={{ marginTop: 28 }}>
+        <AgentFeed messages={feed} connected={connected} error={feedError} />
+      </div>
     </div>
   );
 }
