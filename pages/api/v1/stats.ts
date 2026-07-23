@@ -45,17 +45,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
   try {
     const [tradeStats, walletStats, agentStats, faucetStats, activity] = await Promise.all([
-      query<{
-        total_transactions: number;
-        buy_count: number;
-        sell_count: number;
-        total_volume_tusdc: string;
-        transactions_24h: number;
-        volume_24h_tusdc: string;
-        trading_wallets: number;
-        first_trade_at: Date | null;
-        last_trade_at: Date | null;
-      }>(`
+      query(`
         SELECT
           COUNT(*)::int AS total_transactions,
           COUNT(*) FILTER (WHERE action = 'BUY')::int AS buy_count,
@@ -68,11 +58,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           MAX(created_at) AS last_trade_at
         FROM trade_log
       `),
-      query<{
-        enrolled_wallets: number;
-        profile_wallets: number;
-        total_wallets: number;
-      }>(`
+      query(`
         SELECT
           (SELECT COUNT(*)::int FROM enrollments) AS enrolled_wallets,
           (SELECT COUNT(*)::int FROM wallet_profiles) AS profile_wallets,
@@ -84,12 +70,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
              SELECT LOWER(wallet) FROM trade_log
            ) u) AS total_wallets
       `),
-      query<{
-        active_agents: number;
-        paused_agents: number;
-        retired_agents: number;
-        total_enrollments: number;
-      }>(`
+      query(`
         SELECT
           COUNT(*) FILTER (WHERE status = 'active' AND paused = false)::int AS active_agents,
           COUNT(*) FILTER (WHERE status = 'active' AND paused = true)::int AS paused_agents,
@@ -97,10 +78,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           COUNT(*)::int AS total_enrollments
         FROM enrollments
       `),
-      query<{
-        faucet_claims: number;
-        faucet_wallets: number;
-      }>(`
+      query(`
         SELECT
           COALESCE(SUM(claim_count), 0)::int AS faucet_claims,
           COUNT(*)::int AS faucet_wallets
@@ -108,7 +86,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       `).catch(() => ({
         rows: [{ faucet_claims: 0, faucet_wallets: 0 }],
       })),
-      query<{ symbol: string; trades: number; volume_tusdc: string }>(`
+      query(`
         SELECT
           COALESCE(NULLIF(UPPER(symbol), ''), 'UNKNOWN') AS symbol,
           COUNT(*)::int AS trades,
