@@ -6,6 +6,7 @@ import { outcomeJournalText } from './chatter.js';
 import { readOpenPositions } from './stats.js';
 import {
   appendFeedMessage,
+  applyPendingControlIfReady,
   getDisplayName,
   getEnrollment,
   setEnrollment,
@@ -99,6 +100,24 @@ export function createAgentTickProcessor(options = {}) {
       let enrollment = await getEnrollment(wallet);
       if (!enrollment || enrollment.status !== 'active') return { skipped: 'inactive' };
       enrollment = await syncLessons(contract, enrollment);
+
+      // Deferred kill/switch: stop new trades; apply when open markets clear
+      if (enrollment.pendingControl?.timing === 'next_market') {
+        const open = await readOpenPositions(provider, wallet, contractAddress);
+        const applied = await applyPendingControlIfReady(wallet, {
+          openPositionCount: open.length,
+        });
+        if (applied.applied === 'kill') {
+          return { skipped: 'killed', lessonsSynced: true };
+        }
+        if (applied.applied === 'switch_ready') {
+          return { skipped: 'switch_ready', lessonsSynced: true };
+        }
+        enrollment = applied.enrollment || enrollment;
+        await setEnrollment(wallet, enrollment);
+        return { skipped: 'pending_control', lessonsSynced: true, open: open.length };
+      }
+
       if (enrollment.paused) {
         await setEnrollment(wallet, enrollment);
         return { skipped: 'paused', lessonsSynced: true };

@@ -192,7 +192,93 @@ export async function setAgentPaused(wallet, paused) {
     ...row,
     paused: Boolean(paused),
     pausedAt: paused ? Math.floor(Date.now() / 1000) : null,
+    // Clear pending kill/switch if user manually resumes
+    ...(paused === false ? { pendingControl: null } : {}),
   });
+}
+
+/**
+ * Schedule or apply kill / switch.
+ * timing: 'immediate' | 'next_market'
+ * - immediate kill → retire now
+ * - next_market → stop new trades; apply when open positions + pending outcomes clear
+ * - immediate switch → retire now (caller navigates to deploy)
+ * - next_market switch → stop new trades; when clear, pause + ready=true for UI to finish deploy
+ */
+export async function setPendingControl(wallet, control) {
+  const row = await getEnrollment(wallet);
+  if (!row || row.status !== 'active') return null;
+  const now = Math.floor(Date.now() / 1000);
+  const timing = control?.timing === 'next_market' ? 'next_market' : 'immediate';
+  const action = control?.action === 'switch' ? 'switch' : 'kill';
+
+  if (timing === 'immediate' && action === 'kill') {
+    await retireEnrollment(wallet);
+    return { applied: true, action: 'kill', timing, enrollment: null };
+  }
+
+  if (timing === 'immediate' && action === 'switch') {
+    await retireEnrollment(wallet);
+    return {
+      applied: true,
+      action: 'switch',
+      timing,
+      targetAgentId: control?.targetAgentId || null,
+      enrollment: null,
+    };
+  }
+
+  const pendingControl = {
+    action,
+    timing: 'next_market',
+    targetAgentId: action === 'switch' ? control?.targetAgentId || null : null,
+    requestedAt: now,
+    ready: false,
+  };
+
+  const enrollment = await setEnrollment(wallet, {
+    ...row,
+    pendingControl,
+  });
+  return { applied: false, action, timing: 'next_market', enrollment, pendingControl };
+}
+
+export async function clearPendingControl(wallet) {
+  const row = await getEnrollment(wallet);
+  if (!row || row.status !== 'active') return null;
+  return setEnrollment(wallet, { ...row, pendingControl: null });
+}
+
+/** Apply deferred kill/switch once markets have cleared. */
+export async function applyPendingControlIfReady(wallet, { openPositionCount = 0 } = {}) {
+  const row = await getEnrollment(wallet);
+  if (!row || row.status !== 'active' || !row.pendingControl) return { changed: false, enrollment: row };
+  if (row.pendingControl.timing !== 'next_market') return { changed: false, enrollment: row };
+
+  const pendingOutcomes = (row.pendingOutcomes || []).length;
+  if (openPositionCount > 0 || pendingOutcomes > 0) {
+    return { changed: false, enrollment: row };
+  }
+
+  const { action, targetAgentId } = row.pendingControl;
+  if (action === 'kill') {
+    await retireEnrollment(wallet);
+    return { changed: true, applied: 'kill', enrollment: null };
+  }
+
+  // Switch: pause and mark ready so the user can finish deploy with a fresh signature
+  const enrollment = await setEnrollment(wallet, {
+    ...row,
+    paused: true,
+    pausedAt: Math.floor(Date.now() / 1000),
+    pendingControl: {
+      ...row.pendingControl,
+      ready: true,
+      readyAt: Math.floor(Date.now() / 1000),
+      targetAgentId: targetAgentId || null,
+    },
+  });
+  return { changed: true, applied: 'switch_ready', enrollment };
 }
 
 export async function updateTradeLogOutcome(wallet, roundId, side, outcome, extra = {}) {

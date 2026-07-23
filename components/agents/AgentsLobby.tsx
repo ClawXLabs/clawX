@@ -44,7 +44,7 @@ export default function AgentsLobby() {
   const [agents, setAgents] = useState<AgentData[]>([]);
   const [loading, setLoading] = useState(true);
   const [pausing, setPausing] = useState(false);
-  const [switchOpen, setSwitchOpen] = useState(false);
+  const [modalMode, setModalMode] = useState<'switch' | 'kill' | null>(null);
 
   useLayoutEffect(() => {
     const cached = readBrowserCache<{ agents: AgentData[] }>(CATALOG_NS);
@@ -85,11 +85,28 @@ export default function AgentsLobby() {
   const tr = status?.trackRecord;
   const isPaused = !!delegate?.paused;
   const needsRedeploy = !!delegate?.needsRedeploy;
-  const statusColor = needsRedeploy ? RED : isPaused ? '#F69D39' : '#27AE60';
-  const statusText = needsRedeploy ? 'Action needed' : isPaused ? 'Paused' : 'Live';
+  const pending = status?.pendingControl;
+  const statusColor = needsRedeploy
+    ? RED
+    : pending
+      ? '#F69D39'
+      : isPaused
+        ? '#F69D39'
+        : '#27AE60';
+  const statusText = needsRedeploy
+    ? 'Action needed'
+    : pending
+      ? pending.ready
+        ? 'Ready'
+        : pending.action === 'kill'
+          ? 'Killing after markets'
+          : 'Switching after markets'
+      : isPaused
+        ? 'Paused'
+        : 'Live';
 
   const togglePause = async () => {
-    if (!account || needsRedeploy) return;
+    if (!account || needsRedeploy || pending) return;
     setPausing(true);
     try {
       await fetch('/api/agents/pause', {
@@ -107,10 +124,12 @@ export default function AgentsLobby() {
     <div style={{ maxWidth: 1280, margin: '0 auto', padding: '28px 24px 64px' }}>
       {account ? (
         <AgentSwitchModal
-          open={switchOpen}
+          open={!!modalMode}
+          mode={modalMode || 'switch'}
           wallet={account}
           activeAgentId={agent?.id}
-          onClose={() => setSwitchOpen(false)}
+          onClose={() => setModalMode(null)}
+          onDone={() => refresh({ silent: true })}
         />
       ) : null}
 
@@ -148,6 +167,40 @@ export default function AgentsLobby() {
           <span style={redBtn(true)}>{enrolled ? 'Dashboard' : 'New Agent'}</span>
         </Link>
       </header>
+
+      {/* Always show all 4 agents — running agent first + highlighted */}
+      <div style={{ marginBottom: 12 }}>
+        <h2 style={{ ...S.serif, fontSize: 18, fontWeight: 900, color: '#0D0B08', margin: 0 }}>
+          {enrolled ? 'Your agents' : 'Choose an agent'}
+        </h2>
+        <p style={{ ...S.mono, fontSize: 10, color: '#888', margin: '6px 0 0' }}>
+          {loading
+            ? 'Loading…'
+            : enrolled
+              ? 'Running agent is highlighted first · use Switch to change'
+              : 'One row on large screens · tap a badge to start'}
+        </p>
+      </div>
+      <div style={{ marginBottom: 28 }}>
+        <AgentBadgeRow
+          agents={agents}
+          loading={loading}
+          activeId={enrolled ? agent?.id : null}
+          activeFirst={!!enrolled}
+          onSelect={(a) => {
+            if (!account) {
+              window.location.href = `/agents/new?agent=${encodeURIComponent(a.id)}`;
+              return;
+            }
+            if (enrolled) {
+              if (a.id === agent?.id) return;
+              setModalMode('switch');
+              return;
+            }
+            window.location.href = `/agents/new?agent=${encodeURIComponent(a.id)}`;
+          }}
+        />
+      </div>
 
       {account && enrolled && status ? (
         <section style={{ border: '2px solid #0D0B08', padding: '22px 22px', marginBottom: 28 }}>
@@ -211,19 +264,44 @@ export default function AgentsLobby() {
               </div>
             </div>
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-              {!needsRedeploy ? (
+              {!needsRedeploy && !pending ? (
                 <button type="button" onClick={togglePause} disabled={pausing} style={redBtn(false)}>
                   {pausing ? '…' : isPaused ? 'Resume' : 'Pause'}
                 </button>
               ) : null}
-              <button type="button" onClick={() => setSwitchOpen(true)} style={redBtn(false)}>
+              <button type="button" onClick={() => setModalMode('switch')} style={redBtn(false)}>
                 Switch
+              </button>
+              <button type="button" onClick={() => setModalMode('kill')} style={redBtn(true)}>
+                Kill
               </button>
               <Link href="/agents/dashboard" style={{ textDecoration: 'none' }}>
                 <span style={redBtn(true)}>Open Dashboard</span>
               </Link>
             </div>
           </div>
+
+          {pending ? (
+            <div
+              style={{
+                border: `1px solid ${RED}`,
+                background: 'rgba(192,57,43,0.06)',
+                padding: '12px 14px',
+                marginBottom: 16,
+                ...S.mono,
+                fontSize: 12,
+                color: RED,
+              }}
+            >
+              {pending.ready
+                ? pending.action === 'switch'
+                  ? 'Open markets cleared — open Switch to finish deploying the new agent.'
+                  : 'Open markets cleared — confirm Kill to retire this agent.'
+                : pending.action === 'switch'
+                  ? 'Switch scheduled after current markets. No new trades until then.'
+                  : 'Kill scheduled after current markets. No new trades until then.'}
+            </div>
+          ) : null}
 
           <div
             style={{
@@ -302,41 +380,20 @@ export default function AgentsLobby() {
             </div>
           ) : null}
         </section>
-      ) : (
-        <>
-          {account && !enrolled ? (
-            <section
-              style={{
-                border: `1px solid ${RED}`,
-                background: 'rgba(192,57,43,0.04)',
-                padding: '14px 16px',
-                marginBottom: 24,
-                ...S.mono,
-                fontSize: 12,
-                color: RED,
-              }}
-            >
-              No active agent — pick a badge below to deploy.
-            </section>
-          ) : null}
-
-          <div style={{ marginBottom: 12 }}>
-            <h2 style={{ ...S.serif, fontSize: 18, fontWeight: 900, color: '#0D0B08', margin: 0 }}>
-              Choose an agent
-            </h2>
-            <p style={{ ...S.mono, fontSize: 10, color: '#888', margin: '6px 0 0' }}>
-              {loading ? 'Loading…' : 'One row on large screens · tap a badge to start'}
-            </p>
-          </div>
-          <AgentBadgeRow
-            agents={agents}
-            loading={loading}
-            onSelect={(a) => {
-              window.location.href = `/agents/new?agent=${encodeURIComponent(a.id)}`;
-            }}
-          />
-        </>
-      )}
+      ) : account && !enrolled ? (
+        <section
+          style={{
+            border: `1px solid ${RED}`,
+            background: 'rgba(192,57,43,0.04)',
+            padding: '14px 16px',
+            ...S.mono,
+            fontSize: 12,
+            color: RED,
+          }}
+        >
+          No active agent — pick a badge above to deploy.
+        </section>
+      ) : null}
     </div>
   );
 }
