@@ -89,9 +89,6 @@ export function ActiveMarketsPanel({ currentAssetId }: ActiveMarketsPanelProps) 
               <span style={{ ...NP.serif, fontSize: 17, fontWeight: 900, color: isActive ? selectedText : NP.ink }}>
                 {m.symbol}
               </span>
-              <span style={{ ...NP.mono, fontSize: 10, color: isActive ? selectedSubText : '#5A554E' }}>
-                #{m.roundNumber}
-              </span>
             </div>
             {isActive && (
               <span style={{ ...NP.mono, fontSize: 9, letterSpacing: '0.1em', color: isActive ? selectedSubText : '#888' }}>

@@ -23,6 +23,7 @@ interface MarketRow {
   name: string;
   color: string;
   roundNumber: number;
+  startTime: number;
   resolved: boolean;
   remaining: number;
   startPrice: number;
@@ -60,90 +61,97 @@ const S = {
   } as React.CSSProperties,
 };
 
-/* ─── Price History Chart ───────────────────────────────────────── */
+/* ─── Price History Chart (current round only, card background) ─── */
 
 function PriceChart({
-  history, startPrice, accent, width = 240, height = 56,
+  history,
+  startPrice,
+  startTimeSec,
+  width = 400,
+  height = 220,
 }: {
   history: PricePoint[];
   startPrice: number;
-  accent: string;
+  startTimeSec: number;
   width?: number;
   height?: number;
 }) {
-  const base = startPrice;
-  const prices = history.map(p => p.price);
+  const startMs = startTimeSec > 0 ? startTimeSec * 1000 : 0;
+  // Only the current running market window
+  const roundPts =
+    startMs > 0 ? history.filter((p) => p.t >= startMs) : history.slice(-40);
+  const series =
+    roundPts.length >= 2
+      ? roundPts
+      : roundPts.length === 1
+        ? [{ t: startMs || Date.now() - 1000, price: startPrice }, roundPts[0]]
+        : [
+            { t: startMs || Date.now() - 60_000, price: startPrice },
+            { t: Date.now(), price: startPrice },
+          ];
 
-  if (prices.length < 2) {
-    const mid = height / 2;
-    return (
-      <svg viewBox={`0 0 ${width} ${height}`} style={{ width: '100%', height }} preserveAspectRatio="none">
-        <line x1="0" y1={mid} x2={width} y2={mid} stroke="#ccc" strokeWidth="1" strokeDasharray="3 3" />
-        <text x={width / 2} y={mid - 5} textAnchor="middle" fill="#aaa" fontSize="7" fontFamily="Courier New, monospace">
-          Accumulating data…
-        </text>
-      </svg>
-    );
-  }
-
+  const prices = series.map((p) => p.price);
+  const base = startPrice > 0 ? startPrice : prices[0];
   const allValues = [...prices, base];
   const lo = Math.min(...allValues);
   const hi = Math.max(...allValues);
-  const pad = Math.max((hi - lo) * 0.2, base * 0.001, 0.01);
+  const pad = Math.max((hi - lo) * 0.25, base * 0.0008, 0.01);
   const min = lo - pad;
   const max = hi + pad;
   const range = max - min || 1;
 
-  const PAD_L = 2; const PAD_R = 2;
+  const PAD_L = 0;
+  const PAD_R = 0;
   const W = width - PAD_L - PAD_R;
-
-  const toX = (i: number) => PAD_L + (i / (prices.length - 1)) * W;
-  const toY = (v: number) => height - 4 - ((v - min) / range) * (height - 8);
+  const toX = (i: number) => PAD_L + (i / Math.max(1, series.length - 1)) * W;
+  const toY = (v: number) => height - 6 - ((v - min) / range) * (height - 12);
 
   const baselineY = toY(base);
   const currentPrice = prices[prices.length - 1];
   const isUp = currentPrice >= base;
-  const fillColor = isUp ? 'rgba(39,174,96,0.12)' : 'rgba(192,57,43,0.10)';
+  const fillColor = isUp ? 'rgba(39,174,96,0.14)' : 'rgba(192,57,43,0.12)';
   const lineColor = isUp ? '#27AE60' : '#C0392B';
 
-  const linePath = buildSmoothPath(history, toX, toY);
+  const linePath = buildSmoothPath(series, toX, toY);
   const areaD = linePath
-    ? `${linePath} L ${toX(history.length - 1).toFixed(1)},${baselineY.toFixed(1)} L ${toX(0).toFixed(1)},${baselineY.toFixed(1)} Z`
+    ? `${linePath} L ${toX(series.length - 1).toFixed(1)},${height} L ${toX(0).toFixed(1)},${height} Z`
     : '';
 
   return (
-    <svg viewBox={`0 0 ${width} ${height}`} style={{ width: '100%', height }} preserveAspectRatio="none" aria-hidden>
-      {/* Area fill between price and baseline */}
-      {areaD && <path d={areaD} fill={fillColor} />}
-
-      {/* Baseline (start price) */}
+    <svg
+      viewBox={`0 0 ${width} ${height}`}
+      style={{ width: '100%', height: '100%', display: 'block' }}
+      preserveAspectRatio="none"
+      aria-hidden
+    >
+      {areaD ? <path d={areaD} fill={fillColor} /> : null}
       <line
-        x1={PAD_L} y1={baselineY.toFixed(1)}
-        x2={width - PAD_R} y2={baselineY.toFixed(1)}
-        stroke="#0D0B08" strokeWidth="0.75" strokeDasharray="3 2" opacity="0.4"
+        x1={PAD_L}
+        y1={baselineY}
+        x2={width - PAD_R}
+        y2={baselineY}
+        stroke="#0D0B08"
+        strokeWidth="0.8"
+        strokeDasharray="4 3"
+        opacity="0.25"
       />
-
-      {/* Price curve */}
-      {linePath && (
+      {linePath ? (
         <path
           d={linePath}
           fill="none"
           stroke={lineColor}
-          strokeWidth="1.5"
+          strokeWidth="2"
           strokeLinejoin="round"
           strokeLinecap="round"
+          opacity="0.85"
         />
-      )}
-
-      {/* Current price dot */}
+      ) : null}
       <circle
-        cx={toX(prices.length - 1).toFixed(1)}
-        cy={toY(currentPrice).toFixed(1)}
-        r="2.5" fill={lineColor}
+        cx={toX(series.length - 1)}
+        cy={toY(currentPrice)}
+        r="3"
+        fill={lineColor}
       />
-
-      {/* "OPEN" label at baseline left */}
-      <text x={PAD_L + 2} y={baselineY - 3} fill="#888" fontSize="6" fontFamily="Courier New, monospace">OPEN</text>
     </svg>
   );
 }
@@ -151,12 +159,12 @@ function PriceChart({
 function buildSmoothPath(
   points: PricePoint[],
   toX: (i: number) => number,
-  toY: (p: number) => number,
+  toY: (p: number) => number
 ): string {
   if (points.length < 2) return '';
   const n = points.length;
   const xs = points.map((_, i) => toX(i));
-  const ys = points.map(p => toY(p.price));
+  const ys = points.map((p) => toY(p.price));
 
   let d = `M ${xs[0].toFixed(1)},${ys[0].toFixed(1)}`;
   for (let i = 0; i < n - 1; i++) {
@@ -184,13 +192,11 @@ function PoolBar({ upOdds }: { upOdds: number }) {
   const downOdds = 100 - upOdds;
   return (
     <div style={{ width: '100%' }}>
-      {/* Labels */}
       <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
         <span style={{ ...S.mono, fontSize: 11, fontWeight: 700, color: '#27AE60' }}>▲ UP {upOdds}%</span>
         <span style={{ ...S.mono, fontSize: 11, fontWeight: 700, color: '#C0392B' }}>DOWN {downOdds}% ▼</span>
       </div>
-      {/* Bar */}
-      <div style={{ display: 'flex', height: 6, width: '100%', overflow: 'hidden' }}>
+      <div style={{ display: 'flex', height: 5, width: '100%', overflow: 'hidden' }}>
         <div style={{ width: `${upOdds}%`, background: '#27AE60', transition: 'width 0.6s ease' }} />
         <div style={{ width: `${downOdds}%`, background: '#C0392B', transition: 'width 0.6s ease' }} />
       </div>
@@ -198,27 +204,62 @@ function PoolBar({ upOdds }: { upOdds: number }) {
   );
 }
 
-/* ─── Countdown ─────────────────────────────────────────────────── */
+/* ─── Live timer (top-right) ─────────────────────────────────────── */
 
-function Countdown({ remaining }: { remaining: number }) {
+function LiveTimer({ remaining, open, expired }: { remaining: number; open: boolean; expired: boolean }) {
   const [secs, setSecs] = useState(remaining);
-  useEffect(() => { setSecs(remaining); }, [remaining]);
+  useEffect(() => {
+    setSecs(remaining);
+  }, [remaining]);
   useEffect(() => {
     if (secs <= 0) return;
-    const t = setTimeout(() => setSecs(s => Math.max(0, s - 1)), 1000);
+    const t = setTimeout(() => setSecs((s) => Math.max(0, s - 1)), 1000);
     return () => clearTimeout(t);
   }, [secs]);
-  const pct = Math.min(100, ((300 - secs) / 300) * 100);
-  const color = secs < 60 ? '#C0392B' : secs < 120 ? '#F69D39' : '#27AE60';
+
+  const color = !open ? '#888' : secs < 60 ? '#C0392B' : secs < 120 ? '#F69D39' : '#0D0B08';
+
   return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-      {/* Progress bar */}
-      <div style={{ flex: 1, height: 3, background: 'rgba(13,11,8,0.1)' }}>
-        <div style={{ height: 3, width: `${pct}%`, background: color, transition: 'width 1s linear, background 0.4s' }} />
-      </div>
-      <span style={{ ...S.mono, fontSize: 13, fontWeight: 700, color, minWidth: 36, textAlign: 'right' }}>
-        {secs > 0 ? formatCountdown(secs) : 'Settling'}
-      </span>
+    <div style={{ textAlign: 'right', flexShrink: 0 }}>
+      <p
+        style={{
+          ...S.mono,
+          fontSize: 22,
+          fontWeight: 900,
+          letterSpacing: '0.04em',
+          color,
+          margin: 0,
+          lineHeight: 1,
+        }}
+      >
+        {open ? (secs > 0 ? formatCountdown(secs) : '0:00') : expired ? '—' : '—'}
+      </p>
+      <p
+        style={{
+          ...S.mono,
+          fontSize: 9,
+          fontWeight: 700,
+          letterSpacing: '0.14em',
+          textTransform: 'uppercase',
+          margin: '6px 0 0',
+          color: open ? '#27AE60' : expired ? '#F69D39' : '#888',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'flex-end',
+          gap: 5,
+        }}
+      >
+        <span
+          style={{
+            width: 6,
+            height: 6,
+            borderRadius: '50%',
+            background: open ? '#27AE60' : expired ? '#F69D39' : '#888',
+            display: 'inline-block',
+          }}
+        />
+        {open ? 'Live' : expired ? 'Settling' : 'Closed'}
+      </p>
     </div>
   );
 }
@@ -226,130 +267,200 @@ function Countdown({ remaining }: { remaining: number }) {
 /* ─── Market Card ───────────────────────────────────────────────── */
 
 function MarketCard({
-  row, priceHistory,
+  row,
+  priceHistory,
 }: {
   row: MarketRow;
   priceHistory: PricePoint[];
 }) {
-  const expired  = row.remaining === 0 && !row.resolved;
-  const open     = !row.resolved && row.remaining > 0;
+  const expired = row.remaining === 0 && !row.resolved;
+  const open = !row.resolved && row.remaining > 0;
   const oddsDown = 100 - row.upOdds;
-  const mult     = (row.upOdds >= 50
-    ? (100 / row.upOdds)
-    : (100 / oddsDown)
-  ).toFixed(2);
+  const mult = (row.upOdds >= 50 ? 100 / row.upOdds : 100 / oddsDown).toFixed(2);
 
-  const currentP  = row.currentPrice;
-  const startP    = row.startPrice;
+  const currentP = row.currentPrice;
+  const startP = row.startPrice;
   const priceDiff = currentP - startP;
-  const diffPct   = startP > 0 ? ((priceDiff / startP) * 100) : 0;
-  const isUp      = priceDiff >= 0;
+  const diffPct = startP > 0 ? (priceDiff / startP) * 100 : 0;
+  const isUp = priceDiff >= 0;
 
   return (
     <Link href={`/markets/trade?asset=${row.assetId}`} style={{ textDecoration: 'none', color: 'inherit' }}>
-      <div
+      <article
         style={{
+          position: 'relative',
           border: '1px solid #0D0B08',
-          padding: '20px',
-          display: 'flex',
-          flexDirection: 'column',
-          gap: 14,
+          minHeight: 260,
           cursor: 'pointer',
           marginRight: -1,
           marginBottom: -1,
-          transition: 'background 0.2s ease',
-          background: 'transparent',
+          overflow: 'hidden',
+          background: '#FAF8F3',
+          transition: 'box-shadow 0.2s ease',
         }}
-        onMouseEnter={e => (e.currentTarget.style.background = 'rgba(13,11,8,0.03)')}
-        onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
+        onMouseEnter={(e) => {
+          e.currentTarget.style.boxShadow = 'inset 0 0 0 2px #C0392B';
+        }}
+        onMouseLeave={(e) => {
+          e.currentTarget.style.boxShadow = 'none';
+        }}
       >
+        {/* Chart as full-card background — current round only */}
+        <div
+          aria-hidden
+          style={{
+            position: 'absolute',
+            inset: 0,
+            zIndex: 0,
+            opacity: 0.9,
+            pointerEvents: 'none',
+          }}
+        >
+          <PriceChart
+            history={priceHistory}
+            startPrice={row.startPrice}
+            startTimeSec={row.startTime}
+            height={260}
+          />
+        </div>
 
-        {/* ── Row 1: Asset name + status badge ── */}
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-          <div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <AssetIconImg symbol={row.symbol} size={28} />
-              <p style={{ ...S.serif, fontSize: 22, fontWeight: 900, color: '#0D0B08', margin: 0 }}>{row.name}</p>
+        {/* Soft wash so text stays readable */}
+        <div
+          aria-hidden
+          style={{
+            position: 'absolute',
+            inset: 0,
+            zIndex: 1,
+            background:
+              'linear-gradient(180deg, rgba(250,248,243,0.88) 0%, rgba(250,248,243,0.55) 45%, rgba(250,248,243,0.82) 100%)',
+            pointerEvents: 'none',
+          }}
+        />
+
+        {/* Foreground content */}
+        <div
+          style={{
+            position: 'relative',
+            zIndex: 2,
+            padding: '18px 18px 16px',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: 14,
+            minHeight: 260,
+            boxSizing: 'border-box',
+          }}
+        >
+          {/* Top: asset + timer / Live */}
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12 }}>
+            <div style={{ minWidth: 0 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <AssetIconImg symbol={row.symbol} size={26} />
+                <p style={{ ...S.serif, fontSize: 20, fontWeight: 900, color: '#0D0B08', margin: 0 }}>
+                  {row.name}
+                </p>
+              </div>
+              <p style={{ ...S.mono, fontSize: 11, color: '#888', marginTop: 4, marginLeft: 34 }}>
+                {row.symbol}/USD
+              </p>
             </div>
-            <p style={{ ...S.mono, fontSize: 11, color: '#888', marginTop: 3, marginLeft: 36 }}>
-              {row.symbol} · Round #{row.roundNumber}
-            </p>
+            <LiveTimer remaining={row.remaining} open={open} expired={expired} />
           </div>
-          <span style={{
-            ...S.mono, fontSize: 10, fontWeight: 700, letterSpacing: '0.14em',
-            textTransform: 'uppercase', padding: '4px 10px', flexShrink: 0,
-            background: open ? '#27AE60' : expired ? '#F69D39' : '#888',
-            color: '#FAF8F3',
-          }}>
-            {open ? '● LIVE' : expired ? '● SETTLING' : 'CLOSED'}
-          </span>
+
+          {/* Price */}
+          <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', gap: 10 }}>
+            <div>
+              <p style={S.label}>Price</p>
+              <p
+                style={{
+                  ...S.serif,
+                  fontSize: 28,
+                  fontWeight: 900,
+                  color: '#0D0B08',
+                  margin: '2px 0 0',
+                  lineHeight: 1,
+                }}
+              >
+                {fmtUsd(row.currentPrice)}
+              </p>
+            </div>
+            <div style={{ textAlign: 'right' }}>
+              <p
+                style={{
+                  ...S.mono,
+                  fontSize: 14,
+                  fontWeight: 700,
+                  margin: 0,
+                  color: isUp ? '#27AE60' : '#C0392B',
+                }}
+              >
+                {isUp ? '▲' : '▼'} {Math.abs(diffPct).toFixed(3)}%
+              </p>
+              <p style={{ ...S.mono, fontSize: 10, color: '#888', margin: '3px 0 0' }}>
+                Open {fmtUsd(row.startPrice)}
+              </p>
+            </div>
+          </div>
+
+          <PoolBar upOdds={Math.round(row.upOdds)} />
+
+          {/* Bottom stats: highlighted pool + payout · volume right */}
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'flex-end',
+              justifyContent: 'space-between',
+              gap: 12,
+              marginTop: 'auto',
+              paddingTop: 4,
+            }}
+          >
+            <div style={{ display: 'flex', gap: 18, flexWrap: 'wrap' }}>
+              <div>
+                <p style={{ ...S.label, color: '#C0392B' }}>Pool size</p>
+                <p
+                  style={{
+                    ...S.serif,
+                    fontSize: 22,
+                    fontWeight: 900,
+                    color: '#0D0B08',
+                    margin: '2px 0 0',
+                    letterSpacing: '-0.01em',
+                  }}
+                >
+                  {row.collateralPool.toLocaleString(undefined, { maximumFractionDigits: 2 })}
+                  <span style={{ ...S.mono, fontSize: 11, fontWeight: 700, color: '#888', marginLeft: 6 }}>
+                    TUSDC
+                  </span>
+                </p>
+              </div>
+              <div>
+                <p style={S.label}>Payout</p>
+                <p style={{ ...S.mono, fontSize: 18, fontWeight: 900, color: '#0D0B08', margin: '4px 0 0' }}>
+                  {mult}×
+                </p>
+              </div>
+              <div>
+                <p style={S.label}>UP / DOWN</p>
+                <p style={{ ...S.mono, fontSize: 12, fontWeight: 700, margin: '6px 0 0' }}>
+                  <span style={{ color: '#27AE60' }}>
+                    {row.upPool.toLocaleString(undefined, { maximumFractionDigits: 1 })}
+                  </span>
+                  <span style={{ color: '#888' }}> / </span>
+                  <span style={{ color: '#C0392B' }}>
+                    {row.downPool.toLocaleString(undefined, { maximumFractionDigits: 1 })}
+                  </span>
+                </p>
+              </div>
+            </div>
+            <div style={{ textAlign: 'right', flexShrink: 0 }}>
+              <p style={S.label}>Volume</p>
+              <p style={{ ...S.mono, fontSize: 14, fontWeight: 800, color: '#0D0B08', margin: '4px 0 0' }}>
+                {row.collateralPool.toLocaleString(undefined, { maximumFractionDigits: 1 })}
+              </p>
+            </div>
+          </div>
         </div>
-
-        {/* ── Row 2: Current price + change ── */}
-        <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between' }}>
-          <div>
-            <p style={S.label}>Current Price</p>
-            <p style={{ ...S.serif, fontSize: 28, fontWeight: 900, color: '#0D0B08', margin: '3px 0 0', lineHeight: 1 }}>
-              {fmtUsd(row.currentPrice)}
-            </p>
-          </div>
-          <div style={{ textAlign: 'right' }}>
-            <p style={S.label}>vs Open</p>
-            <p style={{
-              ...S.mono, fontSize: 15, fontWeight: 700, margin: '3px 0 0',
-              color: isUp ? '#27AE60' : '#C0392B',
-            }}>
-              {isUp ? '▲' : '▼'} {Math.abs(diffPct).toFixed(3)}%
-            </p>
-            <p style={{ ...S.mono, fontSize: 11, color: '#aaa', marginTop: 1 }}>
-              Open: {fmtUsd(row.startPrice)}
-            </p>
-          </div>
-        </div>
-
-        {/* ── Row 3: Price chart ── */}
-        <div style={{ background: 'rgba(13,11,8,0.03)', padding: '6px 4px 2px' }}>
-          <PriceChart history={priceHistory} startPrice={row.startPrice} accent={row.color} height={52} />
-        </div>
-
-        {/* ── Row 4: Pool sentiment bar ── */}
-        <PoolBar upOdds={Math.round(row.upOdds)} />
-
-        {/* ── Row 5: Stats row ── */}
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8, paddingTop: 10, borderTop: '1px solid rgba(13,11,8,0.12)' }}>
-          <div>
-            <p style={S.label}>Payout</p>
-            <p style={{ ...S.mono, fontSize: 15, fontWeight: 700, color: '#0D0B08', marginTop: 3 }}>{mult}×</p>
-          </div>
-          <div>
-            <p style={S.label}>Volume</p>
-            <p style={{ ...S.mono, fontSize: 13, fontWeight: 700, color: '#5A554E', marginTop: 3 }}>
-              {row.collateralPool.toLocaleString(undefined, { maximumFractionDigits: 2 })} TUSDC
-            </p>
-          </div>
-          <div style={{ textAlign: 'right' }}>
-            <p style={S.label}>Time Left</p>
-            <p style={{ ...S.mono, fontSize: 13, fontWeight: 700, color: '#0D0B08', marginTop: 3 }}>
-              {open ? formatCountdown(row.remaining) : '—'}
-            </p>
-          </div>
-        </div>
-
-        {/* ── Row 6: Countdown bar + CTA ── */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-          {open && <Countdown remaining={row.remaining} />}
-          <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
-            <span style={{
-              ...S.mono, fontSize: 11, fontWeight: 700, letterSpacing: '0.12em',
-              textTransform: 'uppercase', padding: '7px 18px',
-              background: '#0D0B08', color: '#FAF8F3',
-            }}>
-              TRADE →
-            </span>
-          </div>
-        </div>
-
-      </div>
+      </article>
     </Link>
   );
 }
@@ -394,6 +505,7 @@ export default function MarketsHubTerminal() {
       name: meta.name,
       color: meta.color,
       roundNumber: market.roundNumber,
+      startTime: market.startTime,
       resolved: market.resolved,
       remaining,
       startPrice: market.startPrice,
