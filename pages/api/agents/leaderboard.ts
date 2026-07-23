@@ -1,5 +1,11 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
-import { AGENTS, getAgentById } from '../../../utils/agents/config';
+import { AGENTS } from '../../../utils/agents/config';
+import {
+  buildFilteredLeaderboard,
+  getLeaderboardFilterBySlug,
+  listLeaderboardFilters,
+  resolveFilterWindow,
+} from '../../../utils/agents/leaderboardFilters';
 import {
   buildLeaderboardRows,
   countLeaderboardTxs,
@@ -8,7 +14,7 @@ import {
   reconcileTradeLog,
   setEnrollment,
 } from '../../../utils/agents/store';
-import { buildXp } from '../../../utils/agents/xp';
+import { getAgentById } from '../../../utils/agents/config';
 
 async function persistReconciledTradeLogs() {
   const all = await readEnrollments();
@@ -27,20 +33,8 @@ async function persistReconciledTradeLogs() {
   await Promise.all(updates);
 }
 
-/** Build per-agent-persona rankings aggregated across all wallets. */
 function buildAgentPersonaRankings(rawRows: any[]) {
-  const personaMap = new Map<string, {
-    agentId: string;
-    agentName: string;
-    emoji: string;
-    color: string;
-    pilots: number;
-    activePilots: number;
-    txCount: number;
-    wins: number;
-    losses: number;
-    bySymbol: Map<string, { symbol: string; wins: number; losses: number; trades: number; spend: number }>;
-  }>();
+  const personaMap = new Map<string, any>();
 
   for (const row of rawRows) {
     const agentCfg = getAgentById(row.agentId);
@@ -65,15 +59,21 @@ function buildAgentPersonaRankings(rawRows: any[]) {
     bucket.pilots += 1;
     if (row.status === 'active') bucket.activePilots += 1;
     bucket.txCount += row.txCount || 0;
-    bucket.wins    += row.wins    || 0;
-    bucket.losses  += row.losses  || 0;
+    bucket.wins += row.wins || 0;
+    bucket.losses += row.losses || 0;
 
-    for (const sym of (row.bySymbol || [])) {
-      const existing = bucket.bySymbol.get(sym.symbol) || { symbol: sym.symbol, wins: 0, losses: 0, trades: 0, spend: 0 };
-      existing.wins   += sym.wins   || 0;
+    for (const sym of row.bySymbol || []) {
+      const existing = bucket.bySymbol.get(sym.symbol) || {
+        symbol: sym.symbol,
+        wins: 0,
+        losses: 0,
+        trades: 0,
+        spend: 0,
+      };
+      existing.wins += sym.wins || 0;
       existing.losses += sym.losses || 0;
       existing.trades += sym.trades || 0;
-      existing.spend  += sym.spend  || 0;
+      existing.spend += sym.spend || 0;
       bucket.bySymbol.set(sym.symbol, existing);
     }
   }
@@ -86,13 +86,12 @@ function buildAgentPersonaRankings(rawRows: any[]) {
         ...b,
         winRate,
         bySymbol: [...b.bySymbol.values()]
-          .map((s) => ({
+          .map((s: any) => ({
             ...s,
-            winRate: (s.wins + s.losses) > 0
-              ? Math.round((s.wins / (s.wins + s.losses)) * 100)
-              : null,
+            winRate:
+              s.wins + s.losses > 0 ? Math.round((s.wins / (s.wins + s.losses)) * 100) : null,
           }))
-          .sort((a, z) => z.trades - a.trades)
+          .sort((a: any, z: any) => z.trades - a.trades)
           .slice(0, 6),
       };
     })
@@ -109,47 +108,46 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     await persistReconciledTradeLogs();
     const appStats = await getAppAgentStats();
 
-    // Raw rows (already have wins/losses/bySymbol/_enrollment/_socialLinks)
+    const filterSlug = String(req.query.filter || req.query.f || '').trim();
+    const activeFilter = await getLeaderboardFilterBySlug(filterSlug || undefined);
+    const filters = await listLeaderboardFilters({ enabledOnly: true });
+    const window = resolveFilterWindow(activeFilter);
+
+    const rows = await buildFilteredLeaderboard(activeFilter);
+
+    // Agent persona board still uses all-time raw enrollments for now
     const rawRows = await buildLeaderboardRows();
-
-    // Enrich with XP + streak, then re-rank by XP
-    const enriched = rawRows.map((row: any) => {
-      const xpData = buildXp(row._enrollment, row._socialLinks);
-      return {
-        wallet:       row.wallet,
-        displayName:  row.displayName,
-        agentId:      getAgentById(row.agentId)?.id || row.agentId,
-        agentName:    getAgentById(row.agentId)?.name || row.agentName,
-        txCount:      row.txCount,
-        lastTxHash:   row.lastTxHash,
-        status:       row.status,
-        wins:         row.wins,
-        losses:       row.losses,
-        winRate:      row.winRate,
-        bySymbol:     row.bySymbol,
-        // XP data
-        xp:           xpData.total,
-        xpLevel:      xpData.level,
-        xpBreakdown:  xpData.breakdown,
-        streak:       xpData.streak.current,
-        longestStreak: xpData.streak.longest,
-        avgDailyTxs:  xpData.avgDailyTxs,
-      };
-    });
-
-    // Sort by XP descending, break ties by txCount
-    enriched.sort((a: any, b: any) => b.xp - a.xp || b.txCount - a.txCount);
-    const rows = enriched.map((row: any, i: number) => ({ ...row, rank: i + 1 }));
-
     const agentRankings = buildAgentPersonaRankings(rawRows);
 
     return res.status(200).json({
       stats: {
-        agentPersonas:     AGENTS.length,
-        activePilots:      appStats.activePilots,
-        enrolledWallets:   appStats.enrolledWallets,
+        agentPersonas: AGENTS.length,
+        activePilots: appStats.activePilots,
+        enrolledWallets: appStats.enrolledWallets,
         totalTransactions: appStats.totalTransactions,
       },
+      filter: {
+        slug: activeFilter.slug,
+        label: activeFilter.label,
+        description: activeFilter.description || '',
+        sortMetric: activeFilter.sort_metric,
+        sortSecondary: activeFilter.sort_secondary,
+        windowType: activeFilter.window_type,
+        windowLabel: window.label,
+        startAt: window.start ? new Date(window.start).toISOString() : null,
+        endAt: window.end ? new Date(window.end).toISOString() : null,
+        isPrimary: Boolean(activeFilter.is_primary),
+        campaignId: activeFilter.campaign_id || null,
+        campaignTitle: activeFilter.campaign_title || null,
+      },
+      filters: filters.map((f) => ({
+        slug: f.slug,
+        label: f.label,
+        description: f.description || '',
+        isPrimary: Boolean(f.is_primary),
+        windowType: f.window_type,
+        sortMetric: f.sort_metric,
+      })),
       rows,
       agentRankings,
     });
