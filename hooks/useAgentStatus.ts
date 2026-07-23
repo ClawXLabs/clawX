@@ -80,6 +80,11 @@ export interface AgentStatusData {
     roundNumber: number;
     side: string;
     assetId?: number;
+    shares?: string;
+    resolved?: boolean;
+    endTime?: number;
+    hash?: string | null;
+    amountTusdc?: number | null;
   }>;
   tradeLog?: TradeRow[];
   enrichedTradeLog?: TradeRow[];

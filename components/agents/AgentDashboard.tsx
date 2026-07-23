@@ -8,9 +8,9 @@ import PendingSettlementsPanel from './PendingSettlementsPanel';
 import AgentControlBar from './AgentControlBar';
 import AgentMarketLimits from './AgentMarketLimits';
 import AgentClaimBar from './AgentClaimBar';
+import LivePositionsPanel from './LivePositionsPanel';
 import { useWallet } from '../../contexts/WalletContext';
 import { useAgentStatus } from '../../hooks/useAgentStatus';
-import { marketTradePath } from '../../utils/marketLink';
 
 const RED = '#C0392B';
 
@@ -316,47 +316,40 @@ export default function AgentDashboard() {
             ))}
           </div>
 
-          {openPositions.length > 0 ? (
-            <div style={{ marginTop: 16, borderTop: '1px solid rgba(13,11,8,0.15)', paddingTop: 14 }}>
-              <p style={{ ...S.label, marginBottom: 10 }}>Open positions · click to open market</p>
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-                {openPositions.map((pos) => {
-                  const href = marketTradePath({
-                    assetId: pos.assetId,
-                    symbol: pos.symbol,
-                    roundId: pos.roundId,
-                  });
-                  const chip = (
-                    <span
-                      style={{
-                        ...S.mono,
-                        fontSize: 11,
-                        border: '1px solid #0D0B08',
-                        padding: '6px 10px',
-                        display: 'inline-block',
-                        color: '#0D0B08',
-                        textDecoration: href ? 'underline' : 'none',
-                        textUnderlineOffset: 3,
-                        cursor: href ? 'pointer' : 'default',
-                      }}
-                    >
-                      {pos.symbol} · R#{pos.roundNumber} ·{' '}
-                      <strong style={{ color: pos.side === 'UP' ? '#27AE60' : RED }}>{pos.side}</strong>
-                      {href ? ' ↗' : ''}
-                    </span>
-                  );
-                  return href ? (
-                    <Link key={pos.roundId} href={href} style={{ textDecoration: 'none' }}>
-                      {chip}
-                    </Link>
-                  ) : (
-                    <span key={pos.roundId}>{chip}</span>
-                  );
-                })}
-              </div>
-            </div>
-          ) : null}
+          </div>
         </section>
+
+        <div
+          style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))',
+            gap: 20,
+            marginBottom: 20,
+          }}
+        >
+          <section style={S.section}>
+            <h2 style={{ ...S.serif, fontSize: 16, fontWeight: 900, color: '#0D0B08', margin: '0 0 4px' }}>
+              Live positions
+            </h2>
+            <p style={{ ...S.mono, fontSize: 10, color: '#888', marginBottom: 14 }}>
+              Open rounds with stake, shares, and buy transaction links.
+            </p>
+            <LivePositionsPanel positions={openPositions} />
+          </section>
+
+          <section style={S.section}>
+            <h2 style={{ ...S.serif, fontSize: 16, fontWeight: 900, color: '#0D0B08', margin: '0 0 4px' }}>
+              Pending settlement
+              {(status?.pendingSettlements?.length ?? 0) > 0
+                ? ` (${status?.pendingSettlements?.length})`
+                : ''}
+            </h2>
+            <p style={{ ...S.mono, fontSize: 10, color: '#888', marginBottom: 14 }}>
+              Trades placed but not yet resolved on-chain.
+            </p>
+            <PendingSettlementsPanel items={status?.pendingSettlements || []} />
+          </section>
+        </div>
 
         <section style={{ ...S.section, marginBottom: 20 }}>
           <AgentMarketLimits
@@ -412,15 +405,6 @@ export default function AgentDashboard() {
           </h2>
           <AgentClaimBar />
         </section>
-
-        {(status?.pendingSettlements?.length ?? 0) > 0 ? (
-          <section style={{ ...S.section, marginBottom: 20 }}>
-            <h2 style={{ ...S.serif, fontSize: 16, fontWeight: 900, color: '#0D0B08', margin: '0 0 12px' }}>
-              Pending ({status?.pendingSettlements?.length})
-            </h2>
-            <PendingSettlementsPanel items={status?.pendingSettlements || []} />
-          </section>
-        ) : null}
 
         <section style={S.section}>
           <h2 style={{ ...S.serif, fontSize: 16, fontWeight: 900, color: '#0D0B08', margin: '0 0 12px' }}>

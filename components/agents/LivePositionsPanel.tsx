@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import type { PendingSettlement } from '../../hooks/useAgentStatus';
+import type { AgentStatusData } from '../../hooks/useAgentStatus';
 import { marketTradePath } from '../../utils/marketLink';
 
 const SNOWTRACE = 'https://testnet.snowtrace.io/tx/';
@@ -18,48 +18,53 @@ const S = {
   } as React.CSSProperties,
 };
 
-function formatWait(sec: number) {
-  if (sec < 60) return `${sec}s`;
-  const m = Math.floor(sec / 60);
-  const s = sec % 60;
-  return `${m}m ${s}s`;
-}
+type OpenPosition = NonNullable<AgentStatusData['openPositions']>[number];
 
-function shortHash(hash?: string) {
+function shortHash(hash?: string | null) {
   if (!hash) return null;
   if (hash.length < 14) return hash;
   return `${hash.slice(0, 8)}…${hash.slice(-6)}`;
 }
 
-interface PendingSettlementsPanelProps {
-  items: PendingSettlement[];
+function formatEndsIn(endTime?: number) {
+  if (!endTime || !Number.isFinite(endTime)) return null;
+  const left = Math.max(0, endTime - Math.floor(Date.now() / 1000));
+  if (left < 60) return `${left}s`;
+  const m = Math.floor(left / 60);
+  const s = left % 60;
+  return `${m}m ${s}s`;
 }
 
-export default function PendingSettlementsPanel({ items }: PendingSettlementsPanelProps) {
-  if (!items.length) {
+interface LivePositionsPanelProps {
+  positions: OpenPosition[];
+}
+
+export default function LivePositionsPanel({ positions }: LivePositionsPanelProps) {
+  if (!positions.length) {
     return (
       <p style={{ ...S.mono, fontSize: 12, color: '#888' }}>
-        No trades awaiting settlement.
+        No open positions — scanning next 5m round.
       </p>
     );
   }
 
   return (
     <ul style={{ listStyle: 'none', margin: 0, padding: 0, display: 'flex', flexDirection: 'column', gap: 10 }}>
-      {items.map((item) => {
+      {positions.map((pos) => {
         const href = marketTradePath({
-          assetId: item.assetId,
-          symbol: item.symbol,
-          roundId: item.roundId,
+          assetId: pos.assetId,
+          symbol: pos.symbol,
+          roundId: pos.roundId,
         });
-        const hashShort = shortHash(item.hash);
+        const hashShort = shortHash(pos.hash);
+        const endsIn = formatEndsIn(pos.endTime);
         return (
           <li
-            key={`${item.roundId}-${item.side}`}
+            key={String(pos.roundId)}
             style={{
-              border: '1px solid #F69D3944',
-              background: 'rgba(246,157,57,0.06)',
+              border: '1px solid rgba(13,11,8,0.2)',
               padding: '14px 16px',
+              background: '#FAF8F3',
             }}
           >
             <div
@@ -78,15 +83,17 @@ export default function PendingSettlementsPanel({ items }: PendingSettlementsPan
                       href={href}
                       style={{ color: '#0D0B08', textDecoration: 'underline', textUnderlineOffset: 3 }}
                     >
-                      {item.symbol} ↗
+                      {pos.symbol} ↗
                     </Link>
                   ) : (
-                    item.symbol
+                    pos.symbol
                   )}{' '}
-                  <span style={{ color: item.side === 'UP' ? '#27AE60' : RED }}>{item.side}</span>
+                  <span style={{ color: pos.side === 'UP' ? '#27AE60' : RED }}>{pos.side}</span>
                 </p>
                 <p style={{ ...S.mono, fontSize: 11, color: '#888', margin: '4px 0 0' }}>
-                  Round #{item.roundId} · waiting {formatWait(item.waitingSec)}
+                  Round #{pos.roundNumber}
+                  {pos.roundId != null ? ` · id ${pos.roundId}` : ''}
+                  {endsIn ? ` · ends in ${endsIn}` : ''}
                 </p>
               </div>
               <span
@@ -95,13 +102,13 @@ export default function PendingSettlementsPanel({ items }: PendingSettlementsPan
                   fontSize: 9,
                   fontWeight: 700,
                   letterSpacing: '0.1em',
-                  color: '#F69D39',
                   padding: '4px 10px',
-                  border: '1px solid #F69D3955',
+                  background: pos.side === 'UP' ? '#27AE60' : RED,
+                  color: '#FAF8F3',
                   flexShrink: 0,
                 }}
               >
-                SETTLEMENT PENDING
+                LIVE
               </span>
             </div>
 
@@ -113,22 +120,32 @@ export default function PendingSettlementsPanel({ items }: PendingSettlementsPan
                 marginTop: 12,
               }}
             >
-              <div>
-                <p style={S.label}>Stake</p>
-                <p style={{ ...S.mono, fontSize: 12, color: '#0D0B08', margin: '2px 0 0' }}>
-                  {item.amountTusdc} TUSDC
-                </p>
-              </div>
+              {pos.amountTusdc != null ? (
+                <div>
+                  <p style={S.label}>Stake</p>
+                  <p style={{ ...S.mono, fontSize: 12, color: '#0D0B08', margin: '2px 0 0' }}>
+                    {pos.amountTusdc} TUSDC
+                  </p>
+                </div>
+              ) : null}
+              {pos.shares != null ? (
+                <div>
+                  <p style={S.label}>Shares</p>
+                  <p style={{ ...S.mono, fontSize: 12, color: '#0D0B08', margin: '2px 0 0' }}>
+                    {pos.shares}
+                  </p>
+                </div>
+              ) : null}
               <div>
                 <p style={S.label}>Buy tx</p>
-                {item.hash && hashShort ? (
+                {pos.hash && hashShort ? (
                   <p style={{ ...S.mono, fontSize: 12, margin: '2px 0 0' }}>
                     <a
-                      href={`${SNOWTRACE}${item.hash}`}
+                      href={`${SNOWTRACE}${pos.hash}`}
                       target="_blank"
                       rel="noopener noreferrer"
-                      style={{ color: '#F69D39', textDecoration: 'none', fontWeight: 700 }}
-                      title={item.hash}
+                      style={{ color: RED, textDecoration: 'none', fontWeight: 700 }}
+                      title={pos.hash}
                     >
                       {hashShort} ↗
                     </a>
@@ -139,20 +156,17 @@ export default function PendingSettlementsPanel({ items }: PendingSettlementsPan
               </div>
             </div>
 
-            <p style={{ ...S.mono, fontSize: 10, color: '#888', margin: '10px 0 0' }}>
-              Round resolves automatically when the 5-minute window ends.
-            </p>
-            {item.hash ? (
+            {pos.hash ? (
               <p
                 style={{
                   ...S.mono,
                   fontSize: 10,
                   color: '#5A554E',
-                  margin: '6px 0 0',
+                  margin: '10px 0 0',
                   wordBreak: 'break-all',
                 }}
               >
-                {item.hash}
+                {pos.hash}
               </p>
             ) : null}
           </li>

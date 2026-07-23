@@ -120,15 +120,41 @@ export function buildMatchHistory(enrollment) {
 
 export function buildPendingSettlements(enrollment) {
   const pending = enrollment?.pendingOutcomes || [];
-  return pending.map((p) => ({
-    roundId: p.roundId,
-    symbol: p.symbol,
-    side: p.isUp ? 'UP' : 'DOWN',
-    amountTusdc: enrollment.tradeSizeTusdc,
-    hash: p.hash || '',
-    placedAt: p.at,
-    waitingSec: Math.max(0, Math.floor(Date.now() / 1000) - (p.at || 0)),
-  }));
+  const tradeLog = enrollment?.tradeLog || [];
+  return pending.map((p) => {
+    const fromLog = tradeLog.find(
+      (t) => Number(t.roundId) === Number(p.roundId) && String(t.action || '').toUpperCase() === 'BUY'
+    );
+    return {
+      roundId: p.roundId,
+      assetId: p.assetId ?? fromLog?.assetId,
+      symbol: p.symbol,
+      side: p.isUp ? 'UP' : 'DOWN',
+      amountTusdc: p.amountTusdc ?? fromLog?.amountTusdc ?? enrollment.tradeSizeTusdc,
+      hash: p.hash || fromLog?.hash || '',
+      placedAt: p.at,
+      waitingSec: Math.max(0, Math.floor(Date.now() / 1000) - (p.at || 0)),
+    };
+  });
+}
+
+/** Attach buy hash / stake from trade log onto on-chain open positions. */
+export function enrichOpenPositions(positions, enrollment) {
+  const tradeLog = enrollment?.tradeLog || [];
+  const pending = enrollment?.pendingOutcomes || [];
+  return (positions || []).map((pos) => {
+    const rid = Number(pos.roundId);
+    const fromPending = pending.find((p) => Number(p.roundId) === rid);
+    const fromLog = tradeLog.find(
+      (t) => Number(t.roundId) === rid && String(t.action || '').toUpperCase() === 'BUY'
+    );
+    return {
+      ...pos,
+      hash: fromPending?.hash || fromLog?.hash || pos.hash || null,
+      amountTusdc:
+        fromPending?.amountTusdc ?? fromLog?.amountTusdc ?? enrollment?.tradeSizeTusdc ?? null,
+    };
+  });
 }
 
 export function buildDelegateStatus(enrollment) {
