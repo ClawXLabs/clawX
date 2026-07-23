@@ -1,5 +1,7 @@
 import { useState } from 'react';
+import { useRouter } from 'next/router';
 import type { DelegateStatus, WalletLimitsStatus } from '../../hooks/useAgentStatus';
+import { clearAgentStatusCache } from '../../hooks/useAgentStatus';
 import AgentSwitchModal from './AgentSwitchModal';
 
 const RED = '#C0392B';
@@ -9,11 +11,19 @@ const S = {
   serif: { fontFamily: 'Georgia, "Times New Roman", serif' } as React.CSSProperties,
 };
 
+interface PendingControl {
+  action: 'kill' | 'switch';
+  timing: 'immediate' | 'next_market';
+  targetAgentId?: string | null;
+  ready?: boolean;
+}
+
 interface AgentControlBarProps {
   wallet: string;
   activeAgentId?: string | null;
   delegate?: DelegateStatus;
   walletLimits?: WalletLimitsStatus;
+  pendingControl?: PendingControl | null;
   onRefresh: () => void;
 }
 
@@ -38,10 +48,13 @@ export default function AgentControlBar({
   activeAgentId,
   delegate,
   walletLimits,
+  pendingControl,
   onRefresh,
 }: AgentControlBarProps) {
+  const router = useRouter();
   const [pausing, setPausing] = useState(false);
-  const [switchOpen, setSwitchOpen] = useState(false);
+  const [modalMode, setModalMode] = useState<'switch' | 'kill' | null>(null);
+  const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState('');
 
   const togglePause = async () => {
@@ -65,14 +78,126 @@ export default function AgentControlBar({
     }
   };
 
+  const cancelPending = async () => {
+    setBusy(true);
+    setMsg('');
+    try {
+      const res = await fetch('/api/agents/control', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ wallet, action: 'cancel_pending' }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Cancel failed');
+      setMsg(data.message || 'Cancelled');
+      onRefresh();
+    } catch (e: unknown) {
+      const err = e as { message?: string };
+      setMsg(err.message || 'Cancel failed');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const completeSwitch = async () => {
+    if (!pendingControl?.targetAgentId) return;
+    setBusy(true);
+    try {
+      const res = await fetch('/api/agents/control', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          wallet,
+          action: 'complete_switch',
+          targetAgentId: pendingControl.targetAgentId,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Switch failed');
+      clearAgentStatusCache(wallet);
+      if (data.redirectTo) router.push(data.redirectTo);
+      else router.push('/agents/new');
+    } catch (e: unknown) {
+      const err = e as { message?: string };
+      setMsg(err.message || 'Switch failed');
+    } finally {
+      setBusy(false);
+    }
+  };
+
   return (
     <div>
-      <AgentSwitchModal
-        open={switchOpen}
-        wallet={wallet}
-        activeAgentId={activeAgentId}
-        onClose={() => setSwitchOpen(false)}
-      />
+      {modalMode ? (
+        <AgentSwitchModal
+          open
+          mode={modalMode}
+          wallet={wallet}
+          activeAgentId={activeAgentId}
+          onClose={() => setModalMode(null)}
+          onDone={onRefresh}
+        />
+      ) : null}
+
+      {pendingControl ? (
+        <div
+          style={{
+            border: `2px solid ${RED}`,
+            background: 'rgba(192,57,43,0.08)',
+            padding: '14px 16px',
+            marginBottom: 16,
+          }}
+        >
+          <p style={{ ...S.mono, fontSize: 10, fontWeight: 700, letterSpacing: '0.14em', color: RED, margin: 0 }}>
+            {pendingControl.ready
+              ? pendingControl.action === 'switch'
+                ? 'SWITCH READY'
+                : 'KILL READY'
+              : pendingControl.action === 'switch'
+                ? 'SWITCH SCHEDULED'
+                : 'KILL SCHEDULED'}
+          </p>
+          <p style={{ ...S.serif, fontSize: 14, color: '#0D0B08', margin: '8px 0 0' }}>
+            {pendingControl.ready
+              ? pendingControl.action === 'switch'
+                ? 'Open markets cleared. Finish deploying the new agent.'
+                : 'Open markets cleared. Confirm to retire this agent.'
+              : 'No new trades. Waiting for current open markets to finish.'}
+          </p>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 12 }}>
+            {pendingControl.ready && pendingControl.action === 'switch' ? (
+              <button type="button" onClick={completeSwitch} disabled={busy} style={redBtn(true, busy)}>
+                {busy ? '…' : 'Complete switch'}
+              </button>
+            ) : null}
+            {pendingControl.ready && pendingControl.action === 'kill' ? (
+              <button
+                type="button"
+                disabled={busy}
+                onClick={async () => {
+                  setBusy(true);
+                  try {
+                    await fetch('/api/agents/control', {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({ wallet, action: 'kill', timing: 'immediate' }),
+                    });
+                    clearAgentStatusCache(wallet);
+                    router.push('/agents');
+                  } finally {
+                    setBusy(false);
+                  }
+                }}
+                style={redBtn(true, busy)}
+              >
+                Confirm kill
+              </button>
+            ) : null}
+            <button type="button" onClick={cancelPending} disabled={busy} style={redBtn(false, busy)}>
+              Cancel
+            </button>
+          </div>
+        </div>
+      ) : null}
 
       {delegate?.needsRedeploy || delegate?.capReached || delegate?.delegateExpired ? (
         <div
@@ -102,7 +227,7 @@ export default function AgentControlBar({
           </p>
           <button
             type="button"
-            onClick={() => setSwitchOpen(true)}
+            onClick={() => setModalMode('switch')}
             style={{ ...redBtn(true), marginTop: 12 }}
           >
             Re-deploy / Switch
@@ -128,13 +253,16 @@ export default function AgentControlBar({
         <button
           type="button"
           onClick={togglePause}
-          disabled={pausing || !!delegate?.needsRedeploy}
-          style={redBtn(!delegate?.paused, pausing || !!delegate?.needsRedeploy)}
+          disabled={pausing || !!delegate?.needsRedeploy || !!pendingControl}
+          style={redBtn(!delegate?.paused, pausing || !!delegate?.needsRedeploy || !!pendingControl)}
         >
           {pausing ? '…' : delegate?.paused ? 'Resume' : 'Pause'}
         </button>
-        <button type="button" onClick={() => setSwitchOpen(true)} style={redBtn(false)}>
+        <button type="button" onClick={() => setModalMode('switch')} style={redBtn(false)}>
           Switch
+        </button>
+        <button type="button" onClick={() => setModalMode('kill')} style={redBtn(true)}>
+          Kill
         </button>
       </div>
 

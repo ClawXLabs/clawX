@@ -84,6 +84,14 @@ export interface AgentStatusData {
   };
   delegate?: DelegateStatus;
   walletLimits?: WalletLimitsStatus;
+  pendingControl?: {
+    action: 'kill' | 'switch';
+    timing: 'immediate' | 'next_market';
+    targetAgentId?: string | null;
+    requestedAt?: number;
+    ready?: boolean;
+    readyAt?: number;
+  } | null;
   enrollment?: {
     tradeSizeTusdc?: number;
     paused?: boolean;

@@ -12,6 +12,8 @@ interface AgentBadgeRowProps {
   activeId?: string | null;
   onSelect?: (agent: AgentData) => void;
   loading?: boolean;
+  /** Put the running agent first in the row */
+  activeFirst?: boolean;
 }
 
 /** Four agents in one row on large screens (flex wrap on small). Accessible badge buttons. */
@@ -21,7 +23,16 @@ export default function AgentBadgeRow({
   activeId,
   onSelect,
   loading,
+  activeFirst,
 }: AgentBadgeRowProps) {
+  const ordered =
+    activeFirst && activeId
+      ? [...agents].sort((a, b) => {
+          if (a.id === activeId) return -1;
+          if (b.id === activeId) return 1;
+          return 0;
+        })
+      : agents;
   const badgeBase = (selected: boolean, active: boolean): React.CSSProperties => ({
     display: 'flex',
     flexDirection: 'column',
@@ -85,7 +96,7 @@ export default function AgentBadgeRow({
         }
       `}</style>
       <div role="listbox" aria-label="Available agents" className="agent-badge-row">
-        {agents.map((agent) => {
+        {ordered.map((agent) => {
           const selected = selectedId === agent.id;
           const active = activeId === agent.id;
           return (

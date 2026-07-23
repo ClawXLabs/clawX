@@ -1,6 +1,6 @@
 import { ethers } from 'ethers';
 import { getAgentById } from '../../../utils/agents/config';
-import { getEnrollment, reconcileTradeLog } from '../../../utils/agents/store';
+import { applyPendingControlIfReady, getEnrollment, reconcileTradeLog } from '../../../utils/agents/store';
 import { buildTrackRecord } from '../../../utils/agents/trackRecord';
 import {
   buildDelegateStatus,
@@ -76,6 +76,25 @@ export default async function handler(req, res) {
     }
   }
 
+  let pendingControl = enrollment.pendingControl || null;
+  if (pendingControl?.timing === 'next_market' && !pendingControl.ready) {
+    const applied = await applyPendingControlIfReady(user, {
+      openPositionCount: positions.length,
+    });
+    if (applied.enrollment) {
+      enrollment = applied.enrollment;
+      pendingControl = enrollment.pendingControl || null;
+    } else if (applied.applied === 'kill') {
+      return res.status(200).json({
+        enrolled: false,
+        retired: true,
+        historicalTxCount: (enrollment.tradeLog || []).filter((t) => t.action === 'BUY').length,
+        walletLimits,
+        pendingControl: null,
+      });
+    }
+  }
+
   return res.status(200).json({
     enrolled: true,
     enrollment: {
@@ -100,6 +119,7 @@ export default async function handler(req, res) {
     },
     delegate,
     walletLimits,
+    pendingControl,
     trackRecord: buildTrackRecord(enrollment),
     updatedAt: Math.floor(Date.now() / 1000),
   });

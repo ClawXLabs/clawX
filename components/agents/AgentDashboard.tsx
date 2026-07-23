@@ -259,6 +259,7 @@ export default function AgentDashboard() {
               activeAgentId={agent?.id}
               delegate={delegate}
               walletLimits={status?.walletLimits}
+              pendingControl={status?.pendingControl}
               onRefresh={() => refresh({ silent: true })}
             />
           </div>
