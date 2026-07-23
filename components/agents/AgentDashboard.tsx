@@ -368,6 +368,45 @@ export default function AgentDashboard() {
         </section>
 
         <section style={{ ...S.section, marginBottom: 20 }}>
+          <h2 style={{ ...S.serif, fontSize: 16, fontWeight: 900, color: '#0D0B08', margin: '0 0 4px' }}>
+            AI Reasoning
+          </h2>
+          <p style={{ ...S.mono, fontSize: 10, color: '#888', marginBottom: 16 }}>
+            Mode:{' '}
+            {status?.enrollment?.agentMemory?.aiMode === 'llm' ? 'Live LLM' : 'Simulated AI'} — learns
+            from settled rounds.
+          </p>
+          {(status?.enrollment?.agentMemory?.recentThoughts || []).length === 0 ? (
+            <p style={{ ...S.mono, fontSize: 12, color: '#888' }}>
+              Watching markets for the next setup…
+            </p>
+          ) : (
+            <div
+              style={{
+                display: 'grid',
+                gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))',
+                gap: 8,
+              }}
+            >
+              {(status?.enrollment?.agentMemory?.recentThoughts || []).map((row, i) => (
+                <div
+                  key={`${row.at}-${i}`}
+                  style={{
+                    border: '1px solid rgba(13,11,8,0.15)',
+                    padding: '12px 16px',
+                    ...S.mono,
+                    fontSize: 13,
+                    color: '#3A3530',
+                  }}
+                >
+                  {row.text}
+                </div>
+              ))}
+            </div>
+          )}
+        </section>
+
+        <section style={{ ...S.section, marginBottom: 20 }}>
           <h2 style={{ ...S.serif, fontSize: 16, fontWeight: 900, color: '#0D0B08', margin: '0 0 12px' }}>
             Claim winnings
           </h2>
