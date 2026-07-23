@@ -109,7 +109,7 @@ function PriceChart({
   const baselineY = toY(base);
   const currentPrice = prices[prices.length - 1];
   const isUp = currentPrice >= base;
-  const fillColor = isUp ? 'rgba(39,174,96,0.14)' : 'rgba(192,57,43,0.12)';
+  const fillColor = isUp ? 'rgba(39,174,96,0.28)' : 'rgba(192,57,43,0.24)';
   const lineColor = isUp ? '#27AE60' : '#C0392B';
 
   const linePath = buildSmoothPath(series, toX, toY);
@@ -140,10 +140,10 @@ function PriceChart({
           d={linePath}
           fill="none"
           stroke={lineColor}
-          strokeWidth="2"
+          strokeWidth="2.25"
           strokeLinejoin="round"
           strokeLinecap="round"
-          opacity="0.85"
+          opacity="1"
         />
       ) : null}
       <circle
@@ -186,7 +186,7 @@ function buildSmoothPath(
   return d;
 }
 
-/* ─── Sentiment strip (bottom border) ───────────────────────────── */
+/* ─── Sentiment strip (thin, vibrant bottom edge) ───────────────── */
 
 function SentimentBorder({ upOdds }: { upOdds: number }) {
   const downOdds = Math.max(0, 100 - upOdds);
@@ -198,22 +198,17 @@ function SentimentBorder({ upOdds }: { upOdds: number }) {
         left: 0,
         right: 0,
         bottom: 0,
-        height: 14,
+        height: 5,
         zIndex: 3,
         display: 'flex',
         overflow: 'hidden',
-        backdropFilter: 'blur(10px) saturate(1.2)',
-        WebkitBackdropFilter: 'blur(10px) saturate(1.2)',
-        background: 'rgba(250,248,243,0.28)',
-        boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.45)',
-        borderTop: '1px solid rgba(13,11,8,0.08)',
       }}
     >
       <div
         style={{
           width: `${upOdds}%`,
           height: '100%',
-          background: 'linear-gradient(180deg, rgba(39,174,96,0.55), rgba(39,174,96,0.28))',
+          background: '#27AE60',
           transition: 'width 0.6s ease',
         }}
       />
@@ -221,7 +216,7 @@ function SentimentBorder({ upOdds }: { upOdds: number }) {
         style={{
           width: `${downOdds}%`,
           height: '100%',
-          background: 'linear-gradient(180deg, rgba(192,57,43,0.55), rgba(192,57,43,0.28))',
+          background: '#C0392B',
           transition: 'width 0.6s ease',
         }}
       />
@@ -373,7 +368,7 @@ function MarketCard({
             inset: 0,
             zIndex: 1,
             background:
-              'linear-gradient(180deg, rgba(250,248,243,0.9) 0%, rgba(250,248,243,0.52) 48%, rgba(250,248,243,0.86) 100%)',
+              'linear-gradient(180deg, rgba(250,248,243,0.72) 0%, rgba(250,248,243,0.28) 42%, rgba(250,248,243,0.55) 100%)',
             pointerEvents: 'none',
           }}
         />
@@ -382,7 +377,7 @@ function MarketCard({
           style={{
             position: 'relative',
             zIndex: 2,
-            padding: '10px 12px 22px',
+            padding: '10px 12px 14px',
             display: 'flex',
             flexDirection: 'column',
             gap: 14,
@@ -455,37 +450,18 @@ function MarketCard({
             </p>
           </div>
 
-          {/* Bottom: three aligned columns — pool · payout · volume */}
+          {/* Bottom: payout · volume (pool size removed — same as volume today) */}
           <div
             style={{
               display: 'grid',
-              gridTemplateColumns: '1fr 1fr 1fr',
+              gridTemplateColumns: '1fr 1fr',
               alignItems: 'end',
-              gap: 12,
+              gap: 16,
               marginTop: 'auto',
               paddingTop: 8,
             }}
           >
             <div style={{ textAlign: 'left' }}>
-              <p
-                style={{
-                  ...S.serif,
-                  fontSize: 26,
-                  fontWeight: 900,
-                  color: '#0D0B08',
-                  margin: 0,
-                  letterSpacing: '-0.02em',
-                  lineHeight: 1,
-                }}
-              >
-                {row.collateralPool.toLocaleString(undefined, { maximumFractionDigits: 2 })}
-                <span style={{ ...S.mono, fontSize: 11, fontWeight: 800, color: '#888', marginLeft: 5 }}>
-                  TUSDC
-                </span>
-              </p>
-              <p style={{ ...S.label, color: '#C0392B', marginTop: 6 }}>Pool size</p>
-            </div>
-            <div style={{ textAlign: 'center' }}>
               <p
                 style={{
                   ...S.mono,
@@ -511,7 +487,10 @@ function MarketCard({
                   lineHeight: 1,
                 }}
               >
-                {(row.upPool + row.downPool).toLocaleString(undefined, { maximumFractionDigits: 1 })}
+                {row.collateralPool.toLocaleString(undefined, { maximumFractionDigits: 1 })}
+                <span style={{ ...S.mono, fontSize: 11, fontWeight: 800, color: '#888', marginLeft: 5 }}>
+                  TUSDC
+                </span>
               </p>
               <p style={{ ...S.label, marginTop: 6 }}>Volume</p>
             </div>
