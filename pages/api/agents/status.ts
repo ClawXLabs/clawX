@@ -9,6 +9,7 @@ import {
   buildPendingSettlements,
 } from '../../../utils/agents/tradeHistory';
 import { readOpenPositions, readWalletAum } from '../../../utils/agents/stats';
+import { checkTxLimit } from '../../../utils/agents/walletLimits';
 import { CONTRACT_ADDRESS, FUJI_RPC_PUBLIC } from '../../../utils/contract';
 
 export default async function handler(req, res) {
@@ -23,6 +24,16 @@ export default async function handler(req, res) {
   }
 
   const user = ethers.getAddress(String(wallet));
+  const txGate = await checkTxLimit(user);
+  const walletLimits = {
+    txUnlimited: txGate.unlimited,
+    txLimit: txGate.limit,
+    txUsed: txGate.buys,
+    txRemaining: txGate.remaining,
+    agentSpendUnlimited: txGate.limits.agent_spend_unlimited,
+    agentSpendLimitTusdc: txGate.limits.agent_spend_limit_tusdc,
+  };
+
   let enrollment = await getEnrollment(user);
   if (!enrollment || enrollment.status !== 'active') {
     const trades = (enrollment?.tradeLog || []).filter((t) => t.action === 'BUY');
@@ -30,6 +41,7 @@ export default async function handler(req, res) {
       enrolled: false,
       retired: enrollment?.status === 'retired',
       historicalTxCount: trades.length,
+      walletLimits,
     });
   }
 
@@ -87,6 +99,7 @@ export default async function handler(req, res) {
       pendingCount: enriched.pendingCount,
     },
     delegate,
+    walletLimits,
     trackRecord: buildTrackRecord(enrollment),
     updatedAt: Math.floor(Date.now() / 1000),
   });

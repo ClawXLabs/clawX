@@ -4,6 +4,11 @@ import { verifyAgentDelegate } from '../../../utils/agents/delegate';
 import { createAgentMemory } from '../../../utils/agents/brain';
 import { getEnrollment, setEnrollment, appendFeedMessage, getDisplayName } from '../../../utils/agents/store';
 import { readWalletAum } from '../../../utils/agents/stats';
+import {
+  checkTxLimit,
+  getWalletLimits,
+  resolveDelegateMaxTusdc,
+} from '../../../utils/agents/walletLimits';
 import { FUJI_RPC_PUBLIC } from '../../../utils/contract';
 
 const ERC20_PERMIT_ABI = [
@@ -69,12 +74,43 @@ export default async function handler(req, res) {
     return res.status(200).json({ ok: true, enrollment: existing, alreadyActive: true });
   }
 
-  const size = Number(tradeSizeTusdc) || DEFAULT_TRADE_SIZE_TUSDC;
+  const limits = await getWalletLimits(user);
+  if (limits.relayer_blocked) {
+    return res.status(403).json({ error: 'Agent enrollment is blocked for this wallet' });
+  }
+
+  const txGate = await checkTxLimit(user);
+  if (!txGate.ok) {
+    return res.status(403).json({
+      error: `Trade limit reached for this account (${txGate.buys}/${txGate.limit}). Ask an admin to raise or clear the limit.`,
+      txLimit: txGate.limit,
+      txUsed: txGate.buys,
+    });
+  }
+
+  // Admin may force a per-trade size; otherwise use the user's choice / default.
+  let size = Number(tradeSizeTusdc) || DEFAULT_TRADE_SIZE_TUSDC;
+  if (limits.agent_trade_size_tusdc != null && Number.isFinite(limits.agent_trade_size_tusdc) && limits.agent_trade_size_tusdc > 0) {
+    size = limits.agent_trade_size_tusdc;
+  }
   const tradeSizeRaw = ethers.parseUnits(String(size), 6).toString();
 
   if (!delegateSignature || !delegateDeadline || !delegateMaxRaw) {
     return res.status(400).json({
       error: 'Agent delegation signature required. Restart from the New agent page.',
+    });
+  }
+
+  // Admin-controlled agent spend (None = unlimited). Caps signed delegate max at enroll.
+  const allowedMax = resolveDelegateMaxTusdc(limits);
+  if (allowedMax <= 0) {
+    return res.status(403).json({ error: 'Agent spending is disabled for this wallet' });
+  }
+  const requestedMax = Number(ethers.formatUnits(BigInt(String(delegateMaxRaw)), 6));
+  if (!limits.agent_spend_unlimited && requestedMax > allowedMax + 1e-9) {
+    return res.status(403).json({
+      error: `Agent spend limit is ${allowedMax} TUSDC. Re-enroll with that delegate cap.`,
+      agentSpendLimitTusdc: allowedMax,
     });
   }
 
