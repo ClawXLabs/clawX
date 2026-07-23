@@ -14,6 +14,7 @@ import {
 } from './store.js';
 import { getUserSettings } from './settings.js';
 import { getMarketSnapshot } from './marketSnapshot.js';
+import { resolveMarketTradeSize } from './marketCaps.js';
 import { acquireRedisLock } from '../db/redisLock.js';
 
 const CONTRACT_ABI = [
@@ -137,7 +138,9 @@ export function createAgentTickProcessor(options = {}) {
         return { skipped: 'paused', lessonsSynced: true };
       }
 
-      const assets = await getMarketSnapshot({ contractAddress, rpcUrl });
+      const assets = (await getMarketSnapshot({ contractAddress, rpcUrl })).filter((a) =>
+        resolveMarketTradeSize(enrollment, a.symbol).ok
+      );
       if (!assets.length) {
         await setEnrollment(wallet, enrollment);
         return { skipped: 'no-open-rounds' };
@@ -168,6 +171,7 @@ export function createAgentTickProcessor(options = {}) {
         row = { ...row, agentMemory: nextMemory };
         if (!decision) break;
         const result = await executeTrade(appUrl, runnerSecret, wallet, decision);
+        const sized = resolveMarketTradeSize(row, decision.symbol);
         row.agentMemory = recordTradePlanned(nextMemory, decision.symbol);
         row.pendingOutcomes = [
           ...(row.pendingOutcomes || []),
@@ -175,6 +179,7 @@ export function createAgentTickProcessor(options = {}) {
             roundId: decision.roundId,
             symbol: decision.symbol,
             isUp: decision.isUp,
+            amountTusdc: sized.ok ? sized.tradeSizeTusdc : Number(row.tradeSizeTusdc) || 0,
             at: Math.floor(Date.now() / 1_000),
             hash: result.hash || '',
           },

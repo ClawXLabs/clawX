@@ -105,6 +105,7 @@ export interface AgentStatusData {
   } | null;
   enrollment?: {
     tradeSizeTusdc?: number;
+    marketCapsTusdc?: Record<string, number> | null;
     paused?: boolean;
     agentMemory?: {
       aiMode?: string;

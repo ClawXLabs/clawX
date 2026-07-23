@@ -6,6 +6,7 @@ import AgentTradeLog from './AgentTradeLog';
 import MatchHistoryPanel from './MatchHistoryPanel';
 import PendingSettlementsPanel from './PendingSettlementsPanel';
 import AgentControlBar from './AgentControlBar';
+import AgentMarketLimits from './AgentMarketLimits';
 import { useWallet } from '../../contexts/WalletContext';
 import { useAgentStatus } from '../../hooks/useAgentStatus';
 import { marketTradePath } from '../../utils/marketLink';
@@ -354,6 +355,15 @@ export default function AgentDashboard() {
               </div>
             </div>
           ) : null}
+        </section>
+
+        <section style={{ ...S.section, marginBottom: 20 }}>
+          <AgentMarketLimits
+            wallet={account}
+            marketCapsTusdc={status?.enrollment?.marketCapsTusdc}
+            defaultTradeSizeTusdc={status?.enrollment?.tradeSizeTusdc}
+            onSaved={() => refresh({ silent: true })}
+          />
         </section>
 
         {(status?.pendingSettlements?.length ?? 0) > 0 ? (
