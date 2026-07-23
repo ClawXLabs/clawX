@@ -112,11 +112,23 @@ CREATE TABLE IF NOT EXISTS platform_config (
   maintenance_message TEXT NOT NULL DEFAULT '',
   announcement TEXT NOT NULL DEFAULT '',
   announcement_published_at TIMESTAMPTZ,
+  -- Global defaults for wallets without a wallet_limits override
+  default_tx_unlimited BOOLEAN NOT NULL DEFAULT true,
+  default_tx_limit INTEGER,
+  default_agent_spend_unlimited BOOLEAN NOT NULL DEFAULT true,
+  default_agent_spend_limit_tusdc NUMERIC,
+  default_agent_trade_size_tusdc NUMERIC,
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
 INSERT INTO platform_config (id) VALUES ('default')
   ON CONFLICT (id) DO NOTHING;
+
+ALTER TABLE platform_config ADD COLUMN IF NOT EXISTS default_tx_unlimited BOOLEAN NOT NULL DEFAULT true;
+ALTER TABLE platform_config ADD COLUMN IF NOT EXISTS default_tx_limit INTEGER;
+ALTER TABLE platform_config ADD COLUMN IF NOT EXISTS default_agent_spend_unlimited BOOLEAN NOT NULL DEFAULT true;
+ALTER TABLE platform_config ADD COLUMN IF NOT EXISTS default_agent_spend_limit_tusdc NUMERIC;
+ALTER TABLE platform_config ADD COLUMN IF NOT EXISTS default_agent_trade_size_tusdc NUMERIC;
 
 CREATE TABLE IF NOT EXISTS ranking_config (
   id TEXT PRIMARY KEY DEFAULT 'default',
@@ -138,6 +150,38 @@ CREATE TABLE IF NOT EXISTS ranking_config (
 INSERT INTO ranking_config (id) VALUES ('default')
   ON CONFLICT (id) DO NOTHING;
 
+-- Admin-managed leaderboard views (time windows + default/primary filter)
+CREATE TABLE IF NOT EXISTS leaderboard_filters (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  slug TEXT NOT NULL UNIQUE,
+  label TEXT NOT NULL,
+  description TEXT NOT NULL DEFAULT '',
+  enabled BOOLEAN NOT NULL DEFAULT true,
+  is_primary BOOLEAN NOT NULL DEFAULT false,
+  sort_order INTEGER NOT NULL DEFAULT 0,
+  sort_metric TEXT NOT NULL DEFAULT 'xp',
+  sort_secondary TEXT NOT NULL DEFAULT 'txCount',
+  window_type TEXT NOT NULL DEFAULT 'all_time',
+  rolling_days INTEGER,
+  start_at TIMESTAMPTZ,
+  end_at TIMESTAMPTZ,
+  campaign_id UUID,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_lb_filters_primary ON leaderboard_filters(is_primary) WHERE is_primary = true;
+CREATE INDEX IF NOT EXISTS idx_lb_filters_enabled ON leaderboard_filters(enabled, sort_order);
+
+INSERT INTO leaderboard_filters (slug, label, description, is_primary, sort_order, sort_metric, window_type)
+VALUES
+  ('all-time', 'All Time', 'Lifetime rankings across all trades', true, 0, 'xp', 'all_time'),
+  ('last-7d', 'Last 7 Days', 'Trades in the last 7 days', false, 1, 'txCount', 'rolling_days'),
+  ('last-30d', 'Last 30 Days', 'Trades in the last 30 days', false, 2, 'txCount', 'rolling_days')
+ON CONFLICT (slug) DO NOTHING;
+
+UPDATE leaderboard_filters SET rolling_days = 7 WHERE slug = 'last-7d' AND rolling_days IS NULL;
+UPDATE leaderboard_filters SET rolling_days = 30 WHERE slug = 'last-30d' AND rolling_days IS NULL;
+
 CREATE TABLE IF NOT EXISTS xp_ledger (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   wallet TEXT NOT NULL,
@@ -157,10 +201,36 @@ CREATE TABLE IF NOT EXISTS wallet_limits (
   tx_unlimited BOOLEAN NOT NULL DEFAULT true,
   faucet_blocked BOOLEAN NOT NULL DEFAULT false,
   relayer_blocked BOOLEAN NOT NULL DEFAULT false,
+  -- Agent spend policy (platform-side). When agent_spend_unlimited is false,
+  -- agent_spend_limit_tusdc caps total agent BUY volume / enrollable delegate max.
+  agent_spend_limit_tusdc NUMERIC,
+  agent_spend_unlimited BOOLEAN NOT NULL DEFAULT true,
+  agent_trade_size_tusdc NUMERIC,
   admin_notes TEXT NOT NULL DEFAULT '',
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_by TEXT
 );
+
+-- Idempotent upgrades for DBs that already had wallet_limits without agent columns
+ALTER TABLE wallet_limits ADD COLUMN IF NOT EXISTS agent_spend_limit_tusdc NUMERIC;
+ALTER TABLE wallet_limits ADD COLUMN IF NOT EXISTS agent_spend_unlimited BOOLEAN NOT NULL DEFAULT true;
+ALTER TABLE wallet_limits ADD COLUMN IF NOT EXISTS agent_trade_size_tusdc NUMERIC;
+
+CREATE TABLE IF NOT EXISTS airdrop_log (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  wallet TEXT NOT NULL,
+  amount_tusdc NUMERIC NOT NULL,
+  tx_hash TEXT,
+  mode TEXT NOT NULL DEFAULT 'single',
+  batch_id UUID,
+  admin_id TEXT,
+  admin_email TEXT,
+  status TEXT NOT NULL DEFAULT 'sent',
+  error TEXT,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_airdrop_created ON airdrop_log(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_airdrop_wallet ON airdrop_log(wallet, created_at DESC);
 
 CREATE TABLE IF NOT EXISTS support_tickets (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
