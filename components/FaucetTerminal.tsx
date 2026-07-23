@@ -73,8 +73,19 @@ const STEPS = [
   { n: 2, text: 'Open MetaMask → click the network name → Add network (or Add a network manually).' },
   { n: 3, text: null },
   { n: 4, text: 'Save the network, then switch MetaMask to Fuji. You should see 43113 or "Fuji" selected.' },
-  { n: 5, text: 'Stay on this Faucet page, connect your wallet, then press Get 300 TUSDC.' },
+  { n: 5, text: null }, // filled dynamically with current claim amount
 ];
+
+function formatCooldownLabel(sec: number) {
+  if (!sec || sec <= 0) return 'no cooldown';
+  if (sec < 3600) return `every ${sec}s`;
+  if (sec % 86400 === 0) {
+    const d = sec / 86400;
+    return d === 1 ? 'every 24 h' : `every ${d} days`;
+  }
+  const h = Math.round(sec / 3600);
+  return `every ${h}h`;
+}
 
 /* ─── Inline styles ──────────────────────────────────────────────── */
 
@@ -191,6 +202,10 @@ export default function FaucetTerminal() {
   const { account, connectWallet } = useWallet();
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState<FaucetMessage | null>(null);
+  const [amountTusdc, setAmountTusdc] = useState(300);
+  const [cooldownSec, setCooldownSec] = useState(86400);
+  const [paused, setPaused] = useState(false);
+  const [configReady, setConfigReady] = useState(false);
 
   const rootRef    = useRef<HTMLDivElement>(null);
   const headerRef  = useRef<HTMLDivElement>(null);
@@ -199,6 +214,25 @@ export default function FaucetTerminal() {
   const claimBtnRef = useRef<HTMLButtonElement>(null);
   const msgRef     = useRef<HTMLDivElement>(null);
   const prevMsg    = useRef<FaucetMessage | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch('/api/faucet-config');
+        const data = await res.json();
+        if (cancelled || !res.ok) return;
+        if (Number.isFinite(Number(data.amountTusdc))) setAmountTusdc(Number(data.amountTusdc));
+        if (Number.isFinite(Number(data.cooldownSec))) setCooldownSec(Number(data.cooldownSec));
+        setPaused(Boolean(data.paused));
+      } catch {
+        /* keep defaults */
+      } finally {
+        if (!cancelled) setConfigReady(true);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, []);
 
   /* ── Page-load entrance animation ── */
   useEffect(() => {
@@ -263,13 +297,19 @@ export default function FaucetTerminal() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ address: recipient }),
       });
-      const data = await response.json() as { error?: string; balance?: bigint; hash?: string };
+      const data = await response.json() as {
+        error?: string;
+        balance?: string;
+        hash?: string;
+        amountTusdc?: number;
+      };
       if (!response.ok) {
         setMessage({ type: 'error', text: data.error || 'Claim failed' });
       } else {
         try { await promptAddTusdcToMetaMask(); } catch { /* dismissed */ }
+        const minted = data.amountTusdc ?? amountTusdc;
         const balText = data.balance != null ? ` Balance: ${ethers.formatUnits(data.balance, 6)} TUSDC.` : '';
-        setMessage({ type: 'ok', text: `300 TUSDC minted on Fuji.${balText} Tx: ${data.hash || 'n/a'}.` });
+        setMessage({ type: 'ok', text: `${minted} TUSDC minted on Fuji.${balText} Tx: ${data.hash || 'n/a'}.` });
       }
     } catch (e: any) {
       setMessage({ type: 'error', text: e.message || 'Network error' });
@@ -306,7 +346,7 @@ export default function FaucetTerminal() {
           }}>
             Claim&nbsp;
             <span style={{ color: '#F69D39' }}>
-              <AnimatedCounter target={300} />
+              <AnimatedCounter target={amountTusdc} />
             </span>
             &nbsp;TUSDC
           </h1>
@@ -343,7 +383,7 @@ export default function FaucetTerminal() {
             fontSize: 'clamp(2.8rem, 6vw, 4rem)',
             fontWeight: 900, color: '#0D0B08', margin: 0, lineHeight: 1,
           }}>
-            300
+            {amountTusdc}
           </h2>
           <span style={{
             ...css.serif,
@@ -357,7 +397,10 @@ export default function FaucetTerminal() {
         </div>
 
         <p style={{ ...css.mono, fontSize: 10, color: '#aaa', marginBottom: 20 }}>
-          One claim per address every 24 h · Fuji Testnet
+          {paused
+            ? 'Faucet paused by admin'
+            : `One claim per address ${formatCooldownLabel(cooldownSec)} · Fuji Testnet`}
+          {configReady ? '' : ' · loading config…'}
         </p>
 
         {/* Checklist bullets */}
@@ -408,27 +451,33 @@ export default function FaucetTerminal() {
           <button
             ref={claimBtnRef}
             type="button"
-            disabled={loading}
+            disabled={loading || paused}
             onClick={getTusdc}
             onMouseEnter={e => handleBtnHover(e.currentTarget, true)}
             onMouseLeave={e => handleBtnHover(e.currentTarget, false)}
             style={{
               ...css.mono,
               display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
-              background: loading ? '#e08a28' : '#F69D39',
+              background: loading || paused ? '#e08a28' : '#F69D39',
               color: '#0D0B08',
               border: 'none',
               padding: '16px 28px',
               fontSize: 12, fontWeight: 700, letterSpacing: '0.14em',
               textTransform: 'uppercase',
-              cursor: loading ? 'not-allowed' : 'pointer',
+              cursor: loading || paused ? 'not-allowed' : 'pointer',
               width: '100%', textAlign: 'center',
-              opacity: loading ? 0.8 : 1,
+              opacity: loading || paused ? 0.8 : 1,
               transformOrigin: 'center',
             }}
           >
             {loading && <PulseDot />}
-            {loading ? 'Working…' : account ? 'Get 300 TUSDC (Free)' : 'Connect & Get 300 TUSDC'}
+            {paused
+              ? 'Faucet paused'
+              : loading
+                ? 'Working…'
+                : account
+                  ? `Get ${amountTusdc} TUSDC (Free)`
+                  : `Connect & Get ${amountTusdc} TUSDC`}
           </button>
 
           {/* Secondary */}
@@ -516,7 +565,9 @@ export default function FaucetTerminal() {
                 </div>
               ) : (
                 <span style={{ ...css.serif, fontSize: 14, lineHeight: 1.65, color: '#3A3530' }}>
-                  {step.text}
+                  {step.n === 5
+                    ? `Stay on this Faucet page, connect your wallet, then press Get ${amountTusdc} TUSDC.`
+                    : step.text}
                 </span>
               )}
             </li>
