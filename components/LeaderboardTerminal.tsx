@@ -60,10 +60,28 @@ interface AgentPersona {
   bySymbol: SymbolStat[];
 }
 
+interface LeaderboardFilterOption {
+  slug: string;
+  label: string;
+  description: string;
+  isPrimary: boolean;
+  windowType: string;
+  sortMetric: string;
+}
+
 interface LeaderboardData {
   stats: LeaderboardStats;
   rows: LeaderboardRow[];
   agentRankings: AgentPersona[];
+  filter?: {
+    slug: string;
+    label: string;
+    description: string;
+    windowLabel: string;
+    sortMetric: string;
+    isPrimary: boolean;
+  };
+  filters?: LeaderboardFilterOption[];
 }
 
 // ─── Styles ───────────────────────────────────────────────────────────────────
@@ -504,16 +522,21 @@ export default function LeaderboardTerminal() {
   const [nameMsg, setNameMsg]       = useState('');
   const [error, setError]           = useState('');
   const [activeTab, setActiveTab]   = useState<Tab>('pilots');
+  const [filterSlug, setFilterSlug] = useState<string>('');
 
   // Auto-load + poll
   useEffect(() => {
     let cancelled = false;
     const load = async () => {
       try {
-        const res = await fetch('/api/agents/leaderboard', { cache: 'no-store' });
+        const qs = filterSlug ? `?filter=${encodeURIComponent(filterSlug)}` : '';
+        const res = await fetch(`/api/agents/leaderboard${qs}`, { cache: 'no-store' });
         const json = await res.json();
         if (!res.ok) throw new Error(json.error || 'Failed to load leaderboard');
-        if (!cancelled) setData(json);
+        if (!cancelled) {
+          setData(json);
+          if (!filterSlug && json.filter?.slug) setFilterSlug(json.filter.slug);
+        }
       } catch (e: any) {
         if (!cancelled) setError(e.message || 'Failed to load');
       }
@@ -521,7 +544,7 @@ export default function LeaderboardTerminal() {
     load();
     const timer = setInterval(load, 8000);
     return () => { cancelled = true; clearInterval(timer); };
-  }, []);
+  }, [filterSlug]);
 
   // Load display name
   useEffect(() => {
@@ -558,6 +581,8 @@ export default function LeaderboardTerminal() {
   const stats   = data?.stats;
   const rows    = data?.rows || [];
   const agents  = data?.agentRankings || [];
+  const filters = data?.filters || [];
+  const activeFilter = data?.filter;
   const needsName = account && !displayName;
 
   const TABS: { id: Tab; label: string; icon: React.ReactNode }[] = [
@@ -575,9 +600,40 @@ export default function LeaderboardTerminal() {
           </h1>
           <span style={{ ...S.label, color: '#C0392B' }}>◆ PILOT RANKINGS</span>
           <span style={{ ...S.serif, fontSize: 13, color: '#5A554E' }}>
-            Pilots ranked by XP — real agent trades, wins, streaks, and social milestones on Fuji.
+            {activeFilter
+              ? `${activeFilter.label}${activeFilter.windowLabel ? ` · ${activeFilter.windowLabel}` : ''} · sorted by ${activeFilter.sortMetric}`
+              : 'Pilots ranked by XP — real agent trades, wins, streaks, and social milestones on Fuji.'}
           </span>
         </div>
+
+        {filters.length > 0 && (
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 14 }}>
+            {filters.map((f) => {
+              const active = (filterSlug || activeFilter?.slug) === f.slug;
+              return (
+                <button
+                  key={f.slug}
+                  type="button"
+                  onClick={() => setFilterSlug(f.slug)}
+                  style={{
+                    ...S.mono,
+                    fontSize: 11,
+                    fontWeight: 800,
+                    letterSpacing: '0.04em',
+                    padding: '7px 12px',
+                    border: '1px solid #0D0B08',
+                    background: active ? '#0D0B08' : 'transparent',
+                    color: active ? '#FAF8F3' : '#0D0B08',
+                    cursor: 'pointer',
+                  }}
+                >
+                  {f.label}
+                  {f.isPrimary ? ' ★' : ''}
+                </button>
+              );
+            })}
+          </div>
+        )}
       </div>
 
       {error && (
