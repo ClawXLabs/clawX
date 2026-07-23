@@ -254,14 +254,14 @@ function LiveTimer({ remaining, open, expired }: { remaining: number; open: bool
         display: 'flex',
         flexDirection: 'column',
         alignItems: 'stretch',
-        gap: 6,
+        gap: 4,
       }}
     >
       <p
         style={{
           ...S.mono,
           width: '100%',
-          fontSize: 26,
+          fontSize: 22,
           fontWeight: 900,
           letterSpacing: '0.02em',
           color,
@@ -330,11 +330,13 @@ function MarketCard({
       <article
         style={{
           position: 'relative',
+          width: 320,
+          height: 248,
           border: '1px solid #0D0B08',
-          minHeight: 280,
           cursor: 'pointer',
           overflow: 'hidden',
           background: '#FAF8F3',
+          boxSizing: 'border-box',
           transition: 'transform 0.15s ease, box-shadow 0.2s ease',
         }}
         onMouseEnter={(e) => {
@@ -360,7 +362,7 @@ function MarketCard({
             history={priceHistory}
             startPrice={row.startPrice}
             startTimeSec={row.startTime}
-            height={280}
+            height={248}
           />
         </div>
 
@@ -380,41 +382,43 @@ function MarketCard({
           style={{
             position: 'relative',
             zIndex: 2,
-            padding: '22px 22px 28px',
+            padding: '10px 12px 22px',
             display: 'flex',
             flexDirection: 'column',
-            gap: 22,
-            minHeight: 280,
+            gap: 14,
+            height: '100%',
             boxSizing: 'border-box',
           }}
         >
-          {/* Top: asset + matched-width timer/Live */}
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 20 }}>
-            <div style={{ minWidth: 0, paddingRight: 8 }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                <AssetIconImg symbol={row.symbol} size={28} />
-                <p style={{ ...S.serif, fontSize: 22, fontWeight: 900, color: '#0D0B08', margin: 0 }}>
+          {/* Top: asset + timer — tight to border */}
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12 }}>
+            <div style={{ minWidth: 0 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <AssetIconImg symbol={row.symbol} size={24} />
+                <p style={{ ...S.serif, fontSize: 18, fontWeight: 900, color: '#0D0B08', margin: 0 }}>
                   {row.name}
                 </p>
               </div>
-              <p style={{ ...S.mono, fontSize: 11, color: '#888', marginTop: 6, marginLeft: 38 }}>
+              <p style={{ ...S.mono, fontSize: 10, color: '#888', marginTop: 3, marginLeft: 32 }}>
                 {row.symbol}/USD
               </p>
             </div>
             <LiveTimer remaining={row.remaining} open={open} expired={expired} />
           </div>
 
-          {/* Price block */}
-          <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', gap: 16 }}>
+          {/* Open above current price */}
+          <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', gap: 12 }}>
             <div>
-              <p style={S.label}>Price</p>
+              <p style={{ ...S.mono, fontSize: 10, color: '#888', margin: 0 }}>
+                Open <strong style={{ color: '#5A554E' }}>{fmtUsd(row.startPrice)}</strong>
+              </p>
               <p
                 style={{
                   ...S.serif,
-                  fontSize: 34,
+                  fontSize: 30,
                   fontWeight: 900,
                   color: '#0D0B08',
-                  margin: '8px 0 0',
+                  margin: '4px 0 0',
                   lineHeight: 1,
                   letterSpacing: '-0.02em',
                 }}
@@ -422,81 +426,79 @@ function MarketCard({
                 {fmtUsd(row.currentPrice)}
               </p>
             </div>
-            <div style={{ textAlign: 'right' }}>
-              <p
-                style={{
-                  ...S.mono,
-                  fontSize: 18,
-                  fontWeight: 900,
-                  margin: 0,
-                  color: isUp ? '#27AE60' : '#C0392B',
-                }}
-              >
-                {isUp ? '▲' : '▼'} {Math.abs(diffPct).toFixed(3)}%
-              </p>
-              <p style={{ ...S.mono, fontSize: 11, color: '#888', margin: '8px 0 0' }}>
-                Open {fmtUsd(row.startPrice)}
-              </p>
-            </div>
+            <p
+              style={{
+                ...S.mono,
+                fontSize: 16,
+                fontWeight: 900,
+                margin: 0,
+                color: isUp ? '#27AE60' : '#C0392B',
+                paddingBottom: 2,
+              }}
+            >
+              {isUp ? '▲' : '▼'} {Math.abs(diffPct).toFixed(3)}%
+            </p>
           </div>
 
-          {/* Stats — pool once + payout + sides (no duplicate volume) */}
+          {/* Bottom: pool + payout · volume right */}
           <div
             style={{
               display: 'flex',
               alignItems: 'flex-end',
               justifyContent: 'space-between',
-              gap: 20,
+              gap: 12,
               marginTop: 'auto',
-              paddingTop: 4,
             }}
           >
-            <div>
-              <p style={{ ...S.label, color: '#C0392B' }}>Pool size</p>
-              <p
-                style={{
-                  ...S.serif,
-                  fontSize: 28,
-                  fontWeight: 900,
-                  color: '#0D0B08',
-                  margin: '8px 0 0',
-                  letterSpacing: '-0.02em',
-                  lineHeight: 1,
-                }}
-              >
-                {row.collateralPool.toLocaleString(undefined, { maximumFractionDigits: 2 })}
-                <span style={{ ...S.mono, fontSize: 12, fontWeight: 800, color: '#888', marginLeft: 8 }}>
-                  TUSDC
-                </span>
-              </p>
+            <div style={{ display: 'flex', gap: 16, alignItems: 'flex-end' }}>
+              <div>
+                <p style={{ ...S.label, color: '#C0392B' }}>Pool size</p>
+                <p
+                  style={{
+                    ...S.serif,
+                    fontSize: 22,
+                    fontWeight: 900,
+                    color: '#0D0B08',
+                    margin: '4px 0 0',
+                    letterSpacing: '-0.02em',
+                    lineHeight: 1,
+                  }}
+                >
+                  {row.collateralPool.toLocaleString(undefined, { maximumFractionDigits: 2 })}
+                  <span style={{ ...S.mono, fontSize: 10, fontWeight: 800, color: '#888', marginLeft: 6 }}>
+                    TUSDC
+                  </span>
+                </p>
+              </div>
+              <div>
+                <p style={S.label}>Payout</p>
+                <p
+                  style={{
+                    ...S.mono,
+                    fontSize: 20,
+                    fontWeight: 900,
+                    color: '#0D0B08',
+                    margin: '4px 0 0',
+                    lineHeight: 1,
+                  }}
+                >
+                  {mult}×
+                </p>
+              </div>
             </div>
-            <div style={{ textAlign: 'center' }}>
-              <p style={S.label}>Payout</p>
+            <div style={{ textAlign: 'right', flexShrink: 0 }}>
+              <p style={S.label}>Volume</p>
               <p
                 style={{
                   ...S.mono,
-                  fontSize: 26,
+                  fontSize: 15,
                   fontWeight: 900,
                   color: '#0D0B08',
-                  margin: '8px 0 0',
+                  margin: '4px 0 0',
                   lineHeight: 1,
                 }}
               >
-                {mult}×
-              </p>
-            </div>
-            <div style={{ textAlign: 'right' }}>
-              <p style={S.label}>
-                UP {upOdds}% · DN {100 - upOdds}%
-              </p>
-              <p style={{ ...S.mono, fontSize: 15, fontWeight: 900, margin: '8px 0 0', lineHeight: 1.2 }}>
-                <span style={{ color: '#27AE60' }}>
-                  {row.upPool.toLocaleString(undefined, { maximumFractionDigits: 1 })}
-                </span>
-                <span style={{ color: '#888' }}> / </span>
-                <span style={{ color: '#C0392B' }}>
-                  {row.downPool.toLocaleString(undefined, { maximumFractionDigits: 1 })}
-                </span>
+                {(row.upPool + row.downPool).toLocaleString(undefined, { maximumFractionDigits: 1 })}
               </p>
             </div>
           </div>
@@ -592,7 +594,14 @@ export default function MarketsHubTerminal() {
           Fetching markets from chain…
         </p>
       ) : (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: 16 }}>
+        <div
+          style={{
+            display: 'flex',
+            flexWrap: 'wrap',
+            gap: 16,
+            justifyContent: 'flex-start',
+          }}
+        >
           {rows.map(row => (
             <MarketCard
               key={row.assetId}
