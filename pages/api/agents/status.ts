@@ -32,6 +32,7 @@ export default async function handler(req, res) {
     txRemaining: txGate.remaining,
     agentSpendUnlimited: txGate.limits.agent_spend_unlimited,
     agentSpendLimitTusdc: txGate.limits.agent_spend_limit_tusdc,
+    agentTradeSizeTusdc: txGate.limits.agent_trade_size_tusdc,
   };
 
   let enrollment = await getEnrollment(user);
