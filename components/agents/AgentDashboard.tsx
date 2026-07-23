@@ -380,7 +380,7 @@ export default function AgentDashboard() {
             Recent trades
           </h2>
           <AgentTradeLog
-            trades={(status?.enrichedTradeLog || status?.tradeLog || []).slice(0, 40)}
+            trades={status?.enrichedTradeLog || status?.tradeLog || []}
             poolSummary={status?.poolSummary}
           />
         </section>
