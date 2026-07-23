@@ -8,13 +8,22 @@ import {
 } from '../../../utils/agents/store';
 import { getAgentById } from '../../../utils/agents/config';
 
+function newAgentPath(agentId: string, tradeSizeTusdc?: number | null) {
+  const q = new URLSearchParams({ agent: String(agentId) });
+  if (tradeSizeTusdc != null && Number(tradeSizeTusdc) > 0) {
+    q.set('tradeSize', String(Number(tradeSizeTusdc)));
+  }
+  return `/agents/new?${q.toString()}`;
+}
+
 /**
  * Kill or schedule a switch.
  * body: {
  *   wallet,
  *   action: 'kill' | 'switch' | 'cancel_pending' | 'complete_switch',
  *   timing?: 'immediate' | 'next_market',
- *   targetAgentId?: string
+ *   targetAgentId?: string,
+ *   tradeSizeTusdc?: number
  * }
  */
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
@@ -23,13 +32,19 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     return res.status(405).json({ error: 'Method not allowed' });
   }
 
-  const { wallet, action, timing, targetAgentId } = req.body || {};
+  const { wallet, action, timing, targetAgentId, tradeSizeTusdc } = req.body || {};
   if (!wallet || !ethers.isAddress(String(wallet))) {
     return res.status(400).json({ error: 'Valid wallet address required' });
   }
 
   const user = ethers.getAddress(String(wallet));
   const enrollment = await getEnrollment(user);
+  const sizeNum =
+    tradeSizeTusdc != null && Number(tradeSizeTusdc) > 0
+      ? Number(tradeSizeTusdc)
+      : enrollment?.tradeSizeTusdc != null && Number(enrollment.tradeSizeTusdc) > 0
+        ? Number(enrollment.tradeSizeTusdc)
+        : null;
 
   if (action === 'cancel_pending') {
     if (!enrollment || enrollment.status !== 'active') {
@@ -46,7 +61,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   }
 
   if (action === 'complete_switch') {
-    // Finish a next-market switch that is already ready (or force-complete).
     if (!enrollment || enrollment.status !== 'active') {
       return res.status(404).json({ error: 'No active enrollment' });
     }
@@ -55,14 +69,23 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     if (!target || !getAgentById(String(target))) {
       return res.status(400).json({ error: 'Valid targetAgentId required' });
     }
+    const size =
+      tradeSizeTusdc != null && Number(tradeSizeTusdc) > 0
+        ? Number(tradeSizeTusdc)
+        : pending?.tradeSizeTusdc != null
+          ? Number(pending.tradeSizeTusdc)
+          : enrollment.tradeSizeTusdc != null
+            ? Number(enrollment.tradeSizeTusdc)
+            : null;
     await retireEnrollment(user);
     return res.status(200).json({
       ok: true,
       applied: true,
       action: 'switch',
       targetAgentId: target,
+      tradeSizeTusdc: size,
       message: 'Agent cleared. Deploy the selected agent to continue.',
-      redirectTo: `/agents/new?agent=${encodeURIComponent(String(target))}`,
+      redirectTo: newAgentPath(String(target), size),
     });
   }
 
@@ -88,6 +111,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     action,
     timing: when,
     targetAgentId: action === 'switch' ? String(targetAgentId) : null,
+    tradeSizeTusdc: action === 'switch' ? sizeNum : null,
   });
 
   if (when === 'immediate') {
@@ -97,14 +121,13 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       action,
       timing: when,
       targetAgentId: action === 'switch' ? String(targetAgentId) : null,
+      tradeSizeTusdc: action === 'switch' ? sizeNum : null,
       message:
         action === 'kill'
           ? 'Agent killed. No further trades. History is kept on this wallet.'
           : 'Agent cleared. Deploy the selected agent to continue.',
       redirectTo:
-        action === 'switch'
-          ? `/agents/new?agent=${encodeURIComponent(String(targetAgentId))}`
-          : '/agents',
+        action === 'switch' ? newAgentPath(String(targetAgentId), sizeNum) : '/agents',
     });
   }
 
@@ -116,6 +139,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     timing: when,
     pendingControl: result?.pendingControl || null,
     targetAgentId: action === 'switch' ? String(targetAgentId) : null,
+    tradeSizeTusdc: action === 'switch' ? sizeNum : null,
     message:
       action === 'kill'
         ? 'Kill scheduled. Current open markets will finish; no new trades after that.'

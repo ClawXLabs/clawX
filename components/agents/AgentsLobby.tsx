@@ -129,6 +129,8 @@ export default function AgentsLobby() {
           mode={modalMode || 'switch'}
           wallet={account}
           activeAgentId={agent?.id}
+          currentTradeSizeTusdc={status?.enrollment?.tradeSizeTusdc ?? null}
+          forcedTradeSizeTusdc={status?.walletLimits?.agentTradeSizeTusdc ?? null}
           onClose={() => setModalMode(null)}
           onDone={() => refresh({ silent: true })}
         />

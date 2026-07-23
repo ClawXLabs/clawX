@@ -258,6 +258,8 @@ export default function AgentDashboard() {
             <AgentControlBar
               wallet={account}
               activeAgentId={agent?.id}
+              currentTradeSizeTusdc={status?.enrollment?.tradeSizeTusdc ?? null}
+              forcedTradeSizeTusdc={status?.walletLimits?.agentTradeSizeTusdc ?? null}
               delegate={delegate}
               walletLimits={status?.walletLimits}
               pendingControl={status?.pendingControl}

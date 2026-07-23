@@ -15,12 +15,15 @@ interface PendingControl {
   action: 'kill' | 'switch';
   timing: 'immediate' | 'next_market';
   targetAgentId?: string | null;
+  tradeSizeTusdc?: number | null;
   ready?: boolean;
 }
 
 interface AgentControlBarProps {
   wallet: string;
   activeAgentId?: string | null;
+  currentTradeSizeTusdc?: number | null;
+  forcedTradeSizeTusdc?: number | null;
   delegate?: DelegateStatus;
   walletLimits?: WalletLimitsStatus;
   pendingControl?: PendingControl | null;
@@ -46,6 +49,8 @@ function redBtn(solid: boolean, disabled?: boolean): React.CSSProperties {
 export default function AgentControlBar({
   wallet,
   activeAgentId,
+  currentTradeSizeTusdc,
+  forcedTradeSizeTusdc,
   delegate,
   walletLimits,
   pendingControl,
@@ -110,6 +115,7 @@ export default function AgentControlBar({
           wallet,
           action: 'complete_switch',
           targetAgentId: pendingControl.targetAgentId,
+          tradeSizeTusdc: pendingControl.tradeSizeTusdc ?? currentTradeSizeTusdc ?? undefined,
         }),
       });
       const data = await res.json();
@@ -133,6 +139,8 @@ export default function AgentControlBar({
           mode={modalMode}
           wallet={wallet}
           activeAgentId={activeAgentId}
+          currentTradeSizeTusdc={currentTradeSizeTusdc}
+          forcedTradeSizeTusdc={forcedTradeSizeTusdc}
           onClose={() => setModalMode(null)}
           onDone={onRefresh}
         />
@@ -237,6 +245,8 @@ export default function AgentControlBar({
 
       {delegate && !delegate.needsRedeploy ? (
         <p style={{ ...S.mono, fontSize: 10, color: '#888', marginBottom: 10 }}>
+          Trade size {currentTradeSizeTusdc ?? '—'} TUSDC
+          {' · '}
           Budget {delegate.spentTusdc}/{delegate.maxTusdc} TUSDC
           {walletLimits
             ? ` · Txn ${

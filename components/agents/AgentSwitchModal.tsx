@@ -4,9 +4,11 @@ import AgentBadgeRow from './AgentBadgeRow';
 import type { AgentData } from './AgentCard';
 import { clearAgentStatusCache } from '../../hooks/useAgentStatus';
 import { readBrowserCache, writeBrowserCache } from '../../utils/browserCache';
+import { DEFAULT_TRADE_SIZE_TUSDC } from '../../utils/agents/config';
 
 const CATALOG_NS = 'agent-catalog';
 const RED = '#C0392B';
+const SIZE_OPTIONS = [2, 5, 10, 20];
 
 const S = {
   mono: { fontFamily: '"Courier New", Courier, monospace' } as React.CSSProperties,
@@ -19,6 +21,10 @@ interface AgentSwitchModalProps {
   open: boolean;
   wallet: string;
   activeAgentId?: string | null;
+  /** Current enrollment trade size — default when switching */
+  currentTradeSizeTusdc?: number | null;
+  /** When admin forces a size, lock the picker */
+  forcedTradeSizeTusdc?: number | null;
   mode?: 'switch' | 'kill';
   onClose: () => void;
   onDone?: () => void;
@@ -28,6 +34,8 @@ export default function AgentSwitchModal({
   open,
   wallet,
   activeAgentId,
+  currentTradeSizeTusdc,
+  forcedTradeSizeTusdc,
   mode = 'switch',
   onClose,
   onDone,
@@ -37,8 +45,18 @@ export default function AgentSwitchModal({
   const [loading, setLoading] = useState(true);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [timing, setTiming] = useState<Timing>('next_market');
+  const [tradeSize, setTradeSize] = useState<number>(DEFAULT_TRADE_SIZE_TUSDC);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+
+  const forced =
+    forcedTradeSizeTusdc != null && Number(forcedTradeSizeTusdc) > 0
+      ? Number(forcedTradeSizeTusdc)
+      : null;
+  const prevSize =
+    currentTradeSizeTusdc != null && Number(currentTradeSizeTusdc) > 0
+      ? Number(currentTradeSizeTusdc)
+      : null;
 
   useEffect(() => {
     if (!open) return;
@@ -46,6 +64,7 @@ export default function AgentSwitchModal({
     setBusy(false);
     setTiming('next_market');
     setSelectedId(null);
+    setTradeSize(forced ?? prevSize ?? DEFAULT_TRADE_SIZE_TUSDC);
     const cached = readBrowserCache<{ agents: AgentData[] }>(CATALOG_NS);
     if (cached?.agents?.length) {
       setAgents(cached.agents);
@@ -60,11 +79,14 @@ export default function AgentSwitchModal({
       })
       .catch(() => {})
       .finally(() => setLoading(false));
-  }, [open]);
+  }, [open, forced, prevSize]);
 
   if (!open) return null;
 
   const isKill = mode === 'kill';
+  const sizeChoices = Array.from(
+    new Set([...(prevSize ? [prevSize] : []), ...SIZE_OPTIONS, ...(forced ? [forced] : [])])
+  ).sort((a, b) => a - b);
 
   const submit = async () => {
     if (!isKill && !selectedId) {
@@ -75,14 +97,18 @@ export default function AgentSwitchModal({
       onClose();
       return;
     }
+    if (!isKill && !(tradeSize > 0)) {
+      setError('Choose a trade size for the new agent.');
+      return;
+    }
 
     const confirmMsg = isKill
       ? timing === 'immediate'
         ? 'Kill this agent now? No further trades. History stays on this wallet.'
         : 'Kill after current markets finish? The agent will take no new trades, then stop.'
       : timing === 'immediate'
-        ? `Switch to the selected agent now? You will re-sign to deploy.`
-        : `Schedule switch after current markets finish? No new trades until then.`;
+        ? `Switch now at ${tradeSize} TUSDC / trade? You will re-sign to deploy.`
+        : `Schedule switch after current markets at ${tradeSize} TUSDC / trade?`;
 
     if (!window.confirm(confirmMsg)) return;
 
@@ -97,6 +123,7 @@ export default function AgentSwitchModal({
           action: isKill ? 'kill' : 'switch',
           timing,
           targetAgentId: isKill ? undefined : selectedId,
+          tradeSizeTusdc: isKill ? undefined : tradeSize,
         }),
       });
       const data = await res.json();
@@ -180,7 +207,7 @@ export default function AgentSwitchModal({
             <p style={{ ...S.mono, fontSize: 11, color: '#888', margin: '6px 0 0' }}>
               {isKill
                 ? 'Stop this agent from trading. Choose when it takes effect.'
-                : 'Pick a badge, then choose this market or next market.'}
+                : 'Pick a badge, choose timing, and confirm the trade size limit.'}
             </p>
           </div>
           <button
@@ -226,6 +253,38 @@ export default function AgentSwitchModal({
               activeFirst
               onSelect={(a) => setSelectedId(a.id)}
             />
+
+            <div style={{ marginTop: 20 }}>
+              <p style={{ ...S.mono, fontSize: 10, color: '#888', marginBottom: 10 }}>
+                Trade size / trade
+                {prevSize ? ` · previous ${prevSize} TUSDC` : ''}
+                {forced ? ' · admin-set' : ''}
+              </p>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+                {sizeChoices.map((n) => (
+                  <button
+                    key={n}
+                    type="button"
+                    disabled={forced != null && n !== forced}
+                    onClick={() => setTradeSize(n)}
+                    style={{
+                      ...S.mono,
+                      fontSize: 12,
+                      fontWeight: 700,
+                      padding: '8px 16px',
+                      border: `1px solid ${tradeSize === n ? RED : '#0D0B08'}`,
+                      background: tradeSize === n ? RED : 'transparent',
+                      color: tradeSize === n ? '#FAF8F3' : '#5A554E',
+                      cursor: forced != null && n !== forced ? 'not-allowed' : 'pointer',
+                      opacity: forced != null && n !== forced ? 0.35 : 1,
+                    }}
+                  >
+                    {n} TUSDC
+                    {prevSize === n ? ' · keep' : ''}
+                  </button>
+                ))}
+              </div>
+            </div>
           </>
         ) : null}
 

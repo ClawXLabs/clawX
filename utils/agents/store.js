@@ -224,6 +224,7 @@ export async function setPendingControl(wallet, control) {
       action: 'switch',
       timing,
       targetAgentId: control?.targetAgentId || null,
+      tradeSizeTusdc: control?.tradeSizeTusdc ?? null,
       enrollment: null,
     };
   }
@@ -232,6 +233,10 @@ export async function setPendingControl(wallet, control) {
     action,
     timing: 'next_market',
     targetAgentId: action === 'switch' ? control?.targetAgentId || null : null,
+    tradeSizeTusdc:
+      action === 'switch' && control?.tradeSizeTusdc != null && Number(control.tradeSizeTusdc) > 0
+        ? Number(control.tradeSizeTusdc)
+        : null,
     requestedAt: now,
     ready: false,
   };

@@ -70,6 +70,12 @@ export default function AgentCreator() {
   }, [router.query.agent]);
 
   useEffect(() => {
+    const raw = router.query.tradeSize;
+    const n = raw !== undefined ? Number(Array.isArray(raw) ? raw[0] : raw) : NaN;
+    if (Number.isFinite(n) && n > 0) setTradeSize(n);
+  }, [router.query.tradeSize]);
+
+  useEffect(() => {
     if (!account) {
       setWalletLimits(null);
       return;
@@ -82,7 +88,11 @@ export default function AgentCreator() {
         setWalletLimits(data);
         if (data.agentTradeSizeTusdc != null && data.agentTradeSizeTusdc > 0) {
           setTradeSize(data.agentTradeSizeTusdc);
+          return;
         }
+        const raw = router.query.tradeSize;
+        const n = raw !== undefined ? Number(Array.isArray(raw) ? raw[0] : raw) : NaN;
+        if (Number.isFinite(n) && n > 0) setTradeSize(n);
       })
       .catch(() => {});
     return () => { cancelled = true; };

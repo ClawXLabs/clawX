@@ -40,6 +40,7 @@ export interface WalletLimitsStatus {
   txRemaining: number | null;
   agentSpendUnlimited: boolean;
   agentSpendLimitTusdc: number | null;
+  agentTradeSizeTusdc?: number | null;
 }
 
 export interface PendingSettlement {
@@ -97,6 +98,7 @@ export interface AgentStatusData {
     action: 'kill' | 'switch';
     timing: 'immediate' | 'next_market';
     targetAgentId?: string | null;
+    tradeSizeTusdc?: number | null;
     requestedAt?: number;
     ready?: boolean;
     readyAt?: number;
