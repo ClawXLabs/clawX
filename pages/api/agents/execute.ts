@@ -6,6 +6,11 @@ import { agentChatterText } from '../../../utils/agents/strategy';
 import { recordTradePlanned } from '../../../utils/agents/brain';
 import { isRunnerAuthorized } from '../../../utils/agents/runnerAuth';
 import { acquireRedisLock } from '../../../utils/db/redisLock';
+import {
+  getAgentBuyVolumeTusdc,
+  getWalletLimits,
+  checkTxLimit,
+} from '../../../utils/agents/walletLimits';
 
 const MARKET_ABI = [
   'function owner() view returns (address)',
@@ -46,6 +51,34 @@ export default async function handler(req, res) {
   }
   if (enrollment.paused) {
     return res.status(400).json({ error: 'Agent is paused' });
+  }
+
+  const limits = await getWalletLimits(user);
+  if (limits.relayer_blocked) {
+    return res.status(403).json({ error: 'Relayer / agent trading is blocked for this wallet' });
+  }
+  const txGate = await checkTxLimit(user);
+  if (!txGate.ok) {
+    return res.status(403).json({
+      error: 'Trade limit reached for this account',
+      txLimit: txGate.limit,
+      txUsed: txGate.buys,
+    });
+  }
+  if (!limits.agent_spend_unlimited) {
+    const spendCap = Number(limits.agent_spend_limit_tusdc);
+    if (!Number.isFinite(spendCap) || spendCap <= 0) {
+      return res.status(403).json({ error: 'Agent spending is disabled for this wallet' });
+    }
+    const volume = await getAgentBuyVolumeTusdc(user);
+    const nextTrade = Number(enrollment.tradeSizeTusdc || 0);
+    if (volume + nextTrade > spendCap + 1e-9) {
+      return res.status(403).json({
+        error: `Agent spend limit reached (${spendCap} TUSDC)`,
+        spentTusdc: volume,
+        agentSpendLimitTusdc: spendCap,
+      });
+    }
   }
 
   const contractAddress = process.env.NEXT_PUBLIC_CONTRACT_ADDRESS;

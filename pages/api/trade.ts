@@ -1,6 +1,7 @@
 import { ethers } from 'ethers';
 import { buildTradeAuthMessage } from '../../utils/tradeAuth';
 import { acquireRedisLock } from '../../utils/db/redisLock';
+import { checkTxLimit, getWalletLimits } from '../../utils/agents/walletLimits';
 
 const MARKET_ABI = [
   'function owner() view returns (address)',
@@ -184,6 +185,22 @@ export default async function handler(req, res) {
   if (!trader || !ethers.isAddress(trader)) {
     return res.status(400).json({ error: 'Invalid trader' });
   }
+
+  if (action === 'buy') {
+    const limits = await getWalletLimits(trader);
+    if (limits.relayer_blocked) {
+      return res.status(403).json({ error: 'Trading is blocked for this wallet' });
+    }
+    const txGate = await checkTxLimit(trader);
+    if (!txGate.ok) {
+      return res.status(403).json({
+        error: 'Trade limit reached for this account',
+        txLimit: txGate.limit,
+        txUsed: txGate.buys,
+      });
+    }
+  }
+
   if (!signature || typeof signature !== 'string') {
     return res.status(400).json({ error: 'Missing signature' });
   }
