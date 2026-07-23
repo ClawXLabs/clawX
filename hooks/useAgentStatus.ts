@@ -152,6 +152,8 @@ export function clearAgentStatusCache(wallet?: string) {
   if (typeof window === 'undefined') return;
   if (wallet) {
     sessionStorage.removeItem(`${LEGACY_PREFIX}${wallet.toLowerCase()}`);
+    // Prevent mid-switch bounce: stale enrolled=true must not send user back to dashboard
+    writeBrowserCache(CACHE_NS, { enrolled: false, retired: true, updatedAt: Math.floor(Date.now() / 1000) }, wallet);
     return;
   }
   Object.keys(sessionStorage).forEach((key) => {

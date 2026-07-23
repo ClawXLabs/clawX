@@ -77,6 +77,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           : enrollment.tradeSizeTusdc != null
             ? Number(enrollment.tradeSizeTusdc)
             : null;
+    // Force-complete is allowed even if next_market is not marked ready yet
     await retireEnrollment(user);
     return res.status(200).json({
       ok: true,

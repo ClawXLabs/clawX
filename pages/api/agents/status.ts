@@ -79,8 +79,10 @@ export default async function handler(req, res) {
 
   let pendingControl = enrollment.pendingControl || null;
   if (pendingControl?.timing === 'next_market' && !pendingControl.ready) {
+    const unresolvedOpenCount = (positions || []).filter((p) => !p.resolved).length;
     const applied = await applyPendingControlIfReady(user, {
-      openPositionCount: positions.length,
+      unresolvedOpenCount,
+      openPositionCount: unresolvedOpenCount,
     });
     if (applied.enrollment) {
       enrollment = applied.enrollment;

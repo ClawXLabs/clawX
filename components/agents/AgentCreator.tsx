@@ -51,8 +51,11 @@ export default function AgentCreator() {
   const [error, setError] = useState('');
 
   useEffect(() => {
-    if (enrolled) router.replace('/agents/dashboard');
-  }, [enrolled, router]);
+    if (!enrolled) return;
+    // During switch deploy (?agent=…) do not bounce back to dashboard from stale cache
+    if (typeof router.query.agent === 'string' && router.query.agent) return;
+    router.replace('/agents/dashboard');
+  }, [enrolled, router, router.query.agent]);
 
   useEffect(() => {
     fetch('/api/agents/catalog')

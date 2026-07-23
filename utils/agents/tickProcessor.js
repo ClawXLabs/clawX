@@ -101,21 +101,35 @@ export function createAgentTickProcessor(options = {}) {
       if (!enrollment || enrollment.status !== 'active') return { skipped: 'inactive' };
       enrollment = await syncLessons(contract, enrollment);
 
-      // Deferred kill/switch: stop new trades; apply when open markets clear
+      // Deferred kill/switch: stop new trades; apply when unresolved markets clear
       if (enrollment.pendingControl?.timing === 'next_market') {
         const open = await readOpenPositions(provider, wallet, contractAddress);
+        const unresolvedOpenCount = open.filter((p) => !p.resolved).length;
         const applied = await applyPendingControlIfReady(wallet, {
-          openPositionCount: open.length,
+          unresolvedOpenCount,
+          openPositionCount: unresolvedOpenCount,
         });
         if (applied.applied === 'kill') {
           return { skipped: 'killed', lessonsSynced: true };
         }
-        if (applied.applied === 'switch_ready') {
+        if (applied.applied === 'switch_ready' || enrollment.pendingControl?.ready) {
           return { skipped: 'switch_ready', lessonsSynced: true };
         }
-        enrollment = applied.enrollment || enrollment;
-        await setEnrollment(wallet, enrollment);
-        return { skipped: 'pending_control', lessonsSynced: true, open: open.length };
+        // Persist lesson sync only — avoid clobbering pendingControl
+        if (applied.enrollment) {
+          await setEnrollment(wallet, {
+            ...applied.enrollment,
+            agentMemory: enrollment.agentMemory,
+            pendingOutcomes: enrollment.pendingOutcomes,
+          });
+        } else {
+          await setEnrollment(wallet, {
+            ...enrollment,
+            agentMemory: enrollment.agentMemory,
+            pendingOutcomes: enrollment.pendingOutcomes,
+          });
+        }
+        return { skipped: 'pending_control', lessonsSynced: true, open: unresolvedOpenCount };
       }
 
       if (enrollment.paused) {
