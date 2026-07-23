@@ -443,7 +443,7 @@ export default function XpDashboard() {
       </div>
 
       {/* Streak + breakdown side by side on wide screens */}
-      <div className="np-fade-up-3" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: 16, marginBottom: 16 }}>
+      <div className="np-fade-up-3" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 280px), 1fr))', gap: 16, marginBottom: 16 }}>
         <StreakDisplay streak={xp.streak} />
         <XpBreakdown breakdown={xp.breakdown} />
       </div>

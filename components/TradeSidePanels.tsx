@@ -136,7 +136,7 @@ export function ActiveMarketsPanel({ currentAssetId }: ActiveMarketsPanelProps) 
       style={{
         position: 'relative',
         width: '100%',
-        maxWidth: 280,
+        maxWidth: '100%',
         border: NP.border,
         background: NP.bg,
         zIndex: 45,
@@ -337,7 +337,7 @@ export function RoundHistoryPanel({
       style={{
         position: 'relative',
         width: '100%',
-        maxWidth: 280,
+        maxWidth: '100%',
         border: NP.border,
         background: NP.bg,
         zIndex: 40,

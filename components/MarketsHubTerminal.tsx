@@ -422,7 +422,7 @@ function MarketCard({
               <p
                 style={{
                   ...S.serif,
-                  fontSize: 34,
+                  fontSize: 28,
                   fontWeight: 900,
                   color: '#0D0B08',
                   margin: '8px 0 0',
@@ -559,7 +559,7 @@ export default function MarketsHubTerminal() {
   const error = contextError;
 
   return (
-    <div style={{ maxWidth: 1280, margin: '0 auto', padding: '20px 24px 64px', width: '100%', boxSizing: 'border-box' }}>
+    <div style={{ maxWidth: 1280, margin: '0 auto', padding: '20px 24px 64px', width: '100%', boxSizing: 'border-box' }} className="np-page">
 
       {/* ── Page header — compact ── */}
       <div className="np-fade-up" style={{ borderBottom: '3px double #0D0B08', paddingBottom: 10, marginBottom: 20 }}>
@@ -590,7 +590,7 @@ export default function MarketsHubTerminal() {
         <div
           style={{
             display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))',
+            gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 280px), 1fr))',
             gap: 16,
             width: '100%',
           }}

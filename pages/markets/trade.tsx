@@ -13,6 +13,7 @@ import SpatialTradingChart from '../../components/SpatialTradingChart';
 import { ActiveMarketsPanel, RoundHistoryPanel } from '../../components/TradeSidePanels';
 import TradeTicketPanel from '../../components/TradeTicketPanel';
 import ArchiveTicketDock from '../../components/ArchiveTicketDock';
+import { useIsMobile } from '../../hooks/useIsMobile';
 
 const MONO: React.CSSProperties = { fontFamily: '"Courier New", Courier, monospace' };
 const FUJI_CHAIN_ID_HEX = '0xa869';
@@ -50,6 +51,7 @@ async function ensureFujiNetwork(): Promise<boolean> {
 
 export default function MarketsTradePage() {
   const router = useRouter();
+  const isMobile = useIsMobile(768);
   const { ready, error } = useMarketData();
   const { account, provider, contract, connectWallet } = useWallet();
 
@@ -347,11 +349,23 @@ export default function MarketsTradePage() {
         <meta name="description" content="Trade 5-minute UP/DOWN markets on Avalanche Fuji." />
       </Head>
       <AppShell>
-        <div style={{ position: 'relative', width: '100%', minHeight: 'calc(100vh - 56px)', overflow: 'hidden' }}>
+        <div
+          style={{
+            position: 'relative',
+            width: '100%',
+            minHeight: isMobile ? undefined : 'calc(100vh - 56px)',
+            overflow: isMobile ? 'auto' : 'hidden',
+          }}
+        >
 
           {error && (
             <div style={{
-              position: 'absolute', top: 64, left: 24, right: 24, zIndex: 30,
+              position: isMobile ? 'relative' : 'absolute',
+              top: isMobile ? undefined : 64,
+              left: isMobile ? undefined : 24,
+              right: isMobile ? undefined : 24,
+              margin: isMobile ? '12px' : undefined,
+              zIndex: 30,
               border: '2px solid #8A1C14', padding: '14px 18px',
               background: 'rgba(250,248,243,0.95)',
               ...MONO, fontSize: 12, color: '#8A1C14',
@@ -379,18 +393,10 @@ export default function MarketsTradePage() {
           )}
 
           {market && displayMarket && (
-            <>
-              {/* Full-bleed spatial canvas — fills the desk behind overlays */}
-              <SpatialTradingChart
-                market={displayMarket}
-                history={history}
-                isHistorical={selectedHistoryRound !== null}
-                onReturnToLive={() => setSelectedHistoryRound(null)}
-              />
-
-              {/* Top-left: back + overview dock */}
-              <div style={{ position: 'absolute', top: 12, left: 12, zIndex: 20, width: 250, display: 'flex', flexDirection: 'column', gap: 10 }}>
+            isMobile ? (
+              <div className="np-trade-mobile-stack np-trade-mobile-only">
                 <button
+                  type="button"
                   onClick={() => router.push('/markets')}
                   style={{
                     alignSelf: 'flex-start',
@@ -403,11 +409,39 @@ export default function MarketsTradePage() {
                 >
                   ← MARKETS
                 </button>
-                <ActiveMarketsPanel currentAssetId={assetId} />
-              </div>
 
-              {/* Bottom-left: history dock */}
-              <div style={{ position: 'absolute', bottom: 16, left: 12, zIndex: 20, width: 250 }}>
+                <div className="np-trade-chart-wrap">
+                  <SpatialTradingChart
+                    market={displayMarket}
+                    history={history}
+                    isHistorical={selectedHistoryRound !== null}
+                    onReturnToLive={() => setSelectedHistoryRound(null)}
+                  />
+                </div>
+
+                <div style={{ width: '100%', border: '1px solid #0D0B08', background: 'rgba(250,248,243,0.96)' }}>
+                  {selectedHistoryRound ? (
+                    <ArchiveTicketDock
+                      market={displayMarket}
+                      onClaimWinnings={handleClaimWinnings}
+                      onReturnToLive={() => setSelectedHistoryRound(null)}
+                      stacked
+                    />
+                  ) : (
+                    <TradeTicketPanel
+                      market={displayMarket}
+                      onTakePosition={handleTakePosition}
+                      onSellPosition={handleSellPosition}
+                      onResolveMarket={handleResolveMarket}
+                      onClaimWinnings={handleClaimWinnings}
+                      tokenSymbol="TUSDC"
+                      isHistorical={false}
+                    />
+                  )}
+                </div>
+
+                <ActiveMarketsPanel currentAssetId={assetId} />
+
                 <RoundHistoryPanel
                   assetId={assetId}
                   currentRoundId={market.roundId}
@@ -415,43 +449,77 @@ export default function MarketsTradePage() {
                   onSelectRound={(r) => setSelectedHistoryRound(r)}
                 />
               </div>
-
-              {/* Right: Buy/Sell ticket (live) or expandable archive dock */}
-              {selectedHistoryRound ? (
-                <ArchiveTicketDock
+            ) : (
+              <>
+                <SpatialTradingChart
                   market={displayMarket}
-                  onClaimWinnings={handleClaimWinnings}
+                  history={history}
+                  isHistorical={selectedHistoryRound !== null}
                   onReturnToLive={() => setSelectedHistoryRound(null)}
                 />
-              ) : (
-                <div
-                  style={{
-                    position: 'absolute',
-                    top: '50%',
-                    right: 12,
-                    transform: 'translateY(-50%)',
-                    zIndex: 20,
-                    width: 300,
-                    maxWidth: 'min(300px, 34vw)',
-                    maxHeight: 'calc(100% - 48px)',
-                    border: '1px solid #0D0B08',
-                    background: 'rgba(250,248,243,0.96)',
-                    overflow: 'auto',
-                  }}
-                >
-                  <TradeTicketPanel
-                    market={displayMarket}
-                    onTakePosition={handleTakePosition}
-                    onSellPosition={handleSellPosition}
-                    onResolveMarket={handleResolveMarket}
-                    onClaimWinnings={handleClaimWinnings}
-                    tokenSymbol="TUSDC"
-                    isHistorical={false}
+
+                <div style={{ position: 'absolute', top: 12, left: 12, zIndex: 20, width: 250, display: 'flex', flexDirection: 'column', gap: 10 }}>
+                  <button
+                    type="button"
+                    onClick={() => router.push('/markets')}
+                    style={{
+                      alignSelf: 'flex-start',
+                      background: 'rgba(250,248,243,0.92)',
+                      border: '1px solid #0D0B08',
+                      ...MONO, fontSize: 11, fontWeight: 700,
+                      cursor: 'pointer', color: '#0D0B08',
+                      padding: '8px 12px',
+                    }}
+                  >
+                    ← MARKETS
+                  </button>
+                  <ActiveMarketsPanel currentAssetId={assetId} />
+                </div>
+
+                <div style={{ position: 'absolute', bottom: 16, left: 12, zIndex: 20, width: 250 }}>
+                  <RoundHistoryPanel
+                    assetId={assetId}
+                    currentRoundId={market.roundId}
+                    selectedRoundId={selectedHistoryRound?.roundId}
+                    onSelectRound={(r) => setSelectedHistoryRound(r)}
                   />
                 </div>
-              )}
 
-            </>
+                {selectedHistoryRound ? (
+                  <ArchiveTicketDock
+                    market={displayMarket}
+                    onClaimWinnings={handleClaimWinnings}
+                    onReturnToLive={() => setSelectedHistoryRound(null)}
+                  />
+                ) : (
+                  <div
+                    style={{
+                      position: 'absolute',
+                      top: '50%',
+                      right: 12,
+                      transform: 'translateY(-50%)',
+                      zIndex: 20,
+                      width: 300,
+                      maxWidth: 'min(300px, 34vw)',
+                      maxHeight: 'calc(100% - 48px)',
+                      border: '1px solid #0D0B08',
+                      background: 'rgba(250,248,243,0.96)',
+                      overflow: 'auto',
+                    }}
+                  >
+                    <TradeTicketPanel
+                      market={displayMarket}
+                      onTakePosition={handleTakePosition}
+                      onSellPosition={handleSellPosition}
+                      onResolveMarket={handleResolveMarket}
+                      onClaimWinnings={handleClaimWinnings}
+                      tokenSymbol="TUSDC"
+                      isHistorical={false}
+                    />
+                  </div>
+                )}
+              </>
+            )
           )}
         </div>
       </AppShell>

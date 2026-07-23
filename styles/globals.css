@@ -410,6 +410,63 @@ a { color: inherit; text-decoration: none; }
 }
 
 /* ═══════════════════════════════════════════════════
+   MOBILE RESPONSIVE HELPERS (.np-root)
+═══════════════════════════════════════════════════ */
+.np-root {
+  overflow-x: clip;
+}
+.np-page {
+  width: 100%;
+  max-width: 1280px;
+  margin: 0 auto;
+  padding: 20px 24px 64px;
+  box-sizing: border-box;
+}
+.np-scroll-x {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior-x: contain;
+}
+.np-grid-fill {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 280px), 1fr));
+  gap: 16px;
+}
+
+@media (max-width: 768px) {
+  .np-page {
+    padding: 14px 14px 56px !important;
+  }
+  .np-trade-desktop-only {
+    display: none !important;
+  }
+  .np-trade-mobile-stack {
+    display: flex !important;
+    flex-direction: column;
+    gap: 12px;
+    padding: 12px 12px 28px;
+    box-sizing: border-box;
+  }
+  .np-trade-chart-wrap {
+    position: relative;
+    width: 100%;
+    height: min(42vh, 320px);
+    min-height: 220px;
+    border: 1px solid #0D0B08;
+    overflow: hidden;
+  }
+  .np-hide-sm {
+    display: none !important;
+  }
+}
+
+@media (min-width: 769px) {
+  .np-trade-mobile-only {
+    display: none !important;
+  }
+}
+
+/* ═══════════════════════════════════════════════════
    NEWSPAPER APP MOTION (scoped to .np-root)
 ═══════════════════════════════════════════════════ */
 .np-root button {

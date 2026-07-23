@@ -165,7 +165,7 @@ export default function AgentDashboard() {
         onClose={() => setMatchOpen(false)}
       />
 
-      <div style={{ maxWidth: 1280, margin: '0 auto', padding: '28px 24px 64px' }}>
+      <div style={{ maxWidth: 1280, margin: '0 auto', padding: '28px 24px 64px' }} className="np-page">
         <Link href="/agents" style={{ textDecoration: 'none' }}>
           <span style={{ ...S.mono, fontSize: 11, color: '#888', display: 'inline-block', marginBottom: 16 }}>
             ← Agents
@@ -320,7 +320,7 @@ export default function AgentDashboard() {
         <div
           style={{
             display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))',
+            gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 280px), 1fr))',
             gap: 20,
             marginBottom: 20,
           }}
@@ -375,7 +375,7 @@ export default function AgentDashboard() {
             <div
               style={{
                 display: 'grid',
-                gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))',
+                gridTemplateColumns: 'repeat(auto-fill, minmax(min(100%, 260px), 1fr))',
                 gap: 8,
               }}
             >

@@ -506,7 +506,7 @@ export default function ProfileTerminal() {
 
   /* ── Render ────────────────────────────────────────────────────── */
   return (
-    <div style={{ maxWidth: 860, margin: '0 auto', padding: '20px 24px 64px' }}>
+    <div style={{ maxWidth: 860, margin: '0 auto', padding: '20px 24px 64px' }} className="np-page">
 
       {/* ── Masthead — compact, single ruled line ────────────────── */}
       <div className="np-fade-up" style={{ borderBottom: '3px double #0D0B08', paddingBottom: 10 }}>
@@ -540,7 +540,7 @@ export default function ProfileTerminal() {
 
           {/* ── Identity board ─────────────────────────────────────── */}
           <section className="np-fade-up-1" style={{ borderBottom: '1px solid #0D0B08', padding: '20px 0 18px', display: 'flex', flexWrap: 'wrap', gap: 24, justifyContent: 'space-between', alignItems: 'flex-start' }}>
-            <div style={{ flex: '1 1 300px', minWidth: 260 }}>
+            <div style={{ flex: '1 1 280px', minWidth: 0 }}>
               {/* Editable username header */}
               {!isEditingName ? (
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -610,9 +610,9 @@ export default function ProfileTerminal() {
             </div>
 
             {/* Balance + faucet */}
-            <div style={{ textAlign: 'right', minWidth: 180 }}>
+            <div style={{ textAlign: 'right', minWidth: 0, flex: '1 1 160px' }}>
               <p style={{ ...S.label, marginBottom: 4 }}>{tokenSymbol} Balance</p>
-              <p style={{ ...S.serif, fontSize: 34, fontWeight: 900, color: '#0D0B08', margin: 0, lineHeight: 1.05 }}>
+              <p style={{ ...S.serif, fontSize: 28, fontWeight: 900, color: '#0D0B08', margin: 0, lineHeight: 1.05 }}>
                 {tusdc ? fmt(tusdc.balance, tokenDecimals) : '…'}
               </p>
               <Link href="/faucet" style={{ textDecoration: 'none' }}>
@@ -629,7 +629,7 @@ export default function ProfileTerminal() {
           </section>
 
           {/* ── Stats strip (market-data bar) ──────────────────────── */}
-          <section className="np-fade-up-2" style={{ borderBottom: '1px solid #0D0B08', display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(110px, 1fr))' }}>
+          <section className="np-fade-up-2" style={{ borderBottom: '1px solid #0D0B08', display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 100px), 1fr))' }}>
             {[
               { label: 'Trades', value: String(trades.length), color: '#0D0B08' },
               { label: 'Wins', value: String(winCount), color: '#27AE60' },

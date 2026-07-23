@@ -176,16 +176,16 @@ export default function AgentSwitchModal({
       role="dialog"
       aria-modal="true"
       aria-label={isKill ? 'Kill agent' : 'Switch agent'}
-      style={{
-        position: 'fixed',
-        inset: 0,
-        zIndex: 80,
-        background: 'rgba(13,11,8,0.45)',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        padding: 20,
-      }}
+        style={{
+          position: 'fixed',
+          inset: 0,
+          zIndex: 80,
+          background: 'rgba(13,11,8,0.45)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          padding: 12,
+        }}
       onClick={onClose}
     >
       <div

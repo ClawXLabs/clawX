@@ -333,7 +333,7 @@ export default function FaucetTerminal() {
 
   /* ────────────────────────────────── Render ─── */
   return (
-    <div ref={rootRef} style={{ maxWidth: 680, margin: '0 auto', padding: '20px 24px 80px' }}>
+    <div ref={rootRef} style={{ maxWidth: 680, margin: '0 auto', padding: '20px 24px 80px' }} className="np-page">
 
       {/* ── Header — compact ────────────────────── */}
       <div ref={headerRef} style={{ borderBottom: '2px solid #0D0B08', paddingBottom: 12, marginBottom: 24 }}>
@@ -359,7 +359,7 @@ export default function FaucetTerminal() {
       </div>
 
       {/* ── Claim card ──────────────────────────── */}
-      <section ref={claimRef} style={{ border: '2px solid #0D0B08', padding: '32px 28px', marginBottom: 24 }}>
+      <section ref={claimRef} style={{ border: '2px solid #0D0B08', padding: '20px 16px', marginBottom: 24 }}>
 
         {/* ── Decorative top bar (animated gradient shimmer) ── */}
         <div style={{
@@ -524,7 +524,7 @@ export default function FaucetTerminal() {
 
       {/* ── Setup guide ─────────────────────────── */}
       <section ref={guideRef} style={{
-        border: '1px solid #0D0B08', padding: '32px 28px',
+        border: '1px solid #0D0B08', padding: '20px 16px',
       }}>
         <p style={{ ...css.label, marginBottom: 6 }}>SETUP GUIDE</p>
         <h2 style={{ ...css.serif, fontSize: 20, fontWeight: 900, color: '#0D0B08', marginBottom: 24 }}>
