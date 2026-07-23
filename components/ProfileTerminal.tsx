@@ -1,10 +1,11 @@
 import Link from 'next/link';
 import { useRouter } from 'next/router';
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useLayoutEffect, useState, useCallback, useRef } from 'react';
 import { ethers } from 'ethers';
 import { useWallet } from '../contexts/WalletContext';
 import { CONTRACT_ABI, CONTRACT_ADDRESS, ERC20_ABI, TUSDC_ADDRESS } from '../utils/contract';
 import { relayClaimWinnings, relayClaimAll, type BatchClaimResult } from '../utils/relayClaim';
+import { readBrowserCache, writeBrowserCache } from '../utils/browserCache';
 import SocialLinker, { type SocialLinks } from './SocialLinker';
 import { Pencil, ChevronLeft, ChevronRight, LineChart } from 'lucide-react';
 
@@ -70,6 +71,72 @@ interface AgentBadge { name: string; emoji: string; color: string }
 
 const PAGE_SIZE = 6;
 
+const PROFILE_CACHE_NS = 'profile-snapshot';
+
+type CachedTrade = Omit<
+  TradeRecord,
+  | 'startPrice'
+  | 'endPrice'
+  | 'upShares'
+  | 'downShares'
+  | 'roundUpShares'
+  | 'roundDownShares'
+  | 'upPool'
+  | 'downPool'
+  | 'collateralPool'
+> & {
+  startPrice: string;
+  endPrice: string;
+  upShares: string;
+  downShares: string;
+  roundUpShares: string;
+  roundDownShares: string;
+  upPool: string;
+  downPool: string;
+  collateralPool: string;
+};
+
+type ProfileSnapshot = {
+  displayName: string;
+  socialLinks: SocialLinks;
+  tusdc: { symbol: string; balance: string } | null;
+  tokenDecimals: number;
+  tokenSymbol: string;
+  trades: CachedTrade[];
+  agentTradeMap: Array<[string, AgentBadge]>;
+};
+
+function serializeTrades(trades: TradeRecord[]): CachedTrade[] {
+  return trades.map((t) => ({
+    ...t,
+    startPrice: t.startPrice.toString(),
+    endPrice: t.endPrice.toString(),
+    upShares: t.upShares.toString(),
+    downShares: t.downShares.toString(),
+    roundUpShares: t.roundUpShares.toString(),
+    roundDownShares: t.roundDownShares.toString(),
+    upPool: t.upPool.toString(),
+    downPool: t.downPool.toString(),
+    collateralPool: t.collateralPool.toString(),
+  }));
+}
+
+function deserializeTrades(rows: CachedTrade[] | undefined): TradeRecord[] {
+  if (!Array.isArray(rows)) return [];
+  return rows.map((t) => ({
+    ...t,
+    startPrice: BigInt(t.startPrice || '0'),
+    endPrice: BigInt(t.endPrice || '0'),
+    upShares: BigInt(t.upShares || '0'),
+    downShares: BigInt(t.downShares || '0'),
+    roundUpShares: BigInt(t.roundUpShares || '0'),
+    roundDownShares: BigInt(t.roundDownShares || '0'),
+    upPool: BigInt(t.upPool || '0'),
+    downPool: BigInt(t.downPool || '0'),
+    collateralPool: BigInt(t.collateralPool || '0'),
+  }));
+}
+
 /* ─── Styles ─────────────────────────────────────────────────────── */
 
 const S = {
@@ -125,6 +192,88 @@ export default function ProfileTerminal() {
   // Filter + pagination
   const [tradeFilter, setTradeFilter] = useState<TradeFilter>('all');
   const [page, setPage] = useState(1);
+  const hydratedWalletRef = useRef<string | null>(null);
+  const hasTradesCacheRef = useRef(false);
+
+  const persistSnapshot = useCallback(
+    (partial: Partial<{
+      displayName: string;
+      socialLinks: SocialLinks;
+      tusdc: TusdcInfo | null;
+      tokenDecimals: number;
+      tokenSymbol: string;
+      trades: TradeRecord[];
+      agentTradeMap: Map<string, AgentBadge>;
+    }>) => {
+      if (!account) return;
+      const prev = readBrowserCache<ProfileSnapshot>(PROFILE_CACHE_NS, account) || {
+        displayName: '',
+        socialLinks: {},
+        tusdc: null,
+        tokenDecimals: 6,
+        tokenSymbol: 'TUSDC',
+        trades: [],
+        agentTradeMap: [],
+      };
+      const next: ProfileSnapshot = {
+        displayName: partial.displayName ?? prev.displayName,
+        socialLinks: partial.socialLinks ?? prev.socialLinks,
+        tusdc:
+          partial.tusdc === undefined
+            ? prev.tusdc
+            : partial.tusdc
+              ? { symbol: partial.tusdc.symbol, balance: partial.tusdc.balance.toString() }
+              : null,
+        tokenDecimals: partial.tokenDecimals ?? prev.tokenDecimals,
+        tokenSymbol: partial.tokenSymbol ?? prev.tokenSymbol,
+        trades: partial.trades ? serializeTrades(partial.trades) : prev.trades,
+        agentTradeMap: partial.agentTradeMap
+          ? Array.from(partial.agentTradeMap.entries())
+          : prev.agentTradeMap,
+      };
+      writeBrowserCache(PROFILE_CACHE_NS, next, account);
+    },
+    [account]
+  );
+
+  // Instant hydrate from browser cache for this wallet
+  useLayoutEffect(() => {
+    if (!account) {
+      hydratedWalletRef.current = null;
+      hasTradesCacheRef.current = false;
+      return;
+    }
+    if (hydratedWalletRef.current === account.toLowerCase()) return;
+    hydratedWalletRef.current = account.toLowerCase();
+    const snap = readBrowserCache<ProfileSnapshot>(PROFILE_CACHE_NS, account);
+    if (!snap) {
+      hasTradesCacheRef.current = false;
+      return;
+    }
+    setDisplayName(snap.displayName || '');
+    setNameInput(snap.displayName || '');
+    setSocialLinks(snap.socialLinks || {});
+    if (snap.tusdc) {
+      try {
+        setTusdc({ symbol: snap.tusdc.symbol, balance: BigInt(snap.tusdc.balance) });
+      } catch {
+        /* ignore */
+      }
+    }
+    if (snap.tokenDecimals) setTokenDecimals(snap.tokenDecimals);
+    if (snap.tokenSymbol) setTokenSymbol(snap.tokenSymbol);
+    const cachedTrades = deserializeTrades(snap.trades);
+    if (cachedTrades.length) {
+      setTrades(cachedTrades);
+      setLoadingTrades(false);
+      hasTradesCacheRef.current = true;
+    } else {
+      hasTradesCacheRef.current = false;
+    }
+    if (snap.agentTradeMap?.length) {
+      setAgentTradeMap(new Map(snap.agentTradeMap));
+    }
+  }, [account]);
 
   /* ── Load balances ─────────────────────────────────────────────── */
   const loadBalances = useCallback(async () => {
@@ -136,9 +285,15 @@ export default function ProfileTerminal() {
         tusdcToken.decimals() as Promise<bigint>,
         tusdcToken.balanceOf(account) as Promise<bigint>,
       ]);
-      setTusdc({ symbol: sym, balance: bal });
+      const nextTusdc = { symbol: sym, balance: bal };
+      setTusdc(nextTusdc);
       setTokenDecimals(Number(dec));
       setTokenSymbol(sym);
+      persistSnapshot({
+        tusdc: nextTusdc,
+        tokenDecimals: Number(dec),
+        tokenSymbol: sym,
+      });
     } catch { setTusdc(null); }
     if (contract) {
       try {
@@ -150,14 +305,16 @@ export default function ProfileTerminal() {
         ]);
         setTokenSymbol(sym);
         setTokenDecimals(Number(dec));
+        persistSnapshot({ tokenSymbol: sym, tokenDecimals: Number(dec) });
       } catch { /* fallback */ }
     }
-  }, [account, provider, contract]);
+  }, [account, provider, contract, persistSnapshot]);
 
   /* ── Load trades from chain ────────────────────────────────────── */
-  const loadTrades = useCallback(async () => {
+  const loadTrades = useCallback(async (opts?: { silent?: boolean }) => {
     if (!account || !contract) return;
-    setLoadingTrades(true);
+    const silent = opts?.silent ?? hasTradesCacheRef.current;
+    if (!silent) setLoadingTrades(true);
     try {
       const assetCount = Number(await contract.getAssetCount());
       const results: TradeRecord[] = [];
@@ -205,8 +362,12 @@ export default function ProfileTerminal() {
       }
       results.sort((a, b) => b.roundId - a.roundId);
       setTrades(results);
-    } finally { setLoadingTrades(false); }
-  }, [account, contract]);
+      hasTradesCacheRef.current = results.length > 0;
+      persistSnapshot({ trades: results });
+    } finally {
+      setLoadingTrades(false);
+    }
+  }, [account, contract, persistSnapshot]);
 
   /* ── Load agent tradeLog for executioner attribution ───────────── */
   const loadAgentData = useCallback(async () => {
@@ -227,8 +388,9 @@ export default function ProfileTerminal() {
         map.set(`${entry.roundId}-${String(entry.side).toUpperCase()}`, badge);
       }
       setAgentTradeMap(map);
+      persistSnapshot({ agentTradeMap: map });
     } catch { /* agent data optional */ }
-  }, [account]);
+  }, [account, persistSnapshot]);
 
   /* ── Load display name ─────────────────────────────────────────── */
   const loadDisplayName = useCallback(async () => {
@@ -240,8 +402,12 @@ export default function ProfileTerminal() {
       setDisplayName(json.displayName || '');
       setNameInput(json.displayName || '');
       setSocialLinks(json.socialLinks || {});
+      persistSnapshot({
+        displayName: json.displayName || '',
+        socialLinks: json.socialLinks || {},
+      });
     } catch { setDisplayName(''); }
-  }, [account]);
+  }, [account, persistSnapshot]);
 
   const saveDisplayName = async () => {
     if (!account) return;
@@ -257,6 +423,7 @@ export default function ProfileTerminal() {
       setDisplayName(json.displayName);
       setIsEditingName(false);
       setNameMsg('Saved — visible on the leaderboard.');
+      persistSnapshot({ displayName: json.displayName || '' });
     } catch (e: unknown) {
       const err = e as { message?: string };
       setNameMsg(err.message || 'Save failed');
@@ -265,7 +432,7 @@ export default function ProfileTerminal() {
 
   useEffect(() => {
     loadBalances();
-    loadTrades();
+    loadTrades({ silent: true });
     loadDisplayName();
     loadAgentData();
   }, [loadBalances, loadTrades, loadDisplayName, loadAgentData]);
@@ -488,7 +655,10 @@ export default function ProfileTerminal() {
             <SocialLinker
               wallet={account}
               initialLinks={socialLinks}
-              onSaved={(updated) => setSocialLinks(updated)}
+              onSaved={(updated) => {
+                setSocialLinks(updated);
+                persistSnapshot({ socialLinks: updated });
+              }}
             />
           </section>
 
