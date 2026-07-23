@@ -7,6 +7,7 @@ import {
   buildEnrichedTradeLog,
   buildMatchHistory,
   buildPendingSettlements,
+  enrichOpenPositions,
 } from '../../../utils/agents/tradeHistory';
 import { readOpenPositions, readWalletAum } from '../../../utils/agents/stats';
 import { checkTxLimit } from '../../../utils/agents/walletLimits';
@@ -108,7 +109,7 @@ export default async function handler(req, res) {
     aum: Math.round(aum * 100) / 100,
     returnPct: Math.round(returnPct * 10) / 10,
     decimals,
-    openPositions: positions,
+    openPositions: enrichOpenPositions(positions, enrollment),
     tradeLog: enrollment.tradeLog || [],
     enrichedTradeLog: enriched.trades,
     matchHistory: buildMatchHistory(enrollment),
