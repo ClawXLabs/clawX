@@ -315,8 +315,6 @@ export default function AgentDashboard() {
               </div>
             ))}
           </div>
-
-          </div>
         </section>
 
         <div
