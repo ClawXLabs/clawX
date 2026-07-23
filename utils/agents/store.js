@@ -251,7 +251,13 @@ export async function setPendingControl(wallet, control) {
 export async function clearPendingControl(wallet) {
   const row = await getEnrollment(wallet);
   if (!row || row.status !== 'active') return null;
-  return setEnrollment(wallet, { ...row, pendingControl: null });
+  return setEnrollment(wallet, {
+    ...row,
+    pendingControl: null,
+    // Ready-switch had paused the agent — cancel must unpause
+    paused: false,
+    pausedAt: null,
+  });
 }
 
 /** Apply deferred kill/switch once markets have cleared. */
@@ -339,6 +345,10 @@ export async function retireEnrollment(wallet) {
     retiredAt: Math.floor(Date.now() / 1000),
     agentMemory: null,
     pendingOutcomes: [],
+    // Must clear — otherwise next enroll merges stale pendingControl/paused and loops Complete switch
+    pendingControl: null,
+    paused: false,
+    pausedAt: null,
     delegateSignature: null,
     delegateDeadline: null,
     delegateMaxRaw: null,

@@ -2,7 +2,7 @@ import { ethers } from 'ethers';
 import { getAgentById, DEFAULT_TRADE_SIZE_TUSDC } from '../../../utils/agents/config';
 import { verifyAgentDelegate } from '../../../utils/agents/delegate';
 import { createAgentMemory } from '../../../utils/agents/brain';
-import { getEnrollment, setEnrollment, appendFeedMessage, getDisplayName } from '../../../utils/agents/store';
+import { getEnrollment, setEnrollment, appendFeedMessage, getDisplayName, retireEnrollment } from '../../../utils/agents/store';
 import { readWalletAum } from '../../../utils/agents/stats';
 import {
   checkTxLimit,
@@ -68,10 +68,24 @@ export default async function handler(req, res) {
   }
 
   const user = ethers.getAddress(wallet);
-  const existing = await getEnrollment(user);
+  let existing = await getEnrollment(user);
+
+  // Heal stuck next-market switches: pendingControl survived an older retire/re-enroll path.
+  if (existing?.status === 'active' && existing.pendingControl?.action === 'switch') {
+    await retireEnrollment(user);
+    existing = await getEnrollment(user);
+  }
+
   const preservedTradeLog = existing?.tradeLog || [];
   if (existing?.status === 'active') {
-    return res.status(200).json({ ok: true, enrollment: existing, alreadyActive: true });
+    if (String(existing.agentId) === String(agentId)) {
+      return res.status(200).json({ ok: true, enrollment: existing, alreadyActive: true });
+    }
+    return res.status(409).json({
+      error: 'Another agent is already active. Cancel or complete the pending switch first.',
+      alreadyActive: true,
+      agentId: existing.agentId,
+    });
   }
 
   const limits = await getWalletLimits(user);
@@ -161,6 +175,9 @@ export default async function handler(req, res) {
     initialAumRaw,
     tradeLog: preservedTradeLog,
     pendingOutcomes: [],
+    pendingControl: null,
+    paused: false,
+    pausedAt: null,
     agentMemory: createAgentMemory(agent.id),
     delegateSignature,
     delegateDeadline: Number(delegateDeadline),

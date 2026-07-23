@@ -154,6 +154,26 @@ export default function AgentsLobby() {
     }
   };
 
+  const cancelPending = async () => {
+    if (!account || !pending) return;
+    setBusy(true);
+    try {
+      const res = await fetch('/api/agents/control', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ wallet: account, action: 'cancel_pending' }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Cancel failed');
+      await refresh({ silent: true });
+    } catch (e: unknown) {
+      const err = e as { message?: string };
+      window.alert(err.message || 'Could not cancel');
+    } finally {
+      setBusy(false);
+    }
+  };
+
   return (
     <div style={{ maxWidth: 1280, margin: '0 auto', padding: '28px 24px 64px' }}>
       {account ? (
@@ -309,6 +329,11 @@ export default function AgentsLobby() {
               {pending?.action === 'switch' && pending.targetAgentId ? (
                 <button type="button" onClick={completePendingSwitch} disabled={busy} style={redBtn(true)}>
                   {busy ? '…' : pending.ready ? 'Complete switch' : 'Complete switch now'}
+                </button>
+              ) : null}
+              {pending ? (
+                <button type="button" onClick={cancelPending} disabled={busy} style={redBtn(false)}>
+                  {busy ? '…' : 'Cancel'}
                 </button>
               ) : null}
               <button
