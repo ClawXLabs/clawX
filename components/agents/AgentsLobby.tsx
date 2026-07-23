@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import { useRouter } from 'next/router';
 import { useEffect, useLayoutEffect, useState } from 'react';
 import { Bot } from 'lucide-react';
 import type { AgentData } from './AgentCard';
@@ -6,6 +7,7 @@ import AgentIcon from './AgentIcon';
 import AgentBadgeRow from './AgentBadgeRow';
 import AgentSwitchModal from './AgentSwitchModal';
 import { useAgentEnrollment } from '../../hooks/useAgentEnrollment';
+import { clearAgentStatusCache } from '../../hooks/useAgentStatus';
 import { readBrowserCache, writeBrowserCache } from '../../utils/browserCache';
 import { marketTradePath } from '../../utils/marketLink';
 
@@ -41,11 +43,13 @@ function redBtn(solid = true): React.CSSProperties {
 }
 
 export default function AgentsLobby() {
+  const router = useRouter();
   const { enrolled, status, account, refresh } = useAgentEnrollment(4000);
   const [agents, setAgents] = useState<AgentData[]>([]);
   const [loading, setLoading] = useState(true);
   const [pausing, setPausing] = useState(false);
   const [modalMode, setModalMode] = useState<'switch' | 'kill' | null>(null);
+  const [busy, setBusy] = useState(false);
 
   useLayoutEffect(() => {
     const cached = readBrowserCache<{ agents: AgentData[] }>(CATALOG_NS);
@@ -118,6 +122,32 @@ export default function AgentsLobby() {
       await refresh({ silent: true });
     } finally {
       setPausing(false);
+    }
+  };
+
+  const completePendingSwitch = async () => {
+    if (!account || !pending?.targetAgentId) return;
+    setBusy(true);
+    try {
+      const res = await fetch('/api/agents/control', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          wallet: account,
+          action: 'complete_switch',
+          targetAgentId: pending.targetAgentId,
+          tradeSizeTusdc: pending.tradeSizeTusdc ?? status?.enrollment?.tradeSizeTusdc ?? undefined,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Switch failed');
+      clearAgentStatusCache(account);
+      await router.push(data.redirectTo || `/agents/new?agent=${encodeURIComponent(pending.targetAgentId)}`);
+    } catch (e: unknown) {
+      const err = e as { message?: string };
+      window.alert(err.message || 'Could not complete switch');
+    } finally {
+      setBusy(false);
     }
   };
 
@@ -196,6 +226,7 @@ export default function AgentsLobby() {
               return;
             }
             if (enrolled) {
+              if (pending) return;
               if (a.id === agent?.id) return;
               setModalMode('switch');
               return;
@@ -272,10 +303,25 @@ export default function AgentsLobby() {
                   {pausing ? '…' : isPaused ? 'Resume' : 'Pause'}
                 </button>
               ) : null}
-              <button type="button" onClick={() => setModalMode('switch')} style={redBtn(false)}>
+              {pending?.action === 'switch' && pending.targetAgentId ? (
+                <button type="button" onClick={completePendingSwitch} disabled={busy} style={redBtn(true)}>
+                  {busy ? '…' : pending.ready ? 'Complete switch' : 'Complete switch now'}
+                </button>
+              ) : null}
+              <button
+                type="button"
+                onClick={() => setModalMode('switch')}
+                disabled={!!pending}
+                style={{ ...redBtn(false), opacity: pending ? 0.45 : 1 }}
+              >
                 Switch
               </button>
-              <button type="button" onClick={() => setModalMode('kill')} style={redBtn(true)}>
+              <button
+                type="button"
+                onClick={() => setModalMode('kill')}
+                disabled={!!pending}
+                style={{ ...redBtn(true), opacity: pending ? 0.45 : 1 }}
+              >
                 Kill
               </button>
               <Link href="/agents/dashboard" style={{ textDecoration: 'none' }}>
@@ -296,13 +342,14 @@ export default function AgentsLobby() {
                 color: RED,
               }}
             >
-              {pending.ready
-                ? pending.action === 'switch'
-                  ? 'Open markets cleared — open Switch to finish deploying the new agent.'
-                  : 'Open markets cleared — confirm Kill to retire this agent.'
-                : pending.action === 'switch'
-                  ? 'Switch scheduled after current markets. No new trades until then.'
-                  : 'Kill scheduled after current markets. No new trades until then.'}
+              {pending.action === 'switch'
+                ? pending.ready
+                  ? 'Switch ready — use Complete switch to deploy the new agent.'
+                  : 'Switch scheduled. Waiting for live markets, or Complete switch now.'
+                : pending.ready
+                  ? 'Kill ready — confirm from the dashboard.'
+                  : 'Kill scheduled after live markets finish.'}
+              {pending.tradeSizeTusdc ? ` Size ${pending.tradeSizeTusdc} TUSDC.` : ''}
             </div>
           ) : null}
 

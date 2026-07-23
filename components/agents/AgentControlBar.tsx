@@ -105,8 +105,13 @@ export default function AgentControlBar({
   };
 
   const completeSwitch = async () => {
-    if (!pendingControl?.targetAgentId) return;
+    const targetId = pendingControl?.targetAgentId;
+    if (!targetId) {
+      setMsg('Missing target agent — cancel and switch again.');
+      return;
+    }
     setBusy(true);
+    setMsg('');
     try {
       const res = await fetch('/api/agents/control', {
         method: 'POST',
@@ -114,15 +119,15 @@ export default function AgentControlBar({
         body: JSON.stringify({
           wallet,
           action: 'complete_switch',
-          targetAgentId: pendingControl.targetAgentId,
-          tradeSizeTusdc: pendingControl.tradeSizeTusdc ?? currentTradeSizeTusdc ?? undefined,
+          targetAgentId: targetId,
+          tradeSizeTusdc: pendingControl?.tradeSizeTusdc ?? currentTradeSizeTusdc ?? undefined,
         }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Switch failed');
       clearAgentStatusCache(wallet);
-      if (data.redirectTo) router.push(data.redirectTo);
-      else router.push('/agents/new');
+      const dest = data.redirectTo || `/agents/new?agent=${encodeURIComponent(targetId)}`;
+      await router.push(dest);
     } catch (e: unknown) {
       const err = e as { message?: string };
       setMsg(err.message || 'Switch failed');
@@ -165,16 +170,21 @@ export default function AgentControlBar({
                 : 'KILL SCHEDULED'}
           </p>
           <p style={{ ...S.serif, fontSize: 14, color: '#0D0B08', margin: '8px 0 0' }}>
-            {pendingControl.ready
-              ? pendingControl.action === 'switch'
-                ? 'Open markets cleared. Finish deploying the new agent.'
-                : 'Open markets cleared. Confirm to retire this agent.'
-              : 'No new trades. Waiting for current open markets to finish.'}
+            {pendingControl.action === 'switch'
+              ? pendingControl.ready
+                ? 'Live markets cleared. Complete switch to deploy the new agent.'
+                : 'Waiting for live markets to finish — or complete switch now to cut over early.'
+              : pendingControl.ready
+                ? 'Live markets cleared. Confirm to retire this agent.'
+                : 'No new trades. Waiting for live markets to finish.'}
+            {pendingControl.action === 'switch' && pendingControl.tradeSizeTusdc
+              ? ` Trade size: ${pendingControl.tradeSizeTusdc} TUSDC.`
+              : ''}
           </p>
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 12 }}>
-            {pendingControl.ready && pendingControl.action === 'switch' ? (
+            {pendingControl.action === 'switch' && pendingControl.targetAgentId ? (
               <button type="button" onClick={completeSwitch} disabled={busy} style={redBtn(true, busy)}>
-                {busy ? '…' : 'Complete switch'}
+                {busy ? '…' : pendingControl.ready ? 'Complete switch' : 'Complete switch now'}
               </button>
             ) : null}
             {pendingControl.ready && pendingControl.action === 'kill' ? (
@@ -268,10 +278,20 @@ export default function AgentControlBar({
         >
           {pausing ? '…' : delegate?.paused ? 'Resume' : 'Pause'}
         </button>
-        <button type="button" onClick={() => setModalMode('switch')} style={redBtn(false)}>
+        <button
+          type="button"
+          onClick={() => setModalMode('switch')}
+          disabled={!!pendingControl}
+          style={redBtn(false, !!pendingControl)}
+        >
           Switch
         </button>
-        <button type="button" onClick={() => setModalMode('kill')} style={redBtn(true)}>
+        <button
+          type="button"
+          onClick={() => setModalMode('kill')}
+          disabled={!!pendingControl}
+          style={redBtn(true, !!pendingControl)}
+        >
           Kill
         </button>
       </div>

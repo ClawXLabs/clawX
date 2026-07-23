@@ -255,13 +255,20 @@ export async function clearPendingControl(wallet) {
 }
 
 /** Apply deferred kill/switch once markets have cleared. */
-export async function applyPendingControlIfReady(wallet, { openPositionCount = 0 } = {}) {
+export async function applyPendingControlIfReady(wallet, { openPositionCount = 0, unresolvedOpenCount } = {}) {
   const row = await getEnrollment(wallet);
   if (!row || row.status !== 'active' || !row.pendingControl) return { changed: false, enrollment: row };
   if (row.pendingControl.timing !== 'next_market') return { changed: false, enrollment: row };
 
-  const pendingOutcomes = (row.pendingOutcomes || []).length;
-  if (openPositionCount > 0 || pendingOutcomes > 0) {
+  // Already marked ready — do not rewrite enrollment every tick (avoids UI thrash)
+  if (row.pendingControl.ready) {
+    return { changed: false, applied: 'switch_ready', enrollment: row };
+  }
+
+  const openCount =
+    unresolvedOpenCount != null ? Number(unresolvedOpenCount) : Number(openPositionCount) || 0;
+  // Only unresolved live markets block readiness. Settled shares / journal rows must not trap switch.
+  if (openCount > 0) {
     return { changed: false, enrollment: row };
   }
 
