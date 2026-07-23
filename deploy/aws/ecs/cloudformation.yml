@@ -25,6 +25,13 @@ Parameters:
   WorkerMaxCount:
     Type: Number
     Default: 8
+  AdminDesiredCount:
+    Type: Number
+    Default: 1
+  AdminHost:
+    Type: String
+    Default: admin.clawxlab.xyz
+    Description: Host header routed to the admin ECS service
   ImageTag:
     Type: String
     Default: latest
@@ -366,6 +373,13 @@ Resources:
       ImageScanningConfiguration:
         ScanOnPush: true
 
+  EcrAdmin:
+    Type: AWS::ECR::Repository
+    Properties:
+      RepositoryName: !Sub '${ProjectName}/admin'
+      ImageScanningConfiguration:
+        ScanOnPush: true
+
   EcsCluster:
     Type: AWS::ECS::Cluster
     Properties:
@@ -404,6 +418,25 @@ Resources:
       LogGroupName: !Sub '/ecs/${ProjectName}/agent-worker'
       RetentionInDays: 14
 
+  LogGroupAdmin:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub '/ecs/${ProjectName}/admin'
+      RetentionInDays: 14
+
+  AdminSecret:
+    Type: AWS::SecretsManager::Secret
+    Properties:
+      Name: !Sub '${ProjectName}/${EnvironmentName}/admin'
+      Description: ClawX admin desk env (narrow — no settlement keys). Filled by sync-admin-task-env.js
+      SecretString: !Sub |
+        {
+          "ADMIN_SESSION_SECRET": "REPLACE_ME",
+          "DATABASE_SSL": "true",
+          "DATABASE_SSL_REJECT_UNAUTHORIZED": "false",
+          "ADMIN_HOST": "${AdminHost}"
+        }
+
   EcsExecutionRole:
     Type: AWS::IAM::Role
     Properties:
@@ -427,6 +460,7 @@ Resources:
                   - secretsmanager:GetSecretValue
                 Resource:
                   - !Ref DbMasterSecret
+                  - !Ref AdminSecret
                   - !If [CreateSecret, !Ref AppSecret, !Sub 'arn:aws:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:${ProjectName}/*']
 
   EcsTaskRole:
@@ -486,6 +520,37 @@ Resources:
       DefaultActions:
         - Type: forward
           TargetGroupArn: !Ref TargetGroup
+
+  TargetGroupAdmin:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Properties:
+      Name: !Sub '${ProjectName}-admin'
+      Port: 3000
+      Protocol: HTTP
+      VpcId: !Ref VPC
+      TargetType: ip
+      HealthCheckPath: /api/health
+      HealthCheckIntervalSeconds: 30
+      HealthyThresholdCount: 2
+      UnhealthyThresholdCount: 3
+      Matcher:
+        HttpCode: 200
+      TargetGroupAttributes:
+        - Key: deregistration_delay.timeout_seconds
+          Value: '30'
+
+  HttpListenerRuleAdmin:
+    Type: AWS::ElasticLoadBalancingV2::ListenerRule
+    Properties:
+      ListenerArn: !Ref HttpListener
+      Priority: 10
+      Conditions:
+        - Field: host-header
+          Values:
+            - !Ref AdminHost
+      Actions:
+        - Type: forward
+          TargetGroupArn: !Ref TargetGroupAdmin
 
   # Shared env helpers as CloudFormation intrinsic composition is limited —
   # DATABASE_URL / REDIS_URL / APP_URL are injected by deploy script into task defs.
@@ -618,6 +683,37 @@ Resources:
             - Name: NODE_ENV
               Value: production
 
+  TaskAdmin:
+    Type: AWS::ECS::TaskDefinition
+    Properties:
+      Family: !Sub '${ProjectName}-admin'
+      Cpu: '512'
+      Memory: '1024'
+      NetworkMode: awsvpc
+      RequiresCompatibilities: [FARGATE]
+      ExecutionRoleArn: !GetAtt EcsExecutionRole.Arn
+      TaskRoleArn: !GetAtt EcsTaskRole.Arn
+      ContainerDefinitions:
+        - Name: admin
+          Image: !Sub '${AWS::AccountId}.dkr.ecr.${AWS::Region}.amazonaws.com/${ProjectName}/admin:${ImageTag}'
+          Essential: true
+          PortMappings:
+            - ContainerPort: 3000
+              Protocol: tcp
+          LogConfiguration:
+            LogDriver: awslogs
+            Options:
+              awslogs-group: !Ref LogGroupAdmin
+              awslogs-region: !Ref AWS::Region
+              awslogs-stream-prefix: admin
+          Environment:
+            - Name: NODE_ENV
+              Value: production
+            - Name: PORT
+              Value: '3000'
+            - Name: HOST
+              Value: 0.0.0.0
+
   ServiceWeb:
     Type: AWS::ECS::Service
     DependsOn: HttpListener
@@ -640,6 +736,34 @@ Resources:
           ContainerPort: 3000
           TargetGroupArn: !Ref TargetGroup
       HealthCheckGracePeriodSeconds: 60
+      DeploymentConfiguration:
+        MaximumPercent: 200
+        MinimumHealthyPercent: 50
+
+  ServiceAdmin:
+    Type: AWS::ECS::Service
+    DependsOn:
+      - HttpListener
+      - HttpListenerRuleAdmin
+    Properties:
+      ServiceName: admin
+      Cluster: !Ref EcsCluster
+      TaskDefinition: !Ref TaskAdmin
+      DesiredCount: !Ref AdminDesiredCount
+      LaunchType: FARGATE
+      NetworkConfiguration:
+        AwsvpcConfiguration:
+          AssignPublicIp: DISABLED
+          Subnets:
+            - !Ref PrivateSubnet1
+            - !Ref PrivateSubnet2
+          SecurityGroups:
+            - !Ref EcsSecurityGroup
+      LoadBalancers:
+        - ContainerName: admin
+          ContainerPort: 3000
+          TargetGroupArn: !Ref TargetGroupAdmin
+      HealthCheckGracePeriodSeconds: 90
       DeploymentConfiguration:
         MaximumPercent: 200
         MinimumHealthyPercent: 50
@@ -759,8 +883,16 @@ Outputs:
     Value: !Sub '${AWS::AccountId}.dkr.ecr.${AWS::Region}.amazonaws.com/${ProjectName}/agent-scheduler'
   EcrWorkerUri:
     Value: !Sub '${AWS::AccountId}.dkr.ecr.${AWS::Region}.amazonaws.com/${ProjectName}/agent-worker'
+  EcrAdminUri:
+    Value: !Sub '${AWS::AccountId}.dkr.ecr.${AWS::Region}.amazonaws.com/${ProjectName}/admin'
   TargetGroupArn:
     Value: !Ref TargetGroup
+  AdminTargetGroupArn:
+    Value: !Ref TargetGroupAdmin
+  AdminSecretArn:
+    Value: !Ref AdminSecret
+  AdminHost:
+    Value: !Ref AdminHost
   HttpListenerArn:
     Value: !Ref HttpListener
   PrivateSubnet1:
