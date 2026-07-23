@@ -261,7 +261,7 @@ function LiveTimer({ remaining, open, expired }: { remaining: number; open: bool
         style={{
           ...S.mono,
           width: '100%',
-          fontSize: 22,
+          fontSize: 24,
           fontWeight: 900,
           letterSpacing: '0.02em',
           color,
@@ -331,7 +331,7 @@ function MarketCard({
         style={{
           position: 'relative',
           width: '100%',
-          height: 248,
+          height: 260,
           border: '1px solid #0D0B08',
           cursor: 'pointer',
           overflow: 'hidden',
@@ -362,7 +362,7 @@ function MarketCard({
             history={priceHistory}
             startPrice={row.startPrice}
             startTimeSec={row.startTime}
-            height={248}
+            height={260}
           />
         </div>
 
@@ -390,66 +390,69 @@ function MarketCard({
             boxSizing: 'border-box',
           }}
         >
-          {/* Values first (above the name), then compact title */}
+          {/* Name on top + timer */}
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12 }}>
-            <div style={{ minWidth: 0, flex: 1 }}>
-              <p style={{ ...S.mono, fontSize: 11, fontWeight: 700, color: '#888', margin: 0 }}>
+            <div style={{ minWidth: 0 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <AssetIconImg symbol={row.symbol} size={22} />
+                <p
+                  style={{
+                    ...S.serif,
+                    fontSize: 16,
+                    fontWeight: 800,
+                    color: '#0D0B08',
+                    margin: 0,
+                    lineHeight: 1.15,
+                  }}
+                >
+                  {row.name}
+                </p>
+              </div>
+              <p style={{ ...S.mono, fontSize: 10, color: '#888', marginTop: 3, marginLeft: 30 }}>
+                {row.symbol}/USD
+              </p>
+            </div>
+            <LiveTimer remaining={row.remaining} open={open} expired={expired} />
+          </div>
+
+          {/* Open above current — larger readable values */}
+          <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', gap: 12 }}>
+            <div>
+              <p style={{ ...S.mono, fontSize: 14, fontWeight: 800, color: '#5A554E', margin: 0 }}>
                 {fmtUsd(row.startPrice)}
               </p>
               <p style={{ ...S.mono, fontSize: 9, color: '#aaa', margin: '2px 0 0', letterSpacing: '0.1em' }}>
                 OPEN
               </p>
-              <div style={{ display: 'flex', alignItems: 'flex-end', gap: 10, marginTop: 6 }}>
-                <p
-                  style={{
-                    ...S.serif,
-                    fontSize: 30,
-                    fontWeight: 900,
-                    color: '#0D0B08',
-                    margin: 0,
-                    lineHeight: 1,
-                    letterSpacing: '-0.02em',
-                  }}
-                >
-                  {fmtUsd(row.currentPrice)}
-                </p>
-                <p
-                  style={{
-                    ...S.mono,
-                    fontSize: 14,
-                    fontWeight: 900,
-                    margin: 0,
-                    color: isUp ? '#27AE60' : '#C0392B',
-                    paddingBottom: 2,
-                  }}
-                >
-                  {isUp ? '▲' : '▼'} {Math.abs(diffPct).toFixed(3)}%
-                </p>
-              </div>
+              <p
+                style={{
+                  ...S.serif,
+                  fontSize: 34,
+                  fontWeight: 900,
+                  color: '#0D0B08',
+                  margin: '8px 0 0',
+                  lineHeight: 1,
+                  letterSpacing: '-0.02em',
+                }}
+              >
+                {fmtUsd(row.currentPrice)}
+              </p>
               <p style={{ ...S.mono, fontSize: 9, color: '#aaa', margin: '3px 0 0', letterSpacing: '0.1em' }}>
                 PRICE
               </p>
-
-              <div style={{ display: 'flex', alignItems: 'center', gap: 7, marginTop: 10 }}>
-                <AssetIconImg symbol={row.symbol} size={18} />
-                <p
-                  style={{
-                    ...S.serif,
-                    fontSize: 13,
-                    fontWeight: 700,
-                    color: '#5A554E',
-                    margin: 0,
-                    lineHeight: 1.2,
-                  }}
-                >
-                  {row.name}
-                  <span style={{ ...S.mono, fontSize: 10, fontWeight: 600, color: '#888', marginLeft: 6 }}>
-                    {row.symbol}/USD
-                  </span>
-                </p>
-              </div>
             </div>
-            <LiveTimer remaining={row.remaining} open={open} expired={expired} />
+            <p
+              style={{
+                ...S.mono,
+                fontSize: 18,
+                fontWeight: 900,
+                margin: 0,
+                color: isUp ? '#27AE60' : '#C0392B',
+                paddingBottom: 14,
+              }}
+            >
+              {isUp ? '▲' : '▼'} {Math.abs(diffPct).toFixed(3)}%
+            </p>
           </div>
 
           {/* Bottom: value above label · volume right */}
@@ -467,7 +470,7 @@ function MarketCard({
                 <p
                   style={{
                     ...S.serif,
-                    fontSize: 22,
+                    fontSize: 26,
                     fontWeight: 900,
                     color: '#0D0B08',
                     margin: 0,
@@ -476,7 +479,7 @@ function MarketCard({
                   }}
                 >
                   {row.collateralPool.toLocaleString(undefined, { maximumFractionDigits: 2 })}
-                  <span style={{ ...S.mono, fontSize: 10, fontWeight: 800, color: '#888', marginLeft: 5 }}>
+                  <span style={{ ...S.mono, fontSize: 11, fontWeight: 800, color: '#888', marginLeft: 5 }}>
                     TUSDC
                   </span>
                 </p>
@@ -486,7 +489,7 @@ function MarketCard({
                 <p
                   style={{
                     ...S.mono,
-                    fontSize: 20,
+                    fontSize: 24,
                     fontWeight: 900,
                     color: '#0D0B08',
                     margin: 0,
@@ -502,7 +505,7 @@ function MarketCard({
               <p
                 style={{
                   ...S.mono,
-                  fontSize: 15,
+                  fontSize: 18,
                   fontWeight: 900,
                   color: '#0D0B08',
                   margin: 0,
