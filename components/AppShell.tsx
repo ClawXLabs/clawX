@@ -32,8 +32,7 @@ export default function AppShell({ children }: AppShellProps) {
       {/* Connect Wallet Modal Popup */}
       <ConnectWalletModal />
 
-      {/* Page content — padded below the two fixed nav bars */}
-      <main style={{ paddingTop: 56 }}>
+      <main style={{ paddingTop: 'calc(56px + env(safe-area-inset-top, 0px))' }}>
         {children}
       </main>
     </div>

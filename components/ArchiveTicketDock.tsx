@@ -23,6 +23,8 @@ interface ArchiveTicketDockProps {
   market: MarketInfo;
   onClaimWinnings: (assetId: number) => Promise<void>;
   onReturnToLive: () => void;
+  /** Full-width in-flow layout for mobile trade stack */
+  stacked?: boolean;
 }
 
 /** Collapsed right-edge dock for archive rounds — expands to claim / return. */
@@ -30,26 +32,40 @@ export default function ArchiveTicketDock({
   market,
   onClaimWinnings,
   onReturnToLive,
+  stacked = false,
 }: ArchiveTicketDockProps) {
-  const [expanded, setExpanded] = useState(false);
+  const [expanded, setExpanded] = useState(stacked);
   const wentUp = market.currentPrice >= market.startPrice;
+  const showBody = stacked || expanded;
 
   return (
     <div
-      style={{
-        position: 'absolute',
-        top: '50%',
-        right: 12,
-        transform: 'translateY(-50%)',
-        zIndex: 20,
-        width: expanded ? 280 : 44,
-        maxWidth: 'min(280px, 40vw)',
-        border: NP.border,
-        background: 'rgba(250,248,243,0.96)',
-        transition: 'width 0.18s ease',
-        overflow: 'hidden',
-      }}
+      style={
+        stacked
+          ? {
+              position: 'relative',
+              width: '100%',
+              maxWidth: '100%',
+              border: 'none',
+              background: 'transparent',
+              overflow: 'hidden',
+            }
+          : {
+              position: 'absolute',
+              top: '50%',
+              right: 12,
+              transform: 'translateY(-50%)',
+              zIndex: 20,
+              width: expanded ? 280 : 44,
+              maxWidth: 'min(280px, 40vw)',
+              border: NP.border,
+              background: 'rgba(250,248,243,0.96)',
+              transition: 'width 0.18s ease',
+              overflow: 'hidden',
+            }
+      }
     >
+      {!stacked ? (
       <button
         type="button"
         onClick={() => setExpanded((v) => !v)}
@@ -88,8 +104,26 @@ export default function ArchiveTicketDock({
           <Archive size={18} strokeWidth={2.5} />
         )}
       </button>
+      ) : (
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 8,
+            padding: '12px 14px',
+            borderBottom: '1px solid rgba(13,11,8,0.12)',
+            background: 'rgba(13,11,8,0.04)',
+          }}
+        >
+          <Archive size={15} strokeWidth={2.5} />
+          <span style={{ ...NP.serif, fontSize: 14, fontWeight: 900 }}>Archive</span>
+          <span style={{ ...NP.mono, fontSize: 9, fontWeight: 700, color: '#5A554E' }}>
+            #{market.roundNumber}
+          </span>
+        </div>
+      )}
 
-      {expanded && (
+      {showBody && (
         <div style={{ padding: '14px 14px 16px', display: 'flex', flexDirection: 'column', gap: 12 }}>
           <div
             style={{

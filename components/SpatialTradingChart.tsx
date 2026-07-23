@@ -1073,7 +1073,7 @@ export default function SpatialTradingChart({
         background: PAPER,
         overflow: 'hidden',
         userSelect: 'none',
-        touchAction: 'none',
+        touchAction: 'manipulation',
         cursor: 'grab',
       }}
     >

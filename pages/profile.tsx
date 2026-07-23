@@ -38,7 +38,7 @@ function TabButton({
         fontWeight: 700,
         letterSpacing: '0.1em',
         textTransform: 'uppercase',
-        padding: '10px 18px',
+        padding: '10px 12px',
         border: 'none',
         borderBottom: isActive ? '3px solid #0D0B08' : '3px solid transparent',
         marginBottom: -2,
@@ -51,6 +51,7 @@ function TabButton({
         gap: 6,
         transition: 'color 0.15s, border-color 0.15s',
         whiteSpace: 'nowrap',
+        flexShrink: 0,
       }}
     >
       <span style={{ display: 'flex', alignItems: 'center' }}>{tab.icon}</span>
@@ -71,11 +72,12 @@ export default function ProfilePage() {
       <AppShell>
         {/* ── Tab bar — Settings sits apart on the right ─────────────── */}
         <div
+          className="np-scroll-x"
           style={{
             display: 'flex',
             alignItems: 'stretch',
             gap: 2,
-            padding: '0 2px',
+            padding: '0 8px',
             borderBottom: '2px solid #0D0B08',
           }}
         >
@@ -101,9 +103,11 @@ export default function ProfilePage() {
           className="np-fade-up"
           style={{
             /* Overview tab manages its own padding internally */
-            padding: activeTab === 'overview' ? 0 : '28px 24px 40px',
+            padding: activeTab === 'overview' ? 0 : '16px 14px 40px',
             maxWidth: activeTab === 'overview' ? undefined : 860,
             margin: activeTab === 'overview' ? undefined : '0 auto',
+            boxSizing: 'border-box',
+            width: '100%',
           }}
         >
           {activeTab === 'overview' && <ProfileTerminal />}

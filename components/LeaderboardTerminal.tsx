@@ -591,7 +591,7 @@ export default function LeaderboardTerminal() {
   ];
 
   return (
-    <div style={{ maxWidth: 1280, margin: '0 auto', padding: '20px 24px 64px' }}>
+    <div style={{ maxWidth: 1280, margin: '0 auto', padding: '20px 24px 64px' }} className="np-page">
       {/* Page header — compact */}
       <div className="np-fade-up" style={{ borderBottom: '2px solid #0D0B08', paddingBottom: 12, marginBottom: 20 }}>
         <div style={{ display: 'flex', alignItems: 'baseline', gap: 12, flexWrap: 'wrap' }}>
@@ -646,10 +646,10 @@ export default function LeaderboardTerminal() {
       <div style={{ display: 'flex', gap: 24, alignItems: 'flex-start', flexWrap: 'wrap' }}>
 
         {/* Main column — rankings get the width */}
-        <div className="np-fade-up-1" style={{ flex: '999 1 520px', minWidth: 0 }}>
+        <div className="np-fade-up-1" style={{ flex: '1 1 100%', minWidth: 0, maxWidth: '100%' }}>
 
           {/* Tabs */}
-          <div style={{ display: 'flex', gap: 0, borderBottom: '2px solid #0D0B08', marginBottom: 18 }}>
+          <div className="np-scroll-x" style={{ display: 'flex', gap: 0, borderBottom: '2px solid #0D0B08', marginBottom: 18 }}>
             {TABS.map((t) => {
               const isActive = activeTab === t.id;
               return (
@@ -659,7 +659,7 @@ export default function LeaderboardTerminal() {
                   style={{
                     ...S.mono, fontSize: 11, fontWeight: 700,
                     letterSpacing: '0.1em', textTransform: 'uppercase',
-                    padding: '10px 18px', border: 'none',
+                    padding: '10px 14px', border: 'none',
                     borderBottom: isActive ? '3px solid #0D0B08' : '3px solid transparent',
                     marginBottom: -2,
                     background: 'transparent',
@@ -667,6 +667,7 @@ export default function LeaderboardTerminal() {
                     cursor: 'pointer',
                     display: 'flex', alignItems: 'center', gap: 6,
                     whiteSpace: 'nowrap',
+                    flexShrink: 0,
                   }}
                 >
                   <span style={{ display: 'flex', alignItems: 'center' }}>{t.icon}</span>{t.label}
@@ -691,7 +692,7 @@ export default function LeaderboardTerminal() {
         </div>
 
         {/* Right sidebar — minimal board figures + references */}
-        <aside className="np-fade-up-2" style={{ flex: '1 0 240px', maxWidth: 320 }}>
+        <aside className="np-fade-up-2" style={{ flex: '1 1 240px', maxWidth: 320, width: '100%', minWidth: 0 }}>
 
           {/* Board figures */}
           <div style={{ border: '1px solid #0D0B08', padding: '16px 18px', marginBottom: 14 }}>

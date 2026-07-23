@@ -55,7 +55,7 @@ export default function Navbar({ account, onConnect }: NavbarProps) {
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'space-between',
-          padding: '0 24px',
+          padding: isMobile ? '0 12px' : '0 24px',
           background: scrolled
             ? 'rgba(250, 248, 243, 0.82)'
             : 'rgba(250, 248, 243, 0.95)',

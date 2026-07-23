@@ -175,7 +175,7 @@ export default function AgentsLobby() {
   };
 
   return (
-    <div style={{ maxWidth: 1280, margin: '0 auto', padding: '28px 24px 64px' }}>
+    <div style={{ maxWidth: 1280, margin: '0 auto', padding: '28px 24px 64px' }} className="np-page">
       {account ? (
         <AgentSwitchModal
           open={!!modalMode}
