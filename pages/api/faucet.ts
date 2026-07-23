@@ -1,22 +1,13 @@
 import { ethers } from 'ethers';
-import { query } from '../../utils/db/postgres';
+import { query } from '../../utils/db/postgres.js';
+import { getPlatformConfig, faucetAmountRaw } from '../../utils/platformConfig.js';
+import { getWalletLimits } from '../../utils/agents/walletLimits.js';
 
 const TUSDC_ABI = [
   'function mint(address to, uint256 amount) external',
   'function owner() view returns (address)',
   'function balanceOf(address) view returns (uint256)',
 ];
-
-const CLAIM_AMOUNT = 300n * 10n ** 6n;
-
-/** Seconds between claims per address. Env FAUCET_COOLDOWN_SEC: use 0 for frictionless local testing, 86400 for production-like demo. */
-function cooldownSeconds() {
-  const raw = process.env.FAUCET_COOLDOWN_SEC;
-  if (raw === undefined || raw === '') return 24 * 60 * 60;
-  const n = Number(raw);
-  if (!Number.isFinite(n) || n < 0) return 24 * 60 * 60;
-  return Math.floor(n);
-}
 
 function normalizePrivateKey(value) {
   if (!value) return '';
@@ -51,6 +42,13 @@ async function recordClaim(wallet, claimedAt) {
   );
 }
 
+function formatCooldown(waitSec) {
+  if (waitSec <= 0) return '0s';
+  if (waitSec < 3600) return `${waitSec}s`;
+  const hours = Math.ceil(waitSec / 3600);
+  return `${hours}h`;
+}
+
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
     res.setHeader('Allow', 'POST');
@@ -66,6 +64,19 @@ export default async function handler(req, res) {
     return res.status(400).json({ error: 'Invalid wallet address' });
   }
   const recipient = ethers.getAddress(addressRaw);
+
+  const platform = await getPlatformConfig();
+  if (platform.faucet_paused) {
+    return res.status(503).json({ error: 'Faucet is paused by platform admin.' });
+  }
+
+  const limits = await getWalletLimits(recipient);
+  if (limits.faucet_blocked) {
+    return res.status(403).json({ error: 'Faucet is blocked for this wallet.' });
+  }
+
+  const claimAmount = faucetAmountRaw(platform.faucet_amount_tusdc);
+  const cooldownSec = Math.max(0, Number(platform.faucet_cooldown_sec) || 0);
 
   const keys = faucetKeyCandidates();
   if (keys.length === 0) {
@@ -87,7 +98,7 @@ export default async function handler(req, res) {
   let onChainOwner;
   try {
     onChainOwner = await tusdcRead.owner();
-  } catch (e) {
+  } catch {
     return res.status(500).json({
       error: `Could not read TUSDC owner() at ${tokenAddress}. Wrong contract?`,
     });
@@ -111,7 +122,6 @@ export default async function handler(req, res) {
     });
   }
 
-  const cooldownSec = cooldownSeconds();
   const now = Math.floor(Date.now() / 1000);
   let last;
   try {
@@ -119,16 +129,18 @@ export default async function handler(req, res) {
   } catch (e) {
     console.error('Faucet: could not read claim history:', e);
     return res.status(503).json({
-      error: 'Database unavailable — start Postgres (docker compose -f docker-compose.infrastructure.yml up -d) and retry.',
+      error: 'Database unavailable — start Postgres and retry.',
     });
   }
-  // Corrupt / clock-skew entries (e.g. timestamp in the future) would block forever — ignore them.
   if (last > now) last = 0;
 
   if (cooldownSec > 0 && last && now - last < cooldownSec) {
     const waitSec = cooldownSec - (now - last);
     return res.status(429).json({
-      error: `Already claimed. Try again in ${Math.ceil(waitSec / 3600)}h or wait ${waitSec}s.`,
+      error: `Already claimed. Try again in ${formatCooldown(waitSec)} (${waitSec}s).`,
+      cooldownSec,
+      waitSec,
+      amountTusdc: platform.faucet_amount_tusdc,
     });
   }
 
@@ -146,11 +158,11 @@ export default async function handler(req, res) {
       const wallet = new ethers.Wallet(key, provider);
       const tusdc = new ethers.Contract(tokenAddress, TUSDC_ABI, wallet);
 
-      const tx = await tusdc.mint(recipient, CLAIM_AMOUNT);
+      const tx = await tusdc.mint(recipient, claimAmount);
       await tx.wait();
 
       const balanceAfter = await readBal.balanceOf(recipient);
-      if (balanceAfter < balanceBefore + CLAIM_AMOUNT) {
+      if (balanceAfter < balanceBefore + claimAmount) {
         console.error('Faucet: balance did not increase after mint', {
           recipient,
           balanceBefore: balanceBefore.toString(),
@@ -165,14 +177,15 @@ export default async function handler(req, res) {
       try {
         await recordClaim(recipient.toLowerCase(), now);
       } catch (e) {
-        // Tokens are already minted — log but don't fail the claim over bookkeeping.
         console.error('Faucet: could not record claim:', e);
       }
 
       return res.status(200).json({
         ok: true,
         hash: tx.hash,
-        amount: CLAIM_AMOUNT.toString(),
+        amount: claimAmount.toString(),
+        amountTusdc: platform.faucet_amount_tusdc,
+        cooldownSec,
         recipient,
         balance: balanceAfter.toString(),
       });
