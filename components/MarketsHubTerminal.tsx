@@ -331,7 +331,7 @@ function MarketCard({
         style={{
           position: 'relative',
           width: '100%',
-          height: 260,
+          height: 300,
           border: '1px solid #0D0B08',
           cursor: 'pointer',
           overflow: 'hidden',
@@ -362,7 +362,7 @@ function MarketCard({
             history={priceHistory}
             startPrice={row.startPrice}
             startTimeSec={row.startTime}
-            height={260}
+            height={300}
           />
         </div>
 
@@ -455,57 +455,56 @@ function MarketCard({
             </p>
           </div>
 
-          {/* Bottom: value above label · volume right */}
+          {/* Bottom: three aligned columns — pool · payout · volume */}
           <div
             style={{
-              display: 'flex',
-              alignItems: 'flex-end',
-              justifyContent: 'space-between',
+              display: 'grid',
+              gridTemplateColumns: '1fr 1fr 1fr',
+              alignItems: 'end',
               gap: 12,
               marginTop: 'auto',
+              paddingTop: 8,
             }}
           >
-            <div style={{ display: 'flex', gap: 18, alignItems: 'flex-end' }}>
-              <div>
-                <p
-                  style={{
-                    ...S.serif,
-                    fontSize: 26,
-                    fontWeight: 900,
-                    color: '#0D0B08',
-                    margin: 0,
-                    letterSpacing: '-0.02em',
-                    lineHeight: 1,
-                  }}
-                >
-                  {row.collateralPool.toLocaleString(undefined, { maximumFractionDigits: 2 })}
-                  <span style={{ ...S.mono, fontSize: 11, fontWeight: 800, color: '#888', marginLeft: 5 }}>
-                    TUSDC
-                  </span>
-                </p>
-                <p style={{ ...S.label, color: '#C0392B', marginTop: 4 }}>Pool size</p>
-              </div>
-              <div>
-                <p
-                  style={{
-                    ...S.mono,
-                    fontSize: 24,
-                    fontWeight: 900,
-                    color: '#0D0B08',
-                    margin: 0,
-                    lineHeight: 1,
-                  }}
-                >
-                  {mult}×
-                </p>
-                <p style={{ ...S.label, marginTop: 4 }}>Payout</p>
-              </div>
+            <div style={{ textAlign: 'left' }}>
+              <p
+                style={{
+                  ...S.serif,
+                  fontSize: 26,
+                  fontWeight: 900,
+                  color: '#0D0B08',
+                  margin: 0,
+                  letterSpacing: '-0.02em',
+                  lineHeight: 1,
+                }}
+              >
+                {row.collateralPool.toLocaleString(undefined, { maximumFractionDigits: 2 })}
+                <span style={{ ...S.mono, fontSize: 11, fontWeight: 800, color: '#888', marginLeft: 5 }}>
+                  TUSDC
+                </span>
+              </p>
+              <p style={{ ...S.label, color: '#C0392B', marginTop: 6 }}>Pool size</p>
             </div>
-            <div style={{ textAlign: 'right', flexShrink: 0 }}>
+            <div style={{ textAlign: 'center' }}>
               <p
                 style={{
                   ...S.mono,
-                  fontSize: 18,
+                  fontSize: 26,
+                  fontWeight: 900,
+                  color: '#0D0B08',
+                  margin: 0,
+                  lineHeight: 1,
+                }}
+              >
+                {mult}×
+              </p>
+              <p style={{ ...S.label, marginTop: 6 }}>Payout</p>
+            </div>
+            <div style={{ textAlign: 'right' }}>
+              <p
+                style={{
+                  ...S.mono,
+                  fontSize: 26,
                   fontWeight: 900,
                   color: '#0D0B08',
                   margin: 0,
@@ -514,7 +513,7 @@ function MarketCard({
               >
                 {(row.upPool + row.downPool).toLocaleString(undefined, { maximumFractionDigits: 1 })}
               </p>
-              <p style={{ ...S.label, marginTop: 4 }}>Volume</p>
+              <p style={{ ...S.label, marginTop: 6 }}>Volume</p>
             </div>
           </div>
         </div>
