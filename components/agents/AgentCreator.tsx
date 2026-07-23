@@ -6,6 +6,7 @@ import type { AgentData } from './AgentCard';
 import AgentBadgeRow from './AgentBadgeRow';
 import { useWallet } from '../../contexts/WalletContext';
 import { useAgentEnrollment } from '../../hooks/useAgentEnrollment';
+import { clearAgentStatusCache } from '../../hooks/useAgentStatus';
 import { DEFAULT_TRADE_SIZE_TUSDC } from '../../utils/agents/config';
 import { buildAgentDelegateMessage } from '../../utils/agents/delegate';
 import { signErc2612Permit } from '../../utils/tradePermit';
@@ -51,11 +52,13 @@ export default function AgentCreator() {
   const [error, setError] = useState('');
 
   useEffect(() => {
+    if (!router.isReady) return;
     if (!enrolled) return;
     // During switch deploy (?agent=…) do not bounce back to dashboard from stale cache
-    if (typeof router.query.agent === 'string' && router.query.agent) return;
+    const qAgent = typeof router.query.agent === 'string' ? router.query.agent : '';
+    if (qAgent) return;
     router.replace('/agents/dashboard');
-  }, [enrolled, router, router.query.agent]);
+  }, [enrolled, router, router.isReady, router.query.agent]);
 
   useEffect(() => {
     fetch('/api/agents/catalog')
@@ -156,8 +159,18 @@ export default function AgentCreator() {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ wallet, agentId: selected.id, tradeSizeTusdc: size, delegateSignature, delegateDeadline, delegateMaxRaw, permit })
       });
-      const data = await res.json() as { error?: string };
+      const data = await res.json() as {
+        error?: string;
+        alreadyActive?: boolean;
+        enrollment?: { agentId?: string };
+      };
       if (!res.ok) throw new Error(data.error || 'Could not start agent');
+      if (data.alreadyActive && data.enrollment?.agentId && data.enrollment.agentId !== selected.id) {
+        throw new Error(
+          'Another agent is still active. Open the dashboard, cancel Complete switch, then deploy again.'
+        );
+      }
+      clearAgentStatusCache(wallet);
       router.push(`/agents/dashboard?agent=${selected.id}`);
     } catch (e: unknown) {
       const err = e as { message?: string };
@@ -312,7 +325,11 @@ export default function AgentCreator() {
           <p style={{ ...S.mono, fontSize: 10, color: '#888' }}>
             MetaMask will open on Fuji when you start.
           </p>
-        ) : null}
+        ) : (
+          <p style={{ ...S.mono, fontSize: 10, color: '#888', maxWidth: 420, margin: 0 }}>
+            Up to two MetaMask prompts: delegation signature, then TUSDC allowance if needed.
+          </p>
+        )}
       </div>
     </div>
   );

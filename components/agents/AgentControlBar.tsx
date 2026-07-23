@@ -246,7 +246,8 @@ export default function AgentControlBar({
           <button
             type="button"
             onClick={() => setModalMode('switch')}
-            style={{ ...redBtn(true), marginTop: 12 }}
+            disabled={!!pendingControl}
+            style={{ ...redBtn(true), marginTop: 12, opacity: pendingControl ? 0.45 : 1 }}
           >
             Re-deploy / Switch
           </button>
