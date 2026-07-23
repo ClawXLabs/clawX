@@ -186,25 +186,50 @@ function buildSmoothPath(
   return d;
 }
 
-/* ─── Pool Bar ──────────────────────────────────────────────────── */
+/* ─── Sentiment strip (bottom border) ───────────────────────────── */
 
-function PoolBar({ upOdds }: { upOdds: number }) {
-  const downOdds = 100 - upOdds;
+function SentimentBorder({ upOdds }: { upOdds: number }) {
+  const downOdds = Math.max(0, 100 - upOdds);
   return (
-    <div style={{ width: '100%' }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
-        <span style={{ ...S.mono, fontSize: 11, fontWeight: 700, color: '#27AE60' }}>▲ UP {upOdds}%</span>
-        <span style={{ ...S.mono, fontSize: 11, fontWeight: 700, color: '#C0392B' }}>DOWN {downOdds}% ▼</span>
-      </div>
-      <div style={{ display: 'flex', height: 5, width: '100%', overflow: 'hidden' }}>
-        <div style={{ width: `${upOdds}%`, background: '#27AE60', transition: 'width 0.6s ease' }} />
-        <div style={{ width: `${downOdds}%`, background: '#C0392B', transition: 'width 0.6s ease' }} />
-      </div>
+    <div
+      aria-hidden
+      style={{
+        position: 'absolute',
+        left: 0,
+        right: 0,
+        bottom: 0,
+        height: 14,
+        zIndex: 3,
+        display: 'flex',
+        overflow: 'hidden',
+        backdropFilter: 'blur(10px) saturate(1.2)',
+        WebkitBackdropFilter: 'blur(10px) saturate(1.2)',
+        background: 'rgba(250,248,243,0.28)',
+        boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.45)',
+        borderTop: '1px solid rgba(13,11,8,0.08)',
+      }}
+    >
+      <div
+        style={{
+          width: `${upOdds}%`,
+          height: '100%',
+          background: 'linear-gradient(180deg, rgba(39,174,96,0.55), rgba(39,174,96,0.28))',
+          transition: 'width 0.6s ease',
+        }}
+      />
+      <div
+        style={{
+          width: `${downOdds}%`,
+          height: '100%',
+          background: 'linear-gradient(180deg, rgba(192,57,43,0.55), rgba(192,57,43,0.28))',
+          transition: 'width 0.6s ease',
+        }}
+      />
     </div>
   );
 }
 
-/* ─── Live timer (top-right) ─────────────────────────────────────── */
+/* ─── Live timer (top-right, matched width) ─────────────────────── */
 
 function LiveTimer({ remaining, open, expired }: { remaining: number; open: boolean; expired: boolean }) {
   const [secs, setSecs] = useState(remaining);
@@ -218,35 +243,51 @@ function LiveTimer({ remaining, open, expired }: { remaining: number; open: bool
   }, [secs]);
 
   const color = !open ? '#888' : secs < 60 ? '#C0392B' : secs < 120 ? '#F69D39' : '#0D0B08';
+  const statusColor = open ? '#27AE60' : expired ? '#F69D39' : '#888';
+  const statusLabel = open ? 'Live' : expired ? 'Settling' : 'Closed';
 
   return (
-    <div style={{ textAlign: 'right', flexShrink: 0 }}>
+    <div
+      style={{
+        width: 88,
+        flexShrink: 0,
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'stretch',
+        gap: 6,
+      }}
+    >
       <p
         style={{
           ...S.mono,
-          fontSize: 22,
+          width: '100%',
+          fontSize: 26,
           fontWeight: 900,
-          letterSpacing: '0.04em',
+          letterSpacing: '0.02em',
           color,
           margin: 0,
           lineHeight: 1,
+          textAlign: 'center',
+          boxSizing: 'border-box',
         }}
       >
-        {open ? (secs > 0 ? formatCountdown(secs) : '0:00') : expired ? '—' : '—'}
+        {open ? (secs > 0 ? formatCountdown(secs) : '0:00') : '—'}
       </p>
       <p
         style={{
           ...S.mono,
-          fontSize: 9,
-          fontWeight: 700,
-          letterSpacing: '0.14em',
+          width: '100%',
+          fontSize: 10,
+          fontWeight: 800,
+          letterSpacing: '0.12em',
           textTransform: 'uppercase',
-          margin: '6px 0 0',
-          color: open ? '#27AE60' : expired ? '#F69D39' : '#888',
+          margin: 0,
+          color: statusColor,
           display: 'flex',
           alignItems: 'center',
-          justifyContent: 'flex-end',
+          justifyContent: 'center',
           gap: 5,
+          boxSizing: 'border-box',
         }}
       >
         <span
@@ -254,11 +295,12 @@ function LiveTimer({ remaining, open, expired }: { remaining: number; open: bool
             width: 6,
             height: 6,
             borderRadius: '50%',
-            background: open ? '#27AE60' : expired ? '#F69D39' : '#888',
+            background: statusColor,
             display: 'inline-block',
+            flexShrink: 0,
           }}
         />
-        {open ? 'Live' : expired ? 'Settling' : 'Closed'}
+        {statusLabel}
       </p>
     </div>
   );
@@ -276,12 +318,11 @@ function MarketCard({
   const expired = row.remaining === 0 && !row.resolved;
   const open = !row.resolved && row.remaining > 0;
   const oddsDown = 100 - row.upOdds;
-  const mult = (row.upOdds >= 50 ? 100 / row.upOdds : 100 / oddsDown).toFixed(2);
+  const mult = (row.upOdds >= 50 ? 100 / row.upOdds : 100 / Math.max(oddsDown, 1)).toFixed(2);
+  const upOdds = Math.round(row.upOdds);
 
-  const currentP = row.currentPrice;
-  const startP = row.startPrice;
-  const priceDiff = currentP - startP;
-  const diffPct = startP > 0 ? (priceDiff / startP) * 100 : 0;
+  const priceDiff = row.currentPrice - row.startPrice;
+  const diffPct = row.startPrice > 0 ? (priceDiff / row.startPrice) * 100 : 0;
   const isUp = priceDiff >= 0;
 
   return (
@@ -290,22 +331,21 @@ function MarketCard({
         style={{
           position: 'relative',
           border: '1px solid #0D0B08',
-          minHeight: 260,
+          minHeight: 280,
           cursor: 'pointer',
-          marginRight: -1,
-          marginBottom: -1,
           overflow: 'hidden',
           background: '#FAF8F3',
-          transition: 'box-shadow 0.2s ease',
+          transition: 'transform 0.15s ease, box-shadow 0.2s ease',
         }}
         onMouseEnter={(e) => {
-          e.currentTarget.style.boxShadow = 'inset 0 0 0 2px #C0392B';
+          e.currentTarget.style.boxShadow = '0 8px 24px rgba(13,11,8,0.12)';
+          e.currentTarget.style.transform = 'translateY(-2px)';
         }}
         onMouseLeave={(e) => {
           e.currentTarget.style.boxShadow = 'none';
+          e.currentTarget.style.transform = 'none';
         }}
       >
-        {/* Chart as full-card background — current round only */}
         <div
           aria-hidden
           style={{
@@ -320,11 +360,10 @@ function MarketCard({
             history={priceHistory}
             startPrice={row.startPrice}
             startTimeSec={row.startTime}
-            height={260}
+            height={280}
           />
         </div>
 
-        {/* Soft wash so text stays readable */}
         <div
           aria-hidden
           style={{
@@ -332,52 +371,52 @@ function MarketCard({
             inset: 0,
             zIndex: 1,
             background:
-              'linear-gradient(180deg, rgba(250,248,243,0.88) 0%, rgba(250,248,243,0.55) 45%, rgba(250,248,243,0.82) 100%)',
+              'linear-gradient(180deg, rgba(250,248,243,0.9) 0%, rgba(250,248,243,0.52) 48%, rgba(250,248,243,0.86) 100%)',
             pointerEvents: 'none',
           }}
         />
 
-        {/* Foreground content */}
         <div
           style={{
             position: 'relative',
             zIndex: 2,
-            padding: '18px 18px 16px',
+            padding: '22px 22px 28px',
             display: 'flex',
             flexDirection: 'column',
-            gap: 14,
-            minHeight: 260,
+            gap: 22,
+            minHeight: 280,
             boxSizing: 'border-box',
           }}
         >
-          {/* Top: asset + timer / Live */}
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12 }}>
-            <div style={{ minWidth: 0 }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                <AssetIconImg symbol={row.symbol} size={26} />
-                <p style={{ ...S.serif, fontSize: 20, fontWeight: 900, color: '#0D0B08', margin: 0 }}>
+          {/* Top: asset + matched-width timer/Live */}
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 20 }}>
+            <div style={{ minWidth: 0, paddingRight: 8 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                <AssetIconImg symbol={row.symbol} size={28} />
+                <p style={{ ...S.serif, fontSize: 22, fontWeight: 900, color: '#0D0B08', margin: 0 }}>
                   {row.name}
                 </p>
               </div>
-              <p style={{ ...S.mono, fontSize: 11, color: '#888', marginTop: 4, marginLeft: 34 }}>
+              <p style={{ ...S.mono, fontSize: 11, color: '#888', marginTop: 6, marginLeft: 38 }}>
                 {row.symbol}/USD
               </p>
             </div>
             <LiveTimer remaining={row.remaining} open={open} expired={expired} />
           </div>
 
-          {/* Price */}
-          <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', gap: 10 }}>
+          {/* Price block */}
+          <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', gap: 16 }}>
             <div>
               <p style={S.label}>Price</p>
               <p
                 style={{
                   ...S.serif,
-                  fontSize: 28,
+                  fontSize: 34,
                   fontWeight: 900,
                   color: '#0D0B08',
-                  margin: '2px 0 0',
+                  margin: '8px 0 0',
                   lineHeight: 1,
+                  letterSpacing: '-0.02em',
                 }}
               >
                 {fmtUsd(row.currentPrice)}
@@ -387,79 +426,83 @@ function MarketCard({
               <p
                 style={{
                   ...S.mono,
-                  fontSize: 14,
-                  fontWeight: 700,
+                  fontSize: 18,
+                  fontWeight: 900,
                   margin: 0,
                   color: isUp ? '#27AE60' : '#C0392B',
                 }}
               >
                 {isUp ? '▲' : '▼'} {Math.abs(diffPct).toFixed(3)}%
               </p>
-              <p style={{ ...S.mono, fontSize: 10, color: '#888', margin: '3px 0 0' }}>
+              <p style={{ ...S.mono, fontSize: 11, color: '#888', margin: '8px 0 0' }}>
                 Open {fmtUsd(row.startPrice)}
               </p>
             </div>
           </div>
 
-          <PoolBar upOdds={Math.round(row.upOdds)} />
-
-          {/* Bottom stats: highlighted pool + payout · volume right */}
+          {/* Stats — pool once + payout + sides (no duplicate volume) */}
           <div
             style={{
               display: 'flex',
               alignItems: 'flex-end',
               justifyContent: 'space-between',
-              gap: 12,
+              gap: 20,
               marginTop: 'auto',
               paddingTop: 4,
             }}
           >
-            <div style={{ display: 'flex', gap: 18, flexWrap: 'wrap' }}>
-              <div>
-                <p style={{ ...S.label, color: '#C0392B' }}>Pool size</p>
-                <p
-                  style={{
-                    ...S.serif,
-                    fontSize: 22,
-                    fontWeight: 900,
-                    color: '#0D0B08',
-                    margin: '2px 0 0',
-                    letterSpacing: '-0.01em',
-                  }}
-                >
-                  {row.collateralPool.toLocaleString(undefined, { maximumFractionDigits: 2 })}
-                  <span style={{ ...S.mono, fontSize: 11, fontWeight: 700, color: '#888', marginLeft: 6 }}>
-                    TUSDC
-                  </span>
-                </p>
-              </div>
-              <div>
-                <p style={S.label}>Payout</p>
-                <p style={{ ...S.mono, fontSize: 18, fontWeight: 900, color: '#0D0B08', margin: '4px 0 0' }}>
-                  {mult}×
-                </p>
-              </div>
-              <div>
-                <p style={S.label}>UP / DOWN</p>
-                <p style={{ ...S.mono, fontSize: 12, fontWeight: 700, margin: '6px 0 0' }}>
-                  <span style={{ color: '#27AE60' }}>
-                    {row.upPool.toLocaleString(undefined, { maximumFractionDigits: 1 })}
-                  </span>
-                  <span style={{ color: '#888' }}> / </span>
-                  <span style={{ color: '#C0392B' }}>
-                    {row.downPool.toLocaleString(undefined, { maximumFractionDigits: 1 })}
-                  </span>
-                </p>
-              </div>
+            <div>
+              <p style={{ ...S.label, color: '#C0392B' }}>Pool size</p>
+              <p
+                style={{
+                  ...S.serif,
+                  fontSize: 28,
+                  fontWeight: 900,
+                  color: '#0D0B08',
+                  margin: '8px 0 0',
+                  letterSpacing: '-0.02em',
+                  lineHeight: 1,
+                }}
+              >
+                {row.collateralPool.toLocaleString(undefined, { maximumFractionDigits: 2 })}
+                <span style={{ ...S.mono, fontSize: 12, fontWeight: 800, color: '#888', marginLeft: 8 }}>
+                  TUSDC
+                </span>
+              </p>
             </div>
-            <div style={{ textAlign: 'right', flexShrink: 0 }}>
-              <p style={S.label}>Volume</p>
-              <p style={{ ...S.mono, fontSize: 14, fontWeight: 800, color: '#0D0B08', margin: '4px 0 0' }}>
-                {row.collateralPool.toLocaleString(undefined, { maximumFractionDigits: 1 })}
+            <div style={{ textAlign: 'center' }}>
+              <p style={S.label}>Payout</p>
+              <p
+                style={{
+                  ...S.mono,
+                  fontSize: 26,
+                  fontWeight: 900,
+                  color: '#0D0B08',
+                  margin: '8px 0 0',
+                  lineHeight: 1,
+                }}
+              >
+                {mult}×
+              </p>
+            </div>
+            <div style={{ textAlign: 'right' }}>
+              <p style={S.label}>
+                UP {upOdds}% · DN {100 - upOdds}%
+              </p>
+              <p style={{ ...S.mono, fontSize: 15, fontWeight: 900, margin: '8px 0 0', lineHeight: 1.2 }}>
+                <span style={{ color: '#27AE60' }}>
+                  {row.upPool.toLocaleString(undefined, { maximumFractionDigits: 1 })}
+                </span>
+                <span style={{ color: '#888' }}> / </span>
+                <span style={{ color: '#C0392B' }}>
+                  {row.downPool.toLocaleString(undefined, { maximumFractionDigits: 1 })}
+                </span>
               </p>
             </div>
           </div>
         </div>
+
+        <SentimentBorder upOdds={upOdds} />
       </article>
     </Link>
   );
@@ -549,7 +592,7 @@ export default function MarketsHubTerminal() {
           Fetching markets from chain…
         </p>
       ) : (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: 0 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: 16 }}>
           {rows.map(row => (
             <MarketCard
               key={row.assetId}
