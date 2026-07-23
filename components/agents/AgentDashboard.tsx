@@ -8,6 +8,7 @@ import PendingSettlementsPanel from './PendingSettlementsPanel';
 import AgentControlBar from './AgentControlBar';
 import { useWallet } from '../../contexts/WalletContext';
 import { useAgentStatus } from '../../hooks/useAgentStatus';
+import { marketTradePath } from '../../utils/marketLink';
 
 const RED = '#C0392B';
 
@@ -313,22 +314,41 @@ export default function AgentDashboard() {
 
           {openPositions.length > 0 ? (
             <div style={{ marginTop: 16, borderTop: '1px solid rgba(13,11,8,0.15)', paddingTop: 14 }}>
-              <p style={{ ...S.label, marginBottom: 10 }}>Open positions</p>
+              <p style={{ ...S.label, marginBottom: 10 }}>Open positions · click to open market</p>
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-                {openPositions.map((pos) => (
-                  <span
-                    key={pos.roundId}
-                    style={{
-                      ...S.mono,
-                      fontSize: 11,
-                      border: '1px solid #0D0B08',
-                      padding: '6px 10px',
-                    }}
-                  >
-                    {pos.symbol} · R#{pos.roundNumber} ·{' '}
-                    <strong style={{ color: pos.side === 'UP' ? '#27AE60' : RED }}>{pos.side}</strong>
-                  </span>
-                ))}
+                {openPositions.map((pos) => {
+                  const href = marketTradePath({
+                    assetId: pos.assetId,
+                    symbol: pos.symbol,
+                    roundId: pos.roundId,
+                  });
+                  const chip = (
+                    <span
+                      style={{
+                        ...S.mono,
+                        fontSize: 11,
+                        border: '1px solid #0D0B08',
+                        padding: '6px 10px',
+                        display: 'inline-block',
+                        color: '#0D0B08',
+                        textDecoration: href ? 'underline' : 'none',
+                        textUnderlineOffset: 3,
+                        cursor: href ? 'pointer' : 'default',
+                      }}
+                    >
+                      {pos.symbol} · R#{pos.roundNumber} ·{' '}
+                      <strong style={{ color: pos.side === 'UP' ? '#27AE60' : RED }}>{pos.side}</strong>
+                      {href ? ' ↗' : ''}
+                    </span>
+                  );
+                  return href ? (
+                    <Link key={pos.roundId} href={href} style={{ textDecoration: 'none' }}>
+                      {chip}
+                    </Link>
+                  ) : (
+                    <span key={pos.roundId}>{chip}</span>
+                  );
+                })}
               </div>
             </div>
           ) : null}

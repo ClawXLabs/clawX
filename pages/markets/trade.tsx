@@ -57,6 +57,11 @@ export default function MarketsTradePage() {
   const parsed = raw !== undefined ? Number(Array.isArray(raw) ? raw[0] : raw) : NaN;
   const assetId = Number.isFinite(parsed) && parsed >= 0 ? parsed : null;
 
+  const roundRaw = router.isReady ? router.query.round : undefined;
+  const roundParsed =
+    roundRaw !== undefined ? Number(Array.isArray(roundRaw) ? roundRaw[0] : roundRaw) : NaN;
+  const deepLinkRoundId = Number.isFinite(roundParsed) && roundParsed > 0 ? roundParsed : null;
+
   const market = useMarket(assetId);
   const history = useMarketHistory(assetId);
 
@@ -67,6 +72,23 @@ export default function MarketsTradePage() {
   useEffect(() => {
     setSelectedHistoryRound(null);
   }, [assetId]);
+
+  // Open a specific round from agent dashboard deep links (?round=)
+  useEffect(() => {
+    if (!deepLinkRoundId || !market) return;
+    if (Number(market.roundId) === deepLinkRoundId) {
+      setSelectedHistoryRound(null);
+      return;
+    }
+    const fromHistory = (history || []).find(
+      (r: { roundId?: number }) => Number(r.roundId) === deepLinkRoundId
+    );
+    if (fromHistory) {
+      setSelectedHistoryRound(fromHistory);
+      return;
+    }
+    setSelectedHistoryRound({ roundId: deepLinkRoundId });
+  }, [deepLinkRoundId, market, history]);
 
   const handleTakePosition = async (id: number, isUp: boolean, amount: string) => {
     let activeAccount = account;

@@ -1,4 +1,6 @@
+import Link from 'next/link';
 import type { TradeRow } from '../../hooks/useAgentStatus';
+import { marketTradePath } from '../../utils/marketLink';
 
 const SNOWTRACE = 'https://testnet.snowtrace.io/tx/';
 const RED = '#C0392B';
@@ -132,6 +134,11 @@ export default function AgentTradeLog({ trades, poolSummary }: AgentTradeLogProp
           const id = row.hash || `${row.roundId}-${row.side}-${row.at}`;
           const when = formatWhen(row.at);
           const hashShort = shortHash(row.hash);
+          const marketHref = marketTradePath({
+            assetId: row.assetId,
+            symbol: row.symbol,
+            roundId: row.roundId,
+          });
           return (
             <li
               key={id}
@@ -153,7 +160,16 @@ export default function AgentTradeLog({ trades, poolSummary }: AgentTradeLogProp
               >
                 <div>
                   <p style={{ ...S.serif, fontSize: 16, fontWeight: 900, color: '#0D0B08', margin: 0 }}>
-                    {row.symbol}{' '}
+                    {marketHref ? (
+                      <Link
+                        href={marketHref}
+                        style={{ color: '#0D0B08', textDecoration: 'underline', textUnderlineOffset: 3 }}
+                      >
+                        {row.symbol} ↗
+                      </Link>
+                    ) : (
+                      row.symbol
+                    )}{' '}
                     <span style={{ color: row.side === 'UP' ? '#27AE60' : RED }}>{row.side}</span>
                     <span style={{ ...S.mono, fontSize: 12, fontWeight: 400, color: '#5A554E', marginLeft: 8 }}>
                       {row.amountTusdc} TUSDC
