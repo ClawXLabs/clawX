@@ -6,6 +6,8 @@
 #   ./deploy/aws/ecs/deploy.sh images   # build/push images only
 #   ./deploy/aws/ecs/deploy.sh stack    # CloudFormation only
 #   ./deploy/aws/ecs/deploy.sh sync-env # push .env into Secrets Manager + re-register tasks
+#   ./deploy/aws/ecs/deploy.sh sync-admin  # narrow admin secret + redeploy admin service
+#   ./deploy/aws/ecs/deploy.sh admin-image # build/push clawX-admin image only
 #   ./deploy/aws/ecs/deploy.sh db-init  # run schema against RDS via one-off ECS task
 #   ./deploy/aws/ecs/deploy.sh smoke    # hit ALB /api/health and /api/prices
 set -euo pipefail
@@ -87,6 +89,8 @@ deploy_stack() {
       EnvironmentName="$ENV_NAME" \
       ImageTag="$IMAGE_TAG" \
       WebDesiredCount=1 \
+      AdminDesiredCount=1 \
+      AdminHost=admin.clawxlab.xyz \
       WorkerDesiredCount=2 \
       WorkerMaxCount=8 \
       DbInstanceClass=db.t3.micro \
@@ -147,7 +151,7 @@ build_and_push() {
   ecr_login
 
   # Ensure repos exist (created by CF; create if images-only)
-  for repo in web price-fetcher keeper agent-scheduler agent-worker; do
+  for repo in web price-fetcher keeper agent-scheduler agent-worker admin; do
     aws ecr describe-repositories --repository-names "${PROJECT}/${repo}" --region "$REGION" >/dev/null 2>&1 \
       || aws ecr create-repository --repository-name "${PROJECT}/${repo}" --region "$REGION" >/dev/null
   done
@@ -206,6 +210,49 @@ sync_env() {
   node deploy/aws/ecs/sync-task-env.js --region "$REGION" --stack "$STACK" --project "$PROJECT" --env-name "$ENV_NAME"
 }
 
+sync_admin_env() {
+  need_aws
+  export AWS_BIN
+  node deploy/aws/ecs/sync-admin-task-env.js --region "$REGION" --stack "$STACK" --project "$PROJECT"
+  node deploy/aws/ecs/ensure-admin-https-rule.js --region "$REGION" --stack "$STACK" || true
+}
+
+build_and_push_admin() {
+  need_aws
+  command -v docker >/dev/null || { echo "docker required"; exit 1; }
+  local acct registry admin_dir image tusdc
+  acct="$(account_id)"
+  registry="${acct}.dkr.ecr.${REGION}.amazonaws.com"
+  admin_dir="$(cd "$ROOT/../clawX-admin" && pwd -W 2>/dev/null || cd "$ROOT/../clawX-admin" && pwd)"
+  # Docker Desktop on Windows needs a native path for build context
+  if command -v cygpath >/dev/null 2>&1; then
+    admin_dir="$(cygpath -w "$ROOT/../clawX-admin")"
+  elif [[ "$OSTYPE" == msys* || "$OSTYPE" == cygwin* ]]; then
+    admin_dir="C:${ROOT#/c}/../clawX-admin"
+    admin_dir="$(cd "$ROOT/../clawX-admin" && pwd -W 2>/dev/null || echo "C:/Users/amaym/dev/extPrj/clawX-admin")"
+  fi
+  if [ ! -f "$ROOT/../clawX-admin/Dockerfile" ] && [ ! -f "${admin_dir}/Dockerfile" ]; then
+    echo "ERROR: admin Dockerfile missing at $ROOT/../clawX-admin/Dockerfile" >&2
+    exit 1
+  fi
+  ecr_login
+  aws ecr describe-repositories --repository-names "${PROJECT}/admin" --region "$REGION" >/dev/null 2>&1 \
+    || aws ecr create-repository --repository-name "${PROJECT}/admin" --region "$REGION" >/dev/null
+
+  tusdc=""
+  if [ -f .env ]; then
+    tusdc="$(grep -E '^NEXT_PUBLIC_TUSDC_ADDRESS=' .env | head -1 | cut -d= -f2- | tr -d '\r' || true)"
+  fi
+  image="${registry}/${PROJECT}/admin:${IMAGE_TAG}"
+  echo "==> Building $image from $admin_dir"
+  docker build \
+    --build-arg "NEXT_PUBLIC_TUSDC_ADDRESS=${tusdc}" \
+    -t "$image" \
+    "$admin_dir"
+  echo "==> Pushing $image"
+  docker push "$image"
+}
+
 db_init() {
   need_aws
   node deploy/aws/ecs/run-db-init.js --region "$REGION" --stack "$STACK" --project "$PROJECT"
@@ -234,11 +281,29 @@ case "$MODE" in
   sync-env)
     sync_env
     ;;
+  sync-admin)
+    sync_admin_env
+    ;;
+  admin-image)
+    build_and_push_admin
+    ;;
   db-init)
     db_init
     ;;
   smoke)
     smoke
+    ;;
+  admin)
+    need_aws
+    deploy_stack
+    build_and_push_admin
+    sync_admin_env
+    echo "==> Waiting 45s for admin service..."
+    sleep 45
+    echo "Admin host: $(stack_output AdminHost)"
+    echo "ALB: $(stack_output AlbDnsName)"
+    echo "Smoke (Host header): curl -sS -H \"Host: $(stack_output AdminHost)\" http://$(stack_output AlbDnsName)/api/health"
+    echo "DNS: CNAME admin → $(stack_output AlbDnsName)"
     ;;
   all)
     need_aws
