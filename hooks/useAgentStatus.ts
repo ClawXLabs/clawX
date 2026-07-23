@@ -1,7 +1,9 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { useWallet } from '../contexts/WalletContext';
+import { clearBrowserCache, readBrowserCache, writeBrowserCache } from '../utils/browserCache';
 
-const CACHE_PREFIX = 'clawx-agent-status:';
+const CACHE_NS = 'agent-status';
+const LEGACY_PREFIX = 'clawx-agent-status:';
 
 export interface TradeRow {
   at: number | string;
@@ -28,6 +30,15 @@ export interface DelegateStatus {
   paused: boolean;
   canTrade: boolean;
   needsRedeploy: boolean;
+}
+
+export interface WalletLimitsStatus {
+  txUnlimited: boolean;
+  txLimit: number | null;
+  txUsed: number;
+  txRemaining: number | null;
+  agentSpendUnlimited: boolean;
+  agentSpendLimitTusdc: number | null;
 }
 
 export interface PendingSettlement {
@@ -72,6 +83,7 @@ export interface AgentStatusData {
     pendingCount: number;
   };
   delegate?: DelegateStatus;
+  walletLimits?: WalletLimitsStatus;
   enrollment?: {
     tradeSizeTusdc?: number;
     paused?: boolean;
@@ -94,33 +106,37 @@ export interface AgentStatusData {
   updatedAt?: number;
 }
 
-function readCache(wallet: string): AgentStatusData | null {
+function migrateLegacyCache(wallet: string): AgentStatusData | null {
   if (typeof window === 'undefined') return null;
   try {
-    const raw = sessionStorage.getItem(`${CACHE_PREFIX}${wallet.toLowerCase()}`);
-    return raw ? (JSON.parse(raw) as AgentStatusData) : null;
+    const raw = sessionStorage.getItem(`${LEGACY_PREFIX}${wallet.toLowerCase()}`);
+    if (!raw) return null;
+    const data = JSON.parse(raw) as AgentStatusData;
+    writeBrowserCache(CACHE_NS, data, wallet);
+    sessionStorage.removeItem(`${LEGACY_PREFIX}${wallet.toLowerCase()}`);
+    return data;
   } catch {
     return null;
   }
 }
 
+function readCache(wallet: string): AgentStatusData | null {
+  return readBrowserCache<AgentStatusData>(CACHE_NS, wallet) || migrateLegacyCache(wallet);
+}
+
 function writeCache(wallet: string, data: AgentStatusData) {
-  if (typeof window === 'undefined') return;
-  try {
-    sessionStorage.setItem(`${CACHE_PREFIX}${wallet.toLowerCase()}`, JSON.stringify(data));
-  } catch {
-    /* quota */
-  }
+  writeBrowserCache(CACHE_NS, data, wallet);
 }
 
 export function clearAgentStatusCache(wallet?: string) {
+  clearBrowserCache(CACHE_NS, wallet);
   if (typeof window === 'undefined') return;
   if (wallet) {
-    sessionStorage.removeItem(`${CACHE_PREFIX}${wallet.toLowerCase()}`);
+    sessionStorage.removeItem(`${LEGACY_PREFIX}${wallet.toLowerCase()}`);
     return;
   }
   Object.keys(sessionStorage).forEach((key) => {
-    if (key.startsWith(CACHE_PREFIX)) sessionStorage.removeItem(key);
+    if (key.startsWith(LEGACY_PREFIX)) sessionStorage.removeItem(key);
   });
 }
 
@@ -131,6 +147,28 @@ export function useAgentStatus(pollMs = 3000) {
   const [error, setError] = useState('');
   const [stale, setStale] = useState(false);
   const abortRef = useRef<AbortController | null>(null);
+  const hasCacheRef = useRef(false);
+
+  // Paint cached status before paint so Agent pages don't flash empty.
+  useLayoutEffect(() => {
+    if (!account) {
+      setStatus(null);
+      hasCacheRef.current = false;
+      setLoading(false);
+      setError('');
+      setStale(false);
+      return;
+    }
+    const cached = readCache(account);
+    if (cached) {
+      setStatus(cached);
+      hasCacheRef.current = true;
+      setLoading(false);
+    } else {
+      hasCacheRef.current = false;
+      setLoading(true);
+    }
+  }, [account]);
 
   const refresh = useCallback(async (opts?: { silent?: boolean }) => {
     if (!account) {
@@ -140,7 +178,8 @@ export function useAgentStatus(pollMs = 3000) {
       return null;
     }
 
-    if (!opts?.silent) setLoading(true);
+    const silent = opts?.silent ?? hasCacheRef.current;
+    if (!silent) setLoading(true);
     abortRef.current?.abort();
     const controller = new AbortController();
     abortRef.current = controller;
@@ -150,11 +189,12 @@ export function useAgentStatus(pollMs = 3000) {
         cache: 'no-store',
         signal: controller.signal,
       });
-      const data = await res.json() as AgentStatusData;
+      const data = (await res.json()) as AgentStatusData;
       if (!res.ok) throw new Error((data as { error?: string }).error || 'Failed to load agent status');
 
       setStatus(data);
       writeCache(account, data);
+      hasCacheRef.current = true;
       setError('');
       setStale(false);
       return data;
@@ -162,28 +202,23 @@ export function useAgentStatus(pollMs = 3000) {
       const err = e as { name?: string; message?: string };
       if (err.name === 'AbortError') return null;
       const cached = readCache(account);
-      if (cached?.enrolled) {
+      if (cached) {
         setStatus(cached);
+        hasCacheRef.current = true;
         setStale(true);
-        setError(err.message || 'Using cached agent data — reconnecting…');
+        setError(err.message || 'Showing saved agent data — syncing…');
       } else {
         setError(err.message || 'Failed to load agent status');
       }
       return cached;
     } finally {
-      if (!opts?.silent) setLoading(false);
+      if (!silent) setLoading(false);
     }
   }, [account]);
 
   useEffect(() => {
-    if (!account) {
-      setStatus(null);
-      return undefined;
-    }
-    const cached = readCache(account);
-    if (cached?.enrolled) setStatus(cached);
-
-    refresh({ silent: Boolean(cached?.enrolled) });
+    if (!account) return undefined;
+    refresh({ silent: true });
     const timer = setInterval(() => refresh({ silent: true }), pollMs);
     return () => {
       clearInterval(timer);
@@ -195,7 +230,7 @@ export function useAgentStatus(pollMs = 3000) {
     account,
     status,
     enrolled: Boolean(status?.enrolled),
-    loading,
+    loading: loading && !status,
     error,
     stale,
     refresh,

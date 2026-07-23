@@ -18,7 +18,6 @@ export interface AgentData {
 
 interface AgentCardProps {
   agent: AgentData;
-  rank?: number;
   href?: string;
   onSelect?: (agent: AgentData) => void;
   selected?: boolean;
@@ -37,24 +36,18 @@ const S = {
 
 /* ─── Main Card ─────────────────────────────────────────────────── */
 
-export default function AgentCard({ agent, rank, href, onSelect, selected }: AgentCardProps) {
+export default function AgentCard({ agent, href, onSelect, selected }: AgentCardProps) {
   const [hovered, setHovered] = useState(false);
   const returnPct = agent.returnPct ?? 0;
   const up = returnPct >= 0;
   const aum = agent.aum ?? 0;
   const points = agent.points ?? 0;
   const openPositionCount = agent.openPositionCount ?? 0;
+  const returnColor = up ? '#27AE60' : '#C0392B';
 
   const inner = (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%', justifyContent: 'space-between', flex: 1 }}>
       <div>
-        {/* Rank badge */}
-        {rank != null && (
-          <p style={{ ...S.mono, fontSize: 9, fontWeight: 700, letterSpacing: '0.14em', textTransform: 'uppercase', color: '#888', marginBottom: 10 }}>
-            #{rank} ranked
-          </p>
-        )}
-
         {/* Icon + Name row */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 8 }}>
           <div style={{
@@ -80,15 +73,16 @@ export default function AgentCard({ agent, rank, href, onSelect, selected }: Age
           {agent.style}
         </p>
 
-        {/* Return badge */}
+        {/* Return — colored text + arrow, no fill */}
         <span style={{
-          ...S.mono, fontSize: 12, fontWeight: 700, letterSpacing: '0.1em',
-          padding: '5px 10px',
-          background: up ? '#27AE60' : '#C0392B',
-          color: '#FAF8F3',
+          ...S.mono, fontSize: 13, fontWeight: 700, letterSpacing: '0.06em',
+          color: returnColor,
           display: 'inline-flex', alignItems: 'center', gap: 4,
+          background: 'transparent',
+          padding: 0,
         }}>
-          {up ? '▲' : '▼'} {up ? '+' : ''}{returnPct}%
+          <span aria-hidden style={{ color: returnColor }}>{up ? '▲' : '▼'}</span>
+          {up ? '+' : ''}{returnPct}%
         </span>
 
         {/* Position chips */}
