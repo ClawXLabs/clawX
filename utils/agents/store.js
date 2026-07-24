@@ -2,6 +2,10 @@ import { query, withTransaction } from '../db/postgres.js';
 import { getRedis } from '../db/redis.js';
 
 const TRADE_LOG_DISPLAY_CAP = 200;
+/** Max rows returned when hydrating UI/API trade history from the uncapped table. */
+const TRADE_LOG_API_LIMIT = 2000;
+
+export { TRADE_LOG_DISPLAY_CAP, TRADE_LOG_API_LIMIT };
 
 function walletKey(wallet) {
   return wallet?.toLowerCase() || '';
@@ -130,6 +134,64 @@ export async function countBuysInTable(wallet) {
     [key]
   );
   return Number(result.rows[0]?.cnt) || 0;
+}
+
+/**
+ * Full trade history from Postgres (not capped at TRADE_LOG_DISPLAY_CAP).
+ * Newest first. The enrollment JSON payload only keeps the latest 200 for size;
+ * this table is the source of truth for complete history.
+ */
+export async function readTradeLogFromTable(wallet, { limit = TRADE_LOG_API_LIMIT, offset = 0 } = {}) {
+  const key = walletKey(wallet);
+  if (!key) return [];
+  const lim = Math.max(1, Math.min(Number(limit) || TRADE_LOG_API_LIMIT, 5000));
+  const off = Math.max(0, Number(offset) || 0);
+  const result = await query(
+    `SELECT payload, round_id, side, action, symbol, amount_tusdc, hash, outcome, thought, created_at, settled_at
+     FROM trade_log
+     WHERE wallet = $1
+     ORDER BY created_at DESC
+     LIMIT $2 OFFSET $3`,
+    [key, lim, off]
+  );
+  return result.rows.map((row) => {
+    const payload = row.payload && typeof row.payload === 'object' ? row.payload : {};
+    return {
+      ...payload,
+      at: payload.at || epochSeconds(row.created_at),
+      action: row.action || payload.action || 'BUY',
+      side: row.side || payload.side,
+      symbol: row.symbol || payload.symbol,
+      amountTusdc:
+        row.amount_tusdc != null ? Number(row.amount_tusdc) : payload.amountTusdc,
+      hash: row.hash || payload.hash || '',
+      roundId: row.round_id != null ? Number(row.round_id) : payload.roundId,
+      outcome: row.outcome || payload.outcome || null,
+      thought: row.thought || payload.thought,
+      settledAt: payload.settledAt || epochSeconds(row.settled_at),
+      agentId: payload.agentId,
+      agentName: payload.agentName,
+    };
+  });
+}
+
+/** Attach uncapped table history onto an enrollment for API/UI responses. */
+export async function attachTradeLogFromTable(enrollment, { limit = TRADE_LOG_API_LIMIT } = {}) {
+  if (!enrollment?.wallet) return enrollment;
+  const [rows, lifetime] = await Promise.all([
+    readTradeLogFromTable(enrollment.wallet, { limit }),
+    countBuysInTable(enrollment.wallet),
+  ]);
+  const buyCount = rows.filter((t) => String(t.action || '').toUpperCase() === 'BUY').length;
+  return {
+    ...enrollment,
+    tradeLog: rows.length ? rows : enrollment.tradeLog || [],
+    lifetimeTxCount: Math.max(
+      Number(enrollment.lifetimeTxCount) || 0,
+      lifetime,
+      buyCount
+    ),
+  };
 }
 
 /** Unique confirmed BUY count for leaderboard (never capped by tradeLog slice). */

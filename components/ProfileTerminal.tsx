@@ -320,7 +320,8 @@ export default function ProfileTerminal() {
       const results: TradeRecord[] = [];
       for (let assetId = 0; assetId < assetCount; assetId++) {
         const roundIds = await contract.getAssetRoundIds(assetId) as bigint[];
-        const slice = roundIds.slice(-20);
+        // Scan enough recent rounds so the ledger is not stuck on a tiny window.
+        const slice = roundIds.slice(-100);
         await Promise.all(slice.map(async (roundIdBig) => {
           const roundId = Number(roundIdBig);
           try {
@@ -676,7 +677,7 @@ export default function ProfileTerminal() {
               </button>
             </div>
             <p style={{ ...S.mono, fontSize: 10, color: '#888', margin: '0 0 14px' }}>
-              🤖 agent-executed · 👤 manual — hover an icon for details
+              🤖 agent-executed · 👤 manual — hover an icon for details. Shows open/claimable positions from the last 100 rounds per market (fully claimed rounds drop off once shares are zero).
             </p>
 
             {/* Filter tabs */}

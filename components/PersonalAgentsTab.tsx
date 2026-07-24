@@ -240,10 +240,10 @@ function AgentCard({ agent }: { agent: AgentStat }) {
           {agent.tradeLog.length > 0 && (
             <div>
               <div style={{ ...mono, fontSize: 11, color: '#7B6A52', marginBottom: 8 }}>
-                RECENT TRADES (last {Math.min(agent.tradeLog.length, 10)})
+                RECENT TRADES (showing {Math.min(agent.tradeLog.length, 20)} of {agent.txCount})
               </div>
-              <div style={{ maxHeight: 200, overflowY: 'auto' }}>
-                {[...agent.tradeLog].reverse().slice(0, 10).map((t, i) => (
+              <div style={{ maxHeight: 280, overflowY: 'auto' }}>
+                {[...agent.tradeLog].reverse().slice(0, 20).map((t, i) => (
                   <div
                     key={i}
                     style={{

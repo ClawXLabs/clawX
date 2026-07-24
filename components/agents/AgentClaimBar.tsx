@@ -35,7 +35,7 @@ export default function AgentClaimBar() {
       const ids: number[] = [];
       for (let assetId = 0; assetId < assetCount; assetId++) {
         const roundIds = (await contract.getAssetRoundIds(assetId)) as bigint[];
-        const slice = roundIds.slice(-20);
+        const slice = roundIds.slice(-100);
         await Promise.all(
           slice.map(async (roundIdBig) => {
             const roundId = Number(roundIdBig);

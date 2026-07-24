@@ -187,11 +187,15 @@ export function buildXp(enrollment, socialLinks = {}) {
  * Entries stamped with agentId are grouped precisely.
  * Unstamped entries fall back to the enrollment's current agentId.
  */
-export function buildAgentBreakdown(enrollment, agentsConfig) {
+export function buildAgentBreakdown(enrollment, agentsConfig, opts = {}) {
   if (!enrollment) return { agents: [], combined: null };
 
   const tradeLog = enrollment.tradeLog || [];
   const fallbackId = enrollment.agentId;
+  const lifetimeHint =
+    opts.lifetimeTxCount != null
+      ? Number(opts.lifetimeTxCount)
+      : Number(enrollment.lifetimeTxCount) || 0;
 
   const byAgent = new Map();
 
@@ -259,7 +263,7 @@ export function buildAgentBreakdown(enrollment, agentsConfig) {
       winRate,
       totalPoolSpend: Math.round(totalPoolSpend * 100) / 100,
       bySymbol: Object.values(bySymbol).sort((a, z) => z.trades - a.trades),
-      tradeLog: b.trades.slice(0, 50),
+      tradeLog: b.trades.slice(0, 100),
     };
   });
 
@@ -270,9 +274,10 @@ export function buildAgentBreakdown(enrollment, agentsConfig) {
     return z.txCount - a.txCount;
   });
 
-  // Combined totals
+  const listedTx = agentList.reduce((s, a) => s + a.txCount, 0);
+  // Combined totals — never under-report past the in-memory / payload display window
   const combined = {
-    txCount: agentList.reduce((s, a) => s + a.txCount, 0),
+    txCount: Math.max(listedTx, lifetimeHint),
     wins: agentList.reduce((s, a) => s + a.wins, 0),
     losses: agentList.reduce((s, a) => s + a.losses, 0),
     totalPoolSpend: Math.round(agentList.reduce((s, a) => s + a.totalPoolSpend, 0) * 100) / 100,

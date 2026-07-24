@@ -1,5 +1,5 @@
 import { AGENTS } from '../../../utils/agents/config';
-import { getEnrollment, getFullProfile } from '../../../utils/agents/store';
+import { getEnrollment, getFullProfile, attachTradeLogFromTable, countBuysInTable } from '../../../utils/agents/store';
 import { buildAgentBreakdown, buildXp } from '../../../utils/agents/xp';
 
 export default async function handler(req, res) {
@@ -13,18 +13,25 @@ export default async function handler(req, res) {
     return res.status(400).json({ error: 'Invalid wallet' });
   }
 
-  const [enrollment, profile] = await Promise.all([
+  const [rawEnrollment, profile, lifetimeBuys] = await Promise.all([
     getEnrollment(wallet),
     getFullProfile(wallet),
+    countBuysInTable(wallet),
   ]);
+  const enrollment = rawEnrollment
+    ? await attachTradeLogFromTable(rawEnrollment)
+    : null;
   const socialLinks = profile?.socialLinks || {};
 
-  const breakdown = buildAgentBreakdown(enrollment, AGENTS);
+  const breakdown = buildAgentBreakdown(enrollment, AGENTS, {
+    lifetimeTxCount: lifetimeBuys,
+  });
   const xp = buildXp(enrollment, socialLinks);
 
   return res.status(200).json({
     hasAgent: !!enrollment,
     ...breakdown,
+    lifetimeTxCount: lifetimeBuys,
     xp,
   });
 }
