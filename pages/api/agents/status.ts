@@ -1,6 +1,6 @@
 import { ethers } from 'ethers';
 import { getAgentById } from '../../../utils/agents/config';
-import { applyPendingControlIfReady, getEnrollment, reconcileTradeLog } from '../../../utils/agents/store';
+import { applyPendingControlIfReady, getEnrollment, reconcileTradeLog, attachTradeLogFromTable, countBuysInTable } from '../../../utils/agents/store';
 import { buildTrackRecord } from '../../../utils/agents/trackRecord';
 import {
   buildDelegateStatus,
@@ -38,16 +38,17 @@ export default async function handler(req, res) {
 
   let enrollment = await getEnrollment(user);
   if (!enrollment || enrollment.status !== 'active') {
+    const lifetime = await countBuysInTable(user);
     const trades = (enrollment?.tradeLog || []).filter((t) => t.action === 'BUY');
     return res.status(200).json({
       enrolled: false,
       retired: enrollment?.status === 'retired',
-      historicalTxCount: trades.length,
+      historicalTxCount: Math.max(lifetime, trades.length),
       walletLimits,
     });
   }
 
-  enrollment = reconcileTradeLog(enrollment);
+  enrollment = await attachTradeLogFromTable(reconcileTradeLog(enrollment));
   const agent = getAgentById(enrollment.agentId);
   const enriched = buildEnrichedTradeLog(enrollment);
   const delegate = buildDelegateStatus(enrollment);
