@@ -29,3 +29,8 @@ ORDER BY ordinal_position;
 ALTER TABLE wallet_limits ADD COLUMN IF NOT EXISTS agent_spend_limit_tusdc NUMERIC;
 ALTER TABLE wallet_limits ADD COLUMN IF NOT EXISTS agent_spend_unlimited BOOLEAN NOT NULL DEFAULT true;
 ALTER TABLE wallet_limits ADD COLUMN IF NOT EXISTS agent_trade_size_tusdc NUMERIC;
+
+-- Admin wallet TUSDC top-up threshold (idempotent)
+ALTER TABLE platform_config ADD COLUMN IF NOT EXISTS wallet_topup_enabled BOOLEAN NOT NULL DEFAULT false;
+ALTER TABLE platform_config ADD COLUMN IF NOT EXISTS wallet_topup_min_tusdc NUMERIC NOT NULL DEFAULT 50;
+ALTER TABLE platform_config ADD COLUMN IF NOT EXISTS wallet_topup_amount_tusdc NUMERIC NOT NULL DEFAULT 300;
