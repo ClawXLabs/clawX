@@ -1,6 +1,12 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, ReactNode } from 'react';
 import { ethers, BrowserProvider, Contract } from 'ethers';
 import { CONTRACT_ABI, CONTRACT_ADDRESS } from '../utils/contract';
+import {
+  clearPersistedWallet,
+  getPersistedWallet,
+  persistConnectedWallet,
+  pickPreferredAccount,
+} from '../utils/walletSession';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -72,7 +78,26 @@ export function WalletProvider({ children }: WalletProviderProps) {
     setContract(null);
   }, []);
 
-  // Auto-restore session on mount
+  const applySession = useCallback(async (address: string, eth: EthProvider) => {
+    const allowed = await checkAppAccess(address);
+    if (!allowed) {
+      setAccessDenied(true);
+      clearSession();
+      clearPersistedWallet();
+      return null;
+    }
+    const nextProvider = new ethers.BrowserProvider(eth as unknown as ethers.Eip1193Provider);
+    const signer = await nextProvider.getSigner();
+    const marketContract = new ethers.Contract(CONTRACT_ADDRESS, CONTRACT_ABI, signer);
+    setAccessDenied(false);
+    setAccount(address);
+    setProvider(nextProvider);
+    setContract(marketContract);
+    persistConnectedWallet(address);
+    return address;
+  }, [clearSession]);
+
+  // Auto-restore session on mount (shared cookie/localStorage across clawxlab hosts)
   useEffect(() => {
     if (typeof window !== 'undefined' && !window.isSecureContext) {
       setIsRestoring(false);
@@ -87,25 +112,16 @@ export function WalletProvider({ children }: WalletProviderProps) {
     let cancelled = false;
     const restore = async () => {
       try {
+        const preferred = getPersistedWallet();
         const accounts = await eth.request({ method: 'eth_accounts' }) as string[];
         if (cancelled) return;
-        if (accounts?.[0]) {
+        const chosen = pickPreferredAccount(accounts || [], preferred);
+        if (!chosen) return;
+        await applySession(await (async () => {
           const nextProvider = new ethers.BrowserProvider(eth as unknown as ethers.Eip1193Provider);
-          const signer = await nextProvider.getSigner();
-          const address = await signer.getAddress();
-          const allowed = await checkAppAccess(address);
-          if (cancelled) return;
-          if (!allowed) {
-            setAccessDenied(true);
-            clearSession();
-            return;
-          }
-          const marketContract = new ethers.Contract(CONTRACT_ADDRESS, CONTRACT_ABI, signer);
-          setAccessDenied(false);
-          setAccount(address);
-          setProvider(nextProvider);
-          setContract(marketContract);
-        }
+          const signer = await nextProvider.getSigner(chosen);
+          return signer.getAddress();
+        })(), eth);
       } catch { /* ignore */ } finally {
         if (!cancelled) setIsRestoring(false);
       }
@@ -113,7 +129,7 @@ export function WalletProvider({ children }: WalletProviderProps) {
 
     restore();
     return () => { cancelled = true; };
-  }, [clearSession]);
+  }, [applySession]);
 
   // Connect
   const connectWallet = useCallback(async (): Promise<string | null> => {
@@ -133,22 +149,13 @@ export function WalletProvider({ children }: WalletProviderProps) {
       const nextProvider = new ethers.BrowserProvider(eth as unknown as ethers.Eip1193Provider);
       const signer = await nextProvider.getSigner();
       const address = await signer.getAddress();
-
-      const allowed = await checkAppAccess(address);
-      if (!allowed) {
-        setAccessDenied(true);
-        clearSession();
+      const applied = await applySession(address, eth);
+      if (!applied) {
         alert('Access restricted. Add your wallet from clawxlab.xyz to join the private beta.');
         return null;
       }
-
-      const marketContract = new ethers.Contract(CONTRACT_ADDRESS, CONTRACT_ABI, signer);
-      setAccessDenied(false);
-      setAccount(address);
-      setProvider(nextProvider);
-      setContract(marketContract);
       setShowConnectModal(false);
-      return address;
+      return applied;
     } catch (error: unknown) {
       const err = error as { message?: string; shortMessage?: string };
       console.error('Wallet connect:', err);
@@ -157,11 +164,12 @@ export function WalletProvider({ children }: WalletProviderProps) {
       }
       return null;
     }
-  }, [clearSession]);
+  }, [applySession]);
 
-  // Disconnect
+  // Disconnect — clears shared session so redirect/restore won't reattach until Connect
   const disconnectWallet = useCallback(() => {
     clearSession();
+    clearPersistedWallet();
     setAccessDenied(false);
   }, [clearSession]);
 
@@ -172,9 +180,10 @@ export function WalletProvider({ children }: WalletProviderProps) {
     const onAccounts = (accounts: unknown) => {
       const list = accounts as string[];
       if (list && list.length > 0) {
-        connectWallet();
+        void connectWallet();
       } else {
         clearSession();
+        clearPersistedWallet();
         setAccessDenied(false);
       }
     };
