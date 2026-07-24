@@ -13,6 +13,7 @@ export interface WalletContextValue {
   showConnectModal: boolean;
   setShowConnectModal: (show: boolean) => void;
   isRestoring: boolean;
+  accessDenied: boolean;
 }
 
 interface WalletProviderProps {
@@ -42,6 +43,17 @@ export function getMetaMaskEthereum(): EthProvider | null {
   return null;
 }
 
+async function checkAppAccess(address: string): Promise<boolean> {
+  try {
+    const res = await fetch(`/api/v1/wallets?wallet=${encodeURIComponent(address)}`);
+    if (!res.ok) return true; // fail open on API errors
+    const data = await res.json();
+    return data?.allowed !== false;
+  } catch {
+    return true;
+  }
+}
+
 // ─── Context ─────────────────────────────────────────────────────────────────
 
 const WalletContext = createContext<WalletContextValue | null>(null);
@@ -51,8 +63,14 @@ export function WalletProvider({ children }: WalletProviderProps) {
   const [provider, setProvider] = useState<BrowserProvider | null>(null);
   const [contract, setContract] = useState<Contract | null>(null);
   const [showConnectModal, setShowConnectModal] = useState<boolean>(false);
-
   const [isRestoring, setIsRestoring] = useState<boolean>(true);
+  const [accessDenied, setAccessDenied] = useState<boolean>(false);
+
+  const clearSession = useCallback(() => {
+    setAccount(null);
+    setProvider(null);
+    setContract(null);
+  }, []);
 
   // Auto-restore session on mount
   useEffect(() => {
@@ -75,7 +93,15 @@ export function WalletProvider({ children }: WalletProviderProps) {
           const nextProvider = new ethers.BrowserProvider(eth as unknown as ethers.Eip1193Provider);
           const signer = await nextProvider.getSigner();
           const address = await signer.getAddress();
+          const allowed = await checkAppAccess(address);
+          if (cancelled) return;
+          if (!allowed) {
+            setAccessDenied(true);
+            clearSession();
+            return;
+          }
           const marketContract = new ethers.Contract(CONTRACT_ADDRESS, CONTRACT_ABI, signer);
+          setAccessDenied(false);
           setAccount(address);
           setProvider(nextProvider);
           setContract(marketContract);
@@ -87,7 +113,7 @@ export function WalletProvider({ children }: WalletProviderProps) {
 
     restore();
     return () => { cancelled = true; };
-  }, []);
+  }, [clearSession]);
 
   // Connect
   const connectWallet = useCallback(async (): Promise<string | null> => {
@@ -107,7 +133,17 @@ export function WalletProvider({ children }: WalletProviderProps) {
       const nextProvider = new ethers.BrowserProvider(eth as unknown as ethers.Eip1193Provider);
       const signer = await nextProvider.getSigner();
       const address = await signer.getAddress();
+
+      const allowed = await checkAppAccess(address);
+      if (!allowed) {
+        setAccessDenied(true);
+        clearSession();
+        alert('Access restricted. Add your wallet from clawxlab.xyz to join the private beta.');
+        return null;
+      }
+
       const marketContract = new ethers.Contract(CONTRACT_ADDRESS, CONTRACT_ABI, signer);
+      setAccessDenied(false);
       setAccount(address);
       setProvider(nextProvider);
       setContract(marketContract);
@@ -121,14 +157,13 @@ export function WalletProvider({ children }: WalletProviderProps) {
       }
       return null;
     }
-  }, []);
+  }, [clearSession]);
 
   // Disconnect
   const disconnectWallet = useCallback(() => {
-    setAccount(null);
-    setProvider(null);
-    setContract(null);
-  }, []);
+    clearSession();
+    setAccessDenied(false);
+  }, [clearSession]);
 
   // Account change listener
   useEffect(() => {
@@ -137,21 +172,39 @@ export function WalletProvider({ children }: WalletProviderProps) {
     const onAccounts = (accounts: unknown) => {
       const list = accounts as string[];
       if (list && list.length > 0) {
-        // Automatically switch account
         connectWallet();
       } else {
-        setAccount(null);
-        setContract(null);
-        setProvider(null);
+        clearSession();
+        setAccessDenied(false);
       }
     };
     eth.on?.('accountsChanged', onAccounts);
     return () => eth.removeListener?.('accountsChanged', onAccounts);
-  }, [connectWallet]);
+  }, [connectWallet, clearSession]);
 
   const value = useMemo<WalletContextValue>(
-    () => ({ account, provider, contract, connectWallet, disconnectWallet, showConnectModal, setShowConnectModal, isRestoring }),
-    [account, provider, contract, connectWallet, disconnectWallet, showConnectModal, setShowConnectModal, isRestoring]
+    () => ({
+      account,
+      provider,
+      contract,
+      connectWallet,
+      disconnectWallet,
+      showConnectModal,
+      setShowConnectModal,
+      isRestoring,
+      accessDenied,
+    }),
+    [
+      account,
+      provider,
+      contract,
+      connectWallet,
+      disconnectWallet,
+      showConnectModal,
+      setShowConnectModal,
+      isRestoring,
+      accessDenied,
+    ]
   );
 
   return <WalletContext.Provider value={value}>{children}</WalletContext.Provider>;
