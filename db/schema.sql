@@ -218,6 +218,18 @@ CREATE TABLE IF NOT EXISTS wallet_limits (
   updated_by TEXT
 );
 
+-- Private-beta / landing allowlist for app.clawxlab.xyz access
+CREATE TABLE IF NOT EXISTS wallet_access (
+  wallet TEXT PRIMARY KEY,
+  status TEXT NOT NULL DEFAULT 'allowed',
+  source TEXT NOT NULL DEFAULT 'landing',
+  note TEXT NOT NULL DEFAULT '',
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_by TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_wallet_access_status ON wallet_access(status);
+
 -- Idempotent upgrades for DBs that already had wallet_limits without agent columns
 ALTER TABLE wallet_limits ADD COLUMN IF NOT EXISTS agent_spend_limit_tusdc NUMERIC;
 ALTER TABLE wallet_limits ADD COLUMN IF NOT EXISTS agent_spend_unlimited BOOLEAN NOT NULL DEFAULT true;
