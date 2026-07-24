@@ -118,6 +118,10 @@ CREATE TABLE IF NOT EXISTS platform_config (
   default_agent_spend_unlimited BOOLEAN NOT NULL DEFAULT true,
   default_agent_spend_limit_tusdc NUMERIC,
   default_agent_trade_size_tusdc NUMERIC,
+  -- Admin top-up: fund wallets whose on-chain TUSDC is below min
+  wallet_topup_enabled BOOLEAN NOT NULL DEFAULT false,
+  wallet_topup_min_tusdc NUMERIC NOT NULL DEFAULT 50,
+  wallet_topup_amount_tusdc NUMERIC NOT NULL DEFAULT 300,
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
@@ -129,6 +133,9 @@ ALTER TABLE platform_config ADD COLUMN IF NOT EXISTS default_tx_limit INTEGER;
 ALTER TABLE platform_config ADD COLUMN IF NOT EXISTS default_agent_spend_unlimited BOOLEAN NOT NULL DEFAULT true;
 ALTER TABLE platform_config ADD COLUMN IF NOT EXISTS default_agent_spend_limit_tusdc NUMERIC;
 ALTER TABLE platform_config ADD COLUMN IF NOT EXISTS default_agent_trade_size_tusdc NUMERIC;
+ALTER TABLE platform_config ADD COLUMN IF NOT EXISTS wallet_topup_enabled BOOLEAN NOT NULL DEFAULT false;
+ALTER TABLE platform_config ADD COLUMN IF NOT EXISTS wallet_topup_min_tusdc NUMERIC NOT NULL DEFAULT 50;
+ALTER TABLE platform_config ADD COLUMN IF NOT EXISTS wallet_topup_amount_tusdc NUMERIC NOT NULL DEFAULT 300;
 
 CREATE TABLE IF NOT EXISTS ranking_config (
   id TEXT PRIMARY KEY DEFAULT 'default',
