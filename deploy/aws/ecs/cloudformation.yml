@@ -474,6 +474,23 @@ Resources:
             Principal:
               Service: ecs-tasks.amazonaws.com
             Action: sts:AssumeRole
+      Policies:
+        - PolicyName: !Sub '${ProjectName}-${EnvironmentName}-ecs-describe'
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - ecs:DescribeClusters
+                  - ecs:DescribeServices
+                  - ecs:ListServices
+                  - ecs:ListTasks
+                  - ecs:DescribeTasks
+                  - ecs:DescribeContainerInstances
+                  - ecs:ListContainerInstances
+                  - elasticloadbalancing:DescribeTargetHealth
+                  - elasticloadbalancing:DescribeTargetGroups
+                Resource: '*'
 
   Alb:
     Type: AWS::ElasticLoadBalancingV2::LoadBalancer

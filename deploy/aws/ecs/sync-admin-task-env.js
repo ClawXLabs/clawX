@@ -145,6 +145,10 @@ const secretPayload = {
   FUJI_RPC_URL: clawxEnv.FUJI_RPC_URL || adminEnv.FUJI_RPC_URL || '',
   NEXT_PUBLIC_TUSDC_ADDRESS:
     clawxEnv.NEXT_PUBLIC_TUSDC_ADDRESS || adminEnv.NEXT_PUBLIC_TUSDC_ADDRESS || '',
+  AWS_REGION: region,
+  ECS_CLUSTER_NAME: `${project}-prod`,
+  PUBLIC_APP_HEALTH_URL: 'https://app.clawxlab.xyz/api/health',
+  ADMIN_HEALTH_URL: 'https://admin.clawxlab.xyz/api/health',
 };
 
 if (faucetKey) {
@@ -183,6 +187,10 @@ const ENV_KEYS = [
   'NEXT_PUBLIC_TUSDC_ADDRESS',
   'FAUCET_PRIVATE_KEY',
   'PRIVATE_KEY',
+  'AWS_REGION',
+  'ECS_CLUSTER_NAME',
+  'PUBLIC_APP_HEALTH_URL',
+  'ADMIN_HEALTH_URL',
 ];
 
 const environment = ENV_KEYS
