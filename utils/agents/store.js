@@ -556,6 +556,19 @@ export async function getFullProfile(wallet) {
   };
 }
 
+/** Ensure a wallet_profiles row exists (landing Add Wallet / first app touch). */
+export async function ensureWalletProfile(wallet) {
+  const key = walletKey(wallet);
+  if (!key) return null;
+  await query(
+    `INSERT INTO wallet_profiles (wallet, display_name, social_links)
+     VALUES ($1, NULL, '{}'::jsonb)
+     ON CONFLICT (wallet) DO NOTHING`,
+    [key]
+  );
+  return getFullProfile(key);
+}
+
 export function reconcileTradeLog(row) {
   if (!row?.wallet) return row;
   const log = [...(row.tradeLog || [])];

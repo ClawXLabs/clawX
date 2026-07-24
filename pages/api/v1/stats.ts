@@ -60,7 +60,13 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       `),
       query(`
         SELECT
-          (SELECT COUNT(*)::int FROM enrollments) AS enrolled_wallets,
+          (SELECT COUNT(*)::int FROM (
+             SELECT LOWER(wallet) AS w FROM enrollments
+             UNION
+             SELECT LOWER(wallet) FROM wallet_profiles
+             UNION
+             SELECT LOWER(wallet) FROM wallet_access WHERE status = 'allowed'
+           ) enrolled) AS enrolled_wallets,
           (SELECT COUNT(*)::int FROM wallet_profiles) AS profile_wallets,
           (SELECT COUNT(*)::int FROM (
              SELECT LOWER(wallet) AS w FROM enrollments
@@ -68,6 +74,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
              SELECT LOWER(wallet) FROM wallet_profiles
              UNION
              SELECT LOWER(wallet) FROM trade_log
+             UNION
+             SELECT LOWER(wallet) FROM wallet_access WHERE status = 'allowed'
            ) u) AS total_wallets
       `),
       query(`

@@ -5,11 +5,12 @@ import {
   isWalletAllowed,
   registerWalletAccess,
 } from '../../../utils/agents/walletAccess';
+import { ensureWalletProfile } from '../../../utils/agents/store';
 
 /**
  * Public Open API — register / check wallets for app access.
  *
- * POST /api/v1/wallets  { wallet }  → upsert allowlist row (source=landing)
+ * POST /api/v1/wallets  { wallet }  → upsert allowlist + wallet_profiles row
  * GET  /api/v1/wallets?wallet=0x… → { ok, allowed, registered, status? }
  */
 function setCors(res: NextApiResponse) {
@@ -70,6 +71,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         source: 'landing',
         status: 'allowed',
       });
+      // Same registry the main app uses for known wallets
+      await ensureWalletProfile(checksum);
 
       return res.status(200).json({
         ok: true,
@@ -79,7 +82,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         created: !wasRegistered,
         status: row.status,
         source: row.source,
-        appUrl: 'https://app.clawxlab.xyz',
       });
     }
 
