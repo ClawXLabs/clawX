@@ -730,6 +730,18 @@ Resources:
               Value: '3000'
             - Name: HOST
               Value: 0.0.0.0
+            - Name: AWS_REGION
+              Value: !Ref AWS::Region
+            - Name: ECS_CLUSTER
+              Value: !Ref EcsCluster
+            - Name: ECS_CLUSTER_NAME
+              Value: !Sub '${ProjectName}-${EnvironmentName}'
+            - Name: APP_URL
+              Value: https://app.clawxlab.xyz
+            - Name: PUBLIC_APP_HEALTH_URL
+              Value: https://app.clawxlab.xyz/api/health
+            - Name: ADMIN_HEALTH_URL
+              Value: !Sub 'https://${AdminHost}/api/health'
 
   ServiceWeb:
     Type: AWS::ECS::Service
