@@ -146,9 +146,11 @@ const secretPayload = {
   NEXT_PUBLIC_TUSDC_ADDRESS:
     clawxEnv.NEXT_PUBLIC_TUSDC_ADDRESS || adminEnv.NEXT_PUBLIC_TUSDC_ADDRESS || '',
   AWS_REGION: region,
-  ECS_CLUSTER_NAME: `${project}-prod`,
+  ECS_CLUSTER: stack,
+  ECS_CLUSTER_NAME: stack,
+  APP_URL: clawxEnv.APP_URL || adminEnv.APP_URL || 'https://app.clawxlab.xyz',
   PUBLIC_APP_HEALTH_URL: 'https://app.clawxlab.xyz/api/health',
-  ADMIN_HEALTH_URL: 'https://admin.clawxlab.xyz/api/health',
+  ADMIN_HEALTH_URL: `https://${outputs.AdminHost || 'admin.clawxlab.xyz'}/api/health`,
 };
 
 if (faucetKey) {
@@ -188,7 +190,9 @@ const ENV_KEYS = [
   'FAUCET_PRIVATE_KEY',
   'PRIVATE_KEY',
   'AWS_REGION',
+  'ECS_CLUSTER',
   'ECS_CLUSTER_NAME',
+  'APP_URL',
   'PUBLIC_APP_HEALTH_URL',
   'ADMIN_HEALTH_URL',
 ];
