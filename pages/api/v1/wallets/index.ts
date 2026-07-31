@@ -4,31 +4,43 @@ import {
   getWalletAccess,
   isWalletAllowed,
   registerWalletAccess,
-} from '../../../utils/agents/walletAccess';
-import { ensureWalletProfile } from '../../../utils/agents/store';
+} from '../../../../utils/agents/walletAccess';
+import { ensureWalletProfile } from '../../../../utils/agents/store';
+import { clientIp, rateLimit, setClawxCors } from '../../../../utils/api/clawxCors';
 
 /**
  * Public Open API — register / check wallets for app access.
  *
- * POST /api/v1/wallets  { wallet }  → upsert allowlist + wallet_profiles row
- * GET  /api/v1/wallets?wallet=0x… → { ok, allowed, registered, status? }
+ * POST /api/v1/wallets  { wallet, source?, referrer?, metadata? }
+ *   → upsert allowlist + wallet_profiles (idempotent, bumps last_seen)
+ * GET  /api/v1/wallets?wallet=0x… → { ok, allowed, registered, status?, ... }
+ *
+ * Also served at POST/GET /api/v1/wallets/connect
  */
-function setCors(res: NextApiResponse) {
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Api-Key');
-}
-
 function normalizeWallet(raw: unknown): string | null {
   if (!raw || !ethers.isAddress(String(raw))) return null;
   return ethers.getAddress(String(raw));
 }
 
+function sanitizeSource(raw: unknown): string {
+  const s = String(raw || 'landing').trim().toLowerCase().slice(0, 64);
+  return s || 'landing';
+}
+
+function sanitizeReferrer(raw: unknown): string {
+  return String(raw || '').trim().slice(0, 500);
+}
+
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
-  setCors(res);
+  setClawxCors(req, res, 'GET, POST, OPTIONS');
 
   if (req.method === 'OPTIONS') {
     return res.status(204).end();
+  }
+
+  const ip = clientIp(req);
+  if (!rateLimit(`wallets:${ip}`, { limit: 60, windowMs: 60_000 })) {
+    return res.status(429).json({ ok: false, error: 'Too many requests' });
   }
 
   try {
@@ -47,6 +59,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         registered: Boolean(access),
         status: access?.status || null,
         source: access?.source || null,
+        referrer: access?.referrer || null,
+        firstSeenAt: access?.createdAt || null,
+        lastSeenAt: access?.lastSeenAt || null,
       });
     }
 
@@ -66,13 +81,21 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         });
       }
 
+      const source = sanitizeSource(req.body?.source);
+      const referrer = sanitizeReferrer(req.body?.referrer);
+      const metadata =
+        req.body?.metadata && typeof req.body.metadata === 'object' && !Array.isArray(req.body.metadata)
+          ? req.body.metadata
+          : null;
+
       const wasRegistered = Boolean(existing);
       const row = await registerWalletAccess(checksum, {
-        source: 'landing',
+        source,
         status: 'allowed',
+        referrer,
+        metadata,
       });
-      // Same registry the main app uses for known wallets
-      await ensureWalletProfile(checksum);
+      const profile = await ensureWalletProfile(checksum, { source, referrer });
 
       return res.status(200).json({
         ok: true,
@@ -82,6 +105,18 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         created: !wasRegistered,
         status: row.status,
         source: row.source,
+        referrer: row.referrer || referrer || '',
+        firstSeenAt: row.createdAt,
+        lastSeenAt: row.lastSeenAt,
+        profile: profile
+          ? {
+              wallet: profile.wallet,
+              source: profile.source,
+              referrer: profile.referrer,
+              createdAt: profile.createdAt,
+              lastSeenAt: profile.lastSeenAt,
+            }
+          : null,
       });
     }
 
