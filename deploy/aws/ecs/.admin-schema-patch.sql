@@ -34,3 +34,26 @@ ALTER TABLE wallet_limits ADD COLUMN IF NOT EXISTS agent_trade_size_tusdc NUMERI
 ALTER TABLE platform_config ADD COLUMN IF NOT EXISTS wallet_topup_enabled BOOLEAN NOT NULL DEFAULT false;
 ALTER TABLE platform_config ADD COLUMN IF NOT EXISTS wallet_topup_min_tusdc NUMERIC NOT NULL DEFAULT 50;
 ALTER TABLE platform_config ADD COLUMN IF NOT EXISTS wallet_topup_amount_tusdc NUMERIC NOT NULL DEFAULT 300;
+
+-- Landing / connect wallet metadata (idempotent)
+ALTER TABLE wallet_profiles ADD COLUMN IF NOT EXISTS source TEXT NOT NULL DEFAULT 'app';
+ALTER TABLE wallet_profiles ADD COLUMN IF NOT EXISTS referrer TEXT NOT NULL DEFAULT '';
+ALTER TABLE wallet_profiles ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ NOT NULL DEFAULT NOW();
+ALTER TABLE wallet_profiles ADD COLUMN IF NOT EXISTS last_seen_at TIMESTAMPTZ NOT NULL DEFAULT NOW();
+
+CREATE TABLE IF NOT EXISTS wallet_access (
+  wallet TEXT PRIMARY KEY,
+  status TEXT NOT NULL DEFAULT 'allowed',
+  source TEXT NOT NULL DEFAULT 'landing',
+  note TEXT NOT NULL DEFAULT '',
+  referrer TEXT NOT NULL DEFAULT '',
+  metadata JSONB NOT NULL DEFAULT '{}'::jsonb,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  last_seen_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_by TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_wallet_access_status ON wallet_access(status);
+ALTER TABLE wallet_access ADD COLUMN IF NOT EXISTS referrer TEXT NOT NULL DEFAULT '';
+ALTER TABLE wallet_access ADD COLUMN IF NOT EXISTS metadata JSONB NOT NULL DEFAULT '{}'::jsonb;
+ALTER TABLE wallet_access ADD COLUMN IF NOT EXISTS last_seen_at TIMESTAMPTZ NOT NULL DEFAULT NOW();

@@ -553,18 +553,46 @@ export async function getFullProfile(wallet) {
     wallet: key,
     displayName: row?.display_name || null,
     socialLinks: row?.social_links || {},
+    source: row?.source || null,
+    referrer: row?.referrer || '',
+    createdAt: row?.created_at || null,
+    lastSeenAt: row?.last_seen_at || null,
   };
 }
 
 /** Ensure a wallet_profiles row exists (landing Add Wallet / first app touch). */
-export async function ensureWalletProfile(wallet) {
+let profileMetaEnsured = false;
+async function ensureProfileMetaColumns() {
+  if (profileMetaEnsured) return;
+  await query(`ALTER TABLE wallet_profiles ADD COLUMN IF NOT EXISTS source TEXT NOT NULL DEFAULT 'app'`);
+  await query(`ALTER TABLE wallet_profiles ADD COLUMN IF NOT EXISTS referrer TEXT NOT NULL DEFAULT ''`);
+  await query(`ALTER TABLE wallet_profiles ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()`);
+  await query(`ALTER TABLE wallet_profiles ADD COLUMN IF NOT EXISTS last_seen_at TIMESTAMPTZ NOT NULL DEFAULT NOW()`);
+  profileMetaEnsured = true;
+}
+
+export async function ensureWalletProfile(wallet, {
+  source = 'app',
+  referrer = '',
+} = {}) {
   const key = walletKey(wallet);
   if (!key) return null;
+  await ensureProfileMetaColumns();
   await query(
-    `INSERT INTO wallet_profiles (wallet, display_name, social_links)
-     VALUES ($1, NULL, '{}'::jsonb)
-     ON CONFLICT (wallet) DO NOTHING`,
-    [key]
+    `INSERT INTO wallet_profiles (wallet, display_name, social_links, source, referrer, created_at, last_seen_at, updated_at)
+     VALUES ($1, NULL, '{}'::jsonb, $2, $3, NOW(), NOW(), NOW())
+     ON CONFLICT (wallet) DO UPDATE SET
+       source = CASE
+         WHEN wallet_profiles.source IS NULL OR wallet_profiles.source = 'app' THEN EXCLUDED.source
+         ELSE wallet_profiles.source
+       END,
+       referrer = CASE
+         WHEN EXCLUDED.referrer <> '' THEN EXCLUDED.referrer
+         ELSE wallet_profiles.referrer
+       END,
+       last_seen_at = NOW(),
+       updated_at = NOW()`,
+    [key, String(source || 'app'), String(referrer || '').slice(0, 500)]
   );
   return getFullProfile(key);
 }

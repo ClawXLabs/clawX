@@ -59,6 +59,10 @@ CREATE TABLE IF NOT EXISTS wallet_profiles (
   wallet TEXT PRIMARY KEY,
   display_name TEXT,
   social_links JSONB NOT NULL DEFAULT '{}'::jsonb,
+  source TEXT NOT NULL DEFAULT 'app',
+  referrer TEXT NOT NULL DEFAULT '',
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  last_seen_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
@@ -205,11 +209,22 @@ CREATE TABLE IF NOT EXISTS wallet_access (
   status TEXT NOT NULL DEFAULT 'allowed',
   source TEXT NOT NULL DEFAULT 'landing',
   note TEXT NOT NULL DEFAULT '',
+  referrer TEXT NOT NULL DEFAULT '',
+  metadata JSONB NOT NULL DEFAULT '{}'::jsonb,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  last_seen_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_by TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_wallet_access_status ON wallet_access(status);
+
+ALTER TABLE wallet_profiles ADD COLUMN IF NOT EXISTS source TEXT NOT NULL DEFAULT 'app';
+ALTER TABLE wallet_profiles ADD COLUMN IF NOT EXISTS referrer TEXT NOT NULL DEFAULT '';
+ALTER TABLE wallet_profiles ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ NOT NULL DEFAULT NOW();
+ALTER TABLE wallet_profiles ADD COLUMN IF NOT EXISTS last_seen_at TIMESTAMPTZ NOT NULL DEFAULT NOW();
+ALTER TABLE wallet_access ADD COLUMN IF NOT EXISTS referrer TEXT NOT NULL DEFAULT '';
+ALTER TABLE wallet_access ADD COLUMN IF NOT EXISTS metadata JSONB NOT NULL DEFAULT '{}'::jsonb;
+ALTER TABLE wallet_access ADD COLUMN IF NOT EXISTS last_seen_at TIMESTAMPTZ NOT NULL DEFAULT NOW();
 
 ALTER TABLE wallet_limits ADD COLUMN IF NOT EXISTS agent_spend_limit_tusdc NUMERIC;
 ALTER TABLE wallet_limits ADD COLUMN IF NOT EXISTS agent_spend_unlimited BOOLEAN NOT NULL DEFAULT true;
