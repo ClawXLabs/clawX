@@ -1,10 +1,19 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
 import { query } from '../../../utils/db/postgres';
+import { fetchWalletPopulationStats } from '../../../utils/agents/walletStats';
 
 /**
  * Public Open API — aggregate platform stats (no PII).
  *
  * GET /api/v1/stats
+ *
+ * Wallet populations (see utils/agents/walletStats.js):
+ * - tradingWallets: distinct wallets in trade_log
+ * - enrollmentWallets: distinct wallets in enrollments
+ * - profileWallets: rows in wallet_profiles
+ * - accessWallets: wallet_access with status=allowed
+ * - enrolledWallets: enrollments ∪ profiles ∪ access(allowed) — landing hero count
+ * - totalWallets: enrollments ∪ profiles ∪ trade_log ∪ access(allowed)
  *
  * Optional auth: if OPEN_STATS_API_KEY is set, require
  *   Authorization: Bearer <key>  OR  X-Api-Key: <key>
@@ -53,31 +62,11 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           COALESCE(SUM(amount_tusdc), 0)::text AS total_volume_tusdc,
           COUNT(*) FILTER (WHERE created_at > NOW() - INTERVAL '24 hours')::int AS transactions_24h,
           COALESCE(SUM(amount_tusdc) FILTER (WHERE created_at > NOW() - INTERVAL '24 hours'), 0)::text AS volume_24h_tusdc,
-          COUNT(DISTINCT wallet)::int AS trading_wallets,
           MIN(created_at) AS first_trade_at,
           MAX(created_at) AS last_trade_at
         FROM trade_log
       `),
-      query(`
-        SELECT
-          (SELECT COUNT(*)::int FROM (
-             SELECT LOWER(wallet) AS w FROM enrollments
-             UNION
-             SELECT LOWER(wallet) FROM wallet_profiles
-             UNION
-             SELECT LOWER(wallet) FROM wallet_access WHERE status = 'allowed'
-           ) enrolled) AS enrolled_wallets,
-          (SELECT COUNT(*)::int FROM wallet_profiles) AS profile_wallets,
-          (SELECT COUNT(*)::int FROM (
-             SELECT LOWER(wallet) AS w FROM enrollments
-             UNION
-             SELECT LOWER(wallet) FROM wallet_profiles
-             UNION
-             SELECT LOWER(wallet) FROM trade_log
-             UNION
-             SELECT LOWER(wallet) FROM wallet_access WHERE status = 'allowed'
-           ) u) AS total_wallets
-      `),
+      fetchWalletPopulationStats(query),
       query(`
         SELECT
           COUNT(*) FILTER (WHERE status = 'active' AND paused = false)::int AS active_agents,
@@ -107,7 +96,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     ]);
 
     const t = tradeStats.rows[0] || ({} as any);
-    const w = walletStats.rows[0] || ({} as any);
     const a = agentStats.rows[0] || ({} as any);
     const f = faucetStats.rows[0] || ({} as any);
 
@@ -122,10 +110,12 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         totalVolumeTusdc: Number(t.total_volume_tusdc || 0),
         transactions24h: t.transactions_24h ?? 0,
         volume24hTusdc: Number(t.volume_24h_tusdc || 0),
-        tradingWallets: t.trading_wallets ?? 0,
-        totalWallets: w.total_wallets ?? 0,
-        enrolledWallets: w.enrolled_wallets ?? 0,
-        profileWallets: w.profile_wallets ?? 0,
+        tradingWallets: walletStats.tradingWallets,
+        enrollmentWallets: walletStats.enrollmentWallets,
+        profileWallets: walletStats.profileWallets,
+        accessWallets: walletStats.accessWallets,
+        enrolledWallets: walletStats.enrolledWallets,
+        totalWallets: walletStats.totalWallets,
         activeAgents: a.active_agents ?? 0,
         pausedAgents: a.paused_agents ?? 0,
         retiredAgents: a.retired_agents ?? 0,
