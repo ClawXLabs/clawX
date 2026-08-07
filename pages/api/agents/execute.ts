@@ -12,6 +12,7 @@ import {
   checkTxLimit,
 } from '../../../utils/agents/walletLimits';
 import { resolveMarketTradeSize } from '../../../utils/agents/marketCaps';
+import { getPlatformConfig } from '../../../utils/platformConfig';
 
 const MARKET_ABI = [
   'function owner() view returns (address)',
@@ -29,6 +30,14 @@ export default async function handler(req, res) {
   }
   if (!isRunnerAuthorized(req)) {
     return res.status(401).json({ error: 'Unauthorized runner' });
+  }
+
+  const platform = await getPlatformConfig();
+  if (platform.agents_paused) {
+    return res.status(503).json({
+      error: 'Agent trading is temporarily shut down',
+      agentsPaused: true,
+    });
   }
 
   const body = req.body || {};

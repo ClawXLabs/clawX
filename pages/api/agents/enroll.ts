@@ -10,6 +10,7 @@ import {
   resolveDelegateMaxTusdc,
 } from '../../../utils/agents/walletLimits';
 import { FUJI_RPC_PUBLIC } from '../../../utils/contract';
+import { getPlatformConfig } from '../../../utils/platformConfig';
 
 const ERC20_PERMIT_ABI = [
   'function permit(address owner,address spender,uint256 value,uint256 deadline,uint8 v,bytes32 r,bytes32 s) external',
@@ -55,6 +56,14 @@ export default async function handler(req, res) {
   }
 
   try {
+
+  const platform = await getPlatformConfig();
+  if (platform.agents_paused) {
+    return res.status(503).json({
+      error: 'Agent enrollment is temporarily unavailable while agents are shut down',
+      agentsPaused: true,
+    });
+  }
 
   const { wallet, agentId, tradeSizeTusdc, delegateSignature, delegateDeadline, delegateMaxRaw, permit } =
     req.body || {};
