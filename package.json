@@ -26,7 +26,16 @@
     "deploy:aws:stack": "bash deploy/aws/ecs/deploy.sh stack",
     "deploy:aws:images": "bash deploy/aws/ecs/deploy.sh images",
     "deploy:aws:sync": "bash deploy/aws/ecs/deploy.sh sync-env",
-    "deploy:aws:smoke": "bash deploy/aws/ecs/deploy.sh smoke"
+    "deploy:aws:smoke": "bash deploy/aws/ecs/deploy.sh smoke",
+    "local:infra": "docker compose -f docker-compose.infrastructure.yml up -d",
+    "local:infra:down": "docker compose -f docker-compose.infrastructure.yml down",
+    "local:web": "pm2 start deploy/local/ecosystem.config.cjs --only clawx-web,clawx-price-fetcher",
+    "local:keeper": "pm2 start deploy/local/ecosystem.config.cjs --only clawx-keeper",
+    "local:agents:on": "bash scripts/local-agents.sh on",
+    "local:agents:off": "bash scripts/local-agents.sh off",
+    "local:status": "pm2 status",
+    "agents:pause": "node scripts/set-agents-paused.js on",
+    "agents:unpause": "node scripts/set-agents-paused.js off"
   },
   "devDependencies": {
     "@nomicfoundation/hardhat-toolbox": "^4.0.0",
