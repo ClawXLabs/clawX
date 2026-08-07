@@ -5,6 +5,7 @@ import { WalletProvider } from '../contexts/WalletContext';
 import { MarketDataProvider } from '../contexts/MarketDataContext';
 import AutoSettlementWatcher from '../components/AutoSettlementWatcher';
 import Loading from '../components/Loading';
+import PlatformBanner from '../components/PlatformBanner';
 import '../styles/globals.css';
 
 class ErrorBoundary extends ReactComponent<
@@ -52,6 +53,7 @@ export default function App({ Component, pageProps }: AppProps) {
               href="/favicon.svg"
             />
           </Head>
+          <PlatformBanner />
           <Component {...pageProps} />
           {showLoading && <Loading onComplete={handleLoadingComplete} />}
         </MarketDataProvider>
