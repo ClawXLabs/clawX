@@ -16,6 +16,7 @@ import { getUserSettings } from './settings.js';
 import { getMarketSnapshot } from './marketSnapshot.js';
 import { resolveMarketTradeSize } from './marketCaps.js';
 import { acquireRedisLock } from '../db/redisLock.js';
+import { getPlatformConfig } from '../platformConfig.js';
 
 const CONTRACT_ABI = [
   'function getRoundInfo(uint256 roundId) external view returns (uint256 assetId, string memory asset, uint256 roundNumber, uint256 startTime, uint256 endTime, uint256 startPrice, uint256 endPrice, bool resolved, bool upWins, uint256 upPool, uint256 downPool, uint256 upShares, uint256 downShares, uint256 collateralPool, uint256 currentPrice, address priceFeed)',
@@ -98,6 +99,11 @@ export function createAgentTickProcessor(options = {}) {
     }
 
     try {
+      const platform = await getPlatformConfig();
+      if (platform.agents_paused) {
+        return { skipped: 'agents_paused' };
+      }
+
       let enrollment = await getEnrollment(wallet);
       if (!enrollment || enrollment.status !== 'active') return { skipped: 'inactive' };
       enrollment = await syncLessons(contract, enrollment);

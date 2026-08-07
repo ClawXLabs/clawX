@@ -21,8 +21,10 @@ async function main() {
   });
   const { readEnrollments } = await import('../utils/agents/store.js');
   const { refreshMarketSnapshot } = await import('../utils/agents/marketSnapshot.js');
+  const { getPlatformConfig } = await import('../utils/platformConfig.js');
 
   let stopping = false;
+  let lastPausedLog = 0;
   const shutdown = async () => {
     stopping = true;
     await queue.close();
@@ -36,20 +38,28 @@ async function main() {
   while (!stopping) {
     const started = Date.now();
     try {
-      await refreshMarketSnapshot({ ttlSec: Math.ceil(TICK_MS / 1000) + 2 });
-      const enrollments = await readEnrollments();
-      const active = Object.values(enrollments).filter((row) => row.status === 'active');
-      const bucket = Math.floor(Date.now() / TICK_MS);
-      await Promise.all(
-        active.map((row) =>
-          queue.add(
-            'tick',
-            { wallet: row.wallet },
-            { jobId: `${row.wallet.toLowerCase()}-${bucket}` }
+      const platform = await getPlatformConfig();
+      if (platform.agents_paused) {
+        if (Date.now() - lastPausedLog > 60_000) {
+          console.log('[agent-scheduler] agents_paused=true — skipping enqueue');
+          lastPausedLog = Date.now();
+        }
+      } else {
+        await refreshMarketSnapshot({ ttlSec: Math.ceil(TICK_MS / 1000) + 2 });
+        const enrollments = await readEnrollments();
+        const active = Object.values(enrollments).filter((row) => row.status === 'active');
+        const bucket = Math.floor(Date.now() / TICK_MS);
+        await Promise.all(
+          active.map((row) =>
+            queue.add(
+              'tick',
+              { wallet: row.wallet },
+              { jobId: `${row.wallet.toLowerCase()}-${bucket}` }
+            )
           )
-        )
-      );
-      if (active.length) console.log(`[agent-scheduler] Enqueued ${active.length} wallet(s)`);
+        );
+        if (active.length) console.log(`[agent-scheduler] Enqueued ${active.length} wallet(s)`);
+      }
     } catch (error) {
       console.error('[agent-scheduler] Tick failed:', error.message || error);
     }
