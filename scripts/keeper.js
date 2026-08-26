@@ -12,7 +12,7 @@ const CONTRACT_ABI = [
   "function getRoundInfo(uint256 roundId) external view returns (uint256 assetId, string memory asset, uint256 roundNumber, uint256 startTime, uint256 endTime, uint256 startPrice, uint256 endPrice, bool resolved, bool upWins, uint256 upPool, uint256 downPool, uint256 upShares, uint256 downShares, uint256 collateralPool, uint256 currentPrice, address priceFeed)",
 ];
 
-const POLL_MS = Number(process.env.KEEPER_POLL_MS || 1000);
+const POLL_MS = Number(process.env.KEEPER_POLL_MS || 5000);
 const RPC_URL = process.env.FUJI_RPC_URL || "https://api.avax-test.network/ext/bc/C/rpc";
 const CONTRACT_ADDRESS = process.env.NEXT_PUBLIC_CONTRACT_ADDRESS;
 const PRIVATE_KEY = process.env.SETTLEMENT_PRIVATE_KEY || process.env.PRIVATE_KEY;
@@ -130,16 +130,7 @@ async function settleExpired(contract, redis) {
       throw new Error(`Missing fast price for ${market.symbol}`);
     }
   }
-  const feeData = await contract.runner.provider.getFeeData();
-  const gasOverrides = {};
-  if (feeData.maxFeePerGas) {
-    gasOverrides.maxFeePerGas = (feeData.maxFeePerGas * 300n) / 100n;
-    if (feeData.maxPriorityFeePerGas) {
-      gasOverrides.maxPriorityFeePerGas = (feeData.maxPriorityFeePerGas * 300n) / 100n;
-    }
-  } else if (feeData.gasPrice) {
-    gasOverrides.gasPrice = (feeData.gasPrice * 300n) / 100n;
-  }
+  const gasOverrides = { gasLimit: 5000000 };
   const releaseLock = await acquireRelayerLock(redis, contract.runner.address);
   try {
     const tx = await contract.resolveExpiredRoundsWithPrices(
