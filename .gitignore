@@ -49,3 +49,8 @@ deploy/aws/ecs/.secret-payload.json
 deploy/aws/ecs/.task-*.json
 deploy/aws/ecs/.db-init-*.json
 deploy/aws/ecs/.oidc-*.json
+
+# Local RDS sync artifacts (never commit)
+deploy/aws/ecs/.rds-*
+deploy/aws/ecs/.local-dump.sql
+deploy/aws/ecs/.migrate-taskdef.json
