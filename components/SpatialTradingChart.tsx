@@ -1205,6 +1205,10 @@ export default function SpatialTradingChart({
           alignItems: 'baseline',
         }}
       >
+        {
+          // Time markers are intentionally hidden to provide a cleaner layout 
+          // and reduce clutter during fast-paced spatial trading sessions.
+        }
         <span
           style={{
             width: 12,
