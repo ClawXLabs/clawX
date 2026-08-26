@@ -4,11 +4,11 @@ import { useMarketData, refreshMarketData, hasExpiredMarkets } from '../contexts
 import { FUJI_RPC_PUBLIC } from '../utils/contract';
 
 const SETTLE_CONFIRM_MS = 5000;
-const SETTLE_RECEIPT_POLL_MS = 150;
-const SETTLE_API_RETRY_MS = 350;
+const SETTLE_RECEIPT_POLL_MS = 1500; // Was 150, increased to prevent rate limits
+const SETTLE_API_RETRY_MS = 2000;    // Was 350, increased to prevent rate limits
 const SETTLE_API_MAX_MS = 6000;
 const SETTLE_KEEPER_WAIT_MS = 2500;
-const EXPIRED_REFRESH_MS = 450;
+const EXPIRED_REFRESH_MS = 2000;     // Was 450, increased to prevent rate limits
 const SETTLE_FIRE_DELAY_MS = 0;
 
 type SettleResult = {
