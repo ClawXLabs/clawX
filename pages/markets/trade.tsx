@@ -38,7 +38,7 @@ async function ensureFujiNetwork(): Promise<boolean> {
             chainId: FUJI_CHAIN_ID_HEX,
             chainName: 'Avalanche Fuji C-Chain',
             nativeCurrency: { name: 'AVAX', symbol: 'AVAX', decimals: 18 },
-            rpcUrls: ['https://api.avax-test.network/ext/bc/C/rpc'],
+            rpcUrls: ['https://avalanche-fuji-c-chain-rpc.publicnode.com'],
             blockExplorerUrls: ['https://testnet.snowtrace.io'],
           }],
         });
