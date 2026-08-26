@@ -130,6 +130,9 @@ async function settleExpired(contract, redis) {
       throw new Error(`Missing fast price for ${market.symbol}`);
     }
   }
+  // We use a hardcoded gasLimit instead of relying on ethers' getFeeData()
+  // because the Avalanche testnet RPC returns an invalid base fee (~170 wei)
+  // which causes the network to reject transactions with "exceeds block gas limit".
   const gasOverrides = { gasLimit: 5000000 };
   const releaseLock = await acquireRelayerLock(redis, contract.runner.address);
   try {
