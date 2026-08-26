@@ -207,6 +207,7 @@ sync_env() {
     echo "ERROR: .env missing — copy deploy/aws/.env.production.example and fill secrets" >&2
     exit 1
   fi
+  export AWS_BIN
   node deploy/aws/ecs/sync-task-env.js --region "$REGION" --stack "$STACK" --project "$PROJECT" --env-name "$ENV_NAME"
 }
 
