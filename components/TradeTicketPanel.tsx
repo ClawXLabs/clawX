@@ -301,6 +301,58 @@ export default function TradeTicketPanel({
         ))}
       </div>
 
+      {/* ── Price to Beat ── */}
+      <div
+        style={{
+          border: NP.border,
+          background: 'rgba(13,11,8,0.02)',
+          padding: '10px 12px',
+        }}
+      >
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
+          <span style={{ ...NP.label, fontSize: 8.5 }}>PRICE TO BEAT</span>
+          <span
+            style={{
+              ...NP.mono,
+              fontSize: 16,
+              fontWeight: 900,
+              color: NP.ink,
+              letterSpacing: '-0.02em',
+            }}
+          >
+            ${market.startPrice > 0 ? market.startPrice.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: market.startPrice < 10 ? 4 : 2 }) : '—'}
+          </span>
+        </div>
+        {market.startPrice > 0 && market.currentPrice > 0 && (
+          <div
+            style={{
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              marginTop: 6,
+              paddingTop: 6,
+              borderTop: '1px dashed rgba(13,11,8,0.12)',
+            }}
+          >
+            <span style={{ ...NP.label, fontSize: 8 }}>LIVE PRICE</span>
+            <span
+              style={{
+                ...NP.mono,
+                fontSize: 12,
+                fontWeight: 900,
+                color: priceIsUp ? NP.green : NP.red,
+              }}
+            >
+              ${market.currentPrice.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: market.currentPrice < 10 ? 4 : 2 })}{' '}
+              <span style={{ fontSize: 9.5, fontWeight: 700, opacity: 0.85 }}>
+                {priceIsUp ? '▲' : '▼'}{' '}
+                {Math.abs(((market.currentPrice - market.startPrice) / market.startPrice) * 100).toFixed(2)}%
+              </span>
+            </span>
+          </div>
+        )}
+      </div>
+
       <div>
         <div style={{ ...NP.label, marginBottom: 8 }}>
           {tradeMode === 'buy' ? `AMOUNT (${tokenSymbol})` : `SHARES TO SELL (${side.toUpperCase()})`}
