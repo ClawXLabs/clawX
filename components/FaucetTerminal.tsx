@@ -14,7 +14,7 @@ import { TUSDC_ADDRESS } from '../utils/contract';
 
 const FUJI_NETWORK = {
   name: 'Avalanche Fuji C-Chain',
-  rpc: 'https://api.avax-test.network/ext/bc/C/rpc',
+  rpc: 'https://avalanche-fuji-c-chain-rpc.publicnode.com',
   chainId: '43113',
   symbol: 'AVAX',
   explorer: 'https://testnet.snowtrace.io',

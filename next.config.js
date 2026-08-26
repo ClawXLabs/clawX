@@ -19,7 +19,7 @@ const nextConfig = {
   },
   env: {
     NEXT_PUBLIC_CHAIN_ID: '43113',
-    NEXT_PUBLIC_RPC_URL: 'https://api.avax-test.network/ext/bc/C/rpc',
+    NEXT_PUBLIC_RPC_URL: process.env.NEXT_PUBLIC_FUJI_RPC_URL || 'https://avalanche-fuji-c-chain-rpc.publicnode.com',
   },
 }
 

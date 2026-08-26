@@ -4,7 +4,6 @@ export const COLLATERAL_TOKEN_ADDRESS = process.env.NEXT_PUBLIC_COLLATERAL_TOKEN
 /** Test ERC-20 (Tusdc / TUSDC, 6 decimals) */
 export const TUSDC_ADDRESS =
   process.env.NEXT_PUBLIC_TUSDC_ADDRESS || "0xd27D2AB610714E262E64c7BFA789769A98A5DeB1";
-/** Public Fuji RPC for read-only client pages (leaderboard) */
 export const FUJI_RPC_PUBLIC =
   process.env.NEXT_PUBLIC_FUJI_RPC_URL || "https://api.avax-test.network/ext/bc/C/rpc";
 
