@@ -253,13 +253,12 @@ function samplePriceAt(ticks: PriceTick[], t: number): { t: number; price: numbe
   return { t, price: Math.max(lo, Math.min(hi, price)) };
 }
 
-function strokeSmoothPath(
+function traceSmoothPath(
   ctx: CanvasRenderingContext2D,
   pts: { x: number; y: number }[],
   tension = 0.35,
 ) {
   if (pts.length < 2) return;
-  ctx.beginPath();
   ctx.moveTo(pts[0].x, pts[0].y);
   if (pts.length === 2) {
     ctx.lineTo(pts[1].x, pts[1].y);
@@ -270,12 +269,26 @@ function strokeSmoothPath(
     const p1 = pts[i];
     const p2 = pts[i + 1];
     const p3 = pts[i + 2 < pts.length ? i + 2 : pts.length - 1];
-    const cp1x = p1.x + (p2.x - p0.x) * tension;
-    const cp1y = p1.y + (p2.y - p0.y) * tension;
-    const cp2x = p2.x - (p3.x - p1.x) * tension;
-    const cp2y = p2.y - (p3.y - p1.y) * tension;
+    let cp1x = p1.x + (p2.x - p0.x) * tension;
+    let cp1y = p1.y + (p2.y - p0.y) * tension;
+    let cp2x = p2.x - (p3.x - p1.x) * tension;
+    let cp2y = p2.y - (p3.y - p1.y) * tension;
+    // Constrain X to lie between p1 and p2 to prevent backwards loops
+    const minX = Math.min(p1.x, p2.x);
+    const maxX = Math.max(p1.x, p2.x);
+    cp1x = Math.max(minX, Math.min(maxX, cp1x));
+    cp2x = Math.max(minX, Math.min(maxX, cp2x));
     ctx.bezierCurveTo(cp1x, cp1y, cp2x, cp2y, p2.x, p2.y);
   }
+}
+
+function strokeSmoothPath(
+  ctx: CanvasRenderingContext2D,
+  pts: { x: number; y: number }[],
+  tension = 0.35,
+) {
+  ctx.beginPath();
+  traceSmoothPath(ctx, pts, tension);
 }
 
 interface Engine {
@@ -484,7 +497,10 @@ export default function SpatialTradingChart({
         e.ticks = mergeTicksForward([], history, market.currentPrice);
       } else {
         e.ticks = mergeTicksForward([], history, market.currentPrice);
-        const seed = e.ticks.filter((p) => p.t >= Date.now() - TRAIL_KEEP_MS);
+        const roundOpenT = market.startTime * 1000;
+        const cutoff = Math.max(Date.now() - TRAIL_KEEP_MS, roundOpenT);
+        let seed = e.ticks.filter((p) => p.t >= cutoff);
+        if (seed.length === 0 || seed[0].t > roundOpenT) seed.unshift({ t: roundOpenT, price: market.startPrice });
         e.trail = (seed.length >= 2 ? seed : e.ticks.slice(-120)).map((p) => ({ ...p }));
         const end = e.trail[e.trail.length - 1] || { t: Date.now() - CHART_LAG_MS, price: market.currentPrice };
         e.tip = { t: end.t, price: end.price };
@@ -512,7 +528,10 @@ export default function SpatialTradingChart({
     }
 
     if (e.trail.length < 2 && e.ticks.length >= 2) {
-      const seed = e.ticks.filter((p) => p.t >= Date.now() - TRAIL_KEEP_MS);
+      const roundOpenT = market.startTime * 1000;
+      const cutoff = Math.max(Date.now() - TRAIL_KEEP_MS, roundOpenT);
+      let seed = e.ticks.filter((p) => p.t >= cutoff);
+      if (seed.length === 0 || seed[0].t > roundOpenT) seed.unshift({ t: roundOpenT, price: market.startPrice });
       e.trail = (seed.length >= 2 ? seed : e.ticks.slice(-120)).map((p) => ({ ...p }));
       const end = e.trail[e.trail.length - 1];
       e.tip = { t: end.t, price: end.price };
@@ -808,29 +827,7 @@ export default function SpatialTradingChart({
         ctx.fillText(fmtUsd(p), 10, y);
       }
 
-      // Round open / START — dashed
-      const openY = priceToY(e.startPrice);
-      const openAlpha = 0.35 + 0.65 * e.openFade;
-      ctx.save();
-      ctx.globalAlpha = openAlpha;
-      ctx.strokeStyle = lineColor;
-      ctx.lineWidth = 1.5;
-      ctx.setLineDash([7, 6]);
-      ctx.beginPath();
-      ctx.moveTo(0, openY);
-      ctx.lineTo(W, openY);
-      ctx.stroke();
-      ctx.setLineDash([]);
-      ctx.font = '700 10px "Courier New", monospace';
-      ctx.fillStyle = lineColor;
-      ctx.textAlign = 'left';
-      ctx.textBaseline = 'bottom';
-      ctx.fillText(
-        archive ? `START  ${fmtUsd(e.startPrice)}` : `ROUND OPEN  ${fmtUsd(e.startPrice)}`,
-        78,
-        openY - 4,
-      );
-      ctx.restore();
+      // Round open (Price to Beat) logic moved to render *after* the shading fill so it stays visible
 
       if (archive) {
         const endY = priceToY(e.endPrice);
@@ -874,6 +871,23 @@ export default function SpatialTradingChart({
       }
 
       if (drawPts.length >= 2) {
+        // --- Area Fill Shading ---
+        ctx.save();
+        ctx.fillStyle = lineColor;
+        ctx.globalAlpha = 0.08;
+        
+        ctx.beginPath();
+        traceSmoothPath(ctx, drawPts, archive ? 0.22 : LIVE_PATH_TENSION);
+        const lastPt = drawPts[drawPts.length - 1];
+        const firstPt = drawPts[0];
+        const openY = priceToY(e.startPrice);
+        ctx.lineTo(lastPt.x, openY);
+        ctx.lineTo(firstPt.x, openY);
+        ctx.closePath();
+        ctx.fill();
+        ctx.restore();
+
+        // --- Main Line Stroke ---
         ctx.strokeStyle = lineColor;
         ctx.lineWidth = 2.75;
         ctx.lineJoin = 'round';
@@ -886,6 +900,36 @@ export default function SpatialTradingChart({
         strokeSmoothPath(ctx, drawPts, archive ? 0.22 : LIVE_PATH_TENSION);
         ctx.stroke();
         ctx.globalAlpha = 1;
+      }
+
+      // --- Round open / START (Price to Beat) — dashed line on top ---
+      if (e.startPrice > 0) {
+        const finalOpenY = priceToY(e.startPrice);
+        ctx.save();
+        
+        // Draw the text first, slightly above the line
+        ctx.globalAlpha = 0.9;
+        ctx.font = '700 10px "Courier New", monospace';
+        ctx.fillStyle = lineColor;
+        ctx.textAlign = 'left';
+        ctx.textBaseline = 'bottom';
+        ctx.fillText(
+          archive ? `START  ${fmtUsd(e.startPrice)}` : `PRICE TO BEAT  ${fmtUsd(e.startPrice)}`,
+          8,
+          finalOpenY - 6,
+        );
+
+        // Ensure the dashed line is 100% opaque, distinct, and completely un-obscured
+        ctx.globalAlpha = 1;
+        ctx.strokeStyle = '#000000'; 
+        ctx.lineWidth = 1.5;
+        ctx.setLineDash([8, 8]);
+        ctx.beginPath();
+        ctx.moveTo(0, finalOpenY);
+        ctx.lineTo(W, finalOpenY);
+        ctx.stroke();
+        ctx.setLineDash([]);
+        ctx.restore();
       }
 
       if (archive && e.archiveTicks.length >= 2) {
@@ -960,25 +1004,12 @@ export default function SpatialTradingChart({
         ctx.fillText(`${pct >= 0 ? '▲' : '▼'} ${Math.abs(pct).toFixed(3)}%`, W - 12, liveY + 16);
       }
 
-      ctx.fillStyle = 'rgba(13,11,8,0.5)';
-      ctx.font = '700 10px "Courier New", monospace';
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'top';
       if (archive) {
-        for (let m = 0; m <= 5; m++) {
-          const t = e.startTimeMs + m * 60_000;
-          if (t > e.endTimeMs + 500) break;
-          ctx.fillText(fmtRoundClock(t - e.startTimeMs), timeToX(t), H - 18);
-        }
         ctx.fillStyle = INK;
         ctx.font = '900 10px "Courier New", monospace';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'top';
         ctx.fillText('5 MIN ROUND', W / 2, 10);
-      } else {
-        const marks = 5;
-        for (let i = 0; i <= marks; i++) {
-          const t = tMin + ((tMax - tMin) * i) / marks;
-          ctx.fillText(fmtClock(t), timeToX(t), H - 18);
-        }
       }
 
       if (archive) {
@@ -1146,31 +1177,7 @@ export default function SpatialTradingChart({
         </button>
       )}
 
-      {/* Market timer — top right, no box */}
-      <div
-        style={{
-          position: 'absolute',
-          top: 16,
-          right: 20,
-          zIndex: 6,
-          pointerEvents: 'none',
-          fontFamily: '"Courier New", monospace',
-          fontSize: 18,
-          fontWeight: 900,
-          letterSpacing: '0.06em',
-          color: isHistorical
-            ? '#5A554E'
-            : hud.msLeft <= 0
-              ? RED
-              : timerCritical
-                ? LIVE_RED
-                : timerWarn
-                  ? '#D97706'
-                  : INK,
-        }}
-      >
-        {isHistorical ? 'ARCHIVE' : hud.msLeft <= 0 ? 'SETTLE' : fmtCountdown(hud.msLeft)}
-      </div>
+      {/* Removed the absolute-positioned Market timer from here, moved to HUD bottom center */}
 
       <div
         onPointerDown={onPointerDown}
@@ -1231,7 +1238,16 @@ export default function SpatialTradingChart({
             <span style={{ fontSize: 26, fontWeight: 900, color: lineColor, letterSpacing: '-0.02em' }}>
               {fmtUsd(hud.price)}
             </span>
-            <span style={{ fontSize: 13, fontWeight: 700, color: '#5A554E' }}>{fmtClock(hud.now)}</span>
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+              <span style={{ 
+                fontSize: 14, 
+                fontWeight: 900, 
+                color: hud.msLeft <= 0 ? RED : timerCritical ? LIVE_RED : timerWarn ? '#D97706' : INK,
+                marginTop: 2 
+              }}>
+                {hud.msLeft <= 0 ? 'SETTLE' : `LEFT: ${fmtCountdown(hud.msLeft)}`}
+              </span>
+            </div>
           </>
         )}
       </div>
@@ -1266,7 +1282,13 @@ export default function SpatialTradingChart({
           <>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
               <span style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.1em', color: '#5A554E' }}>ZOOM</span>
-              <span style={{ fontSize: 12, fontWeight: 900, color: INK }}>{hud.zoom}</span>
+              <span 
+                style={{ fontSize: 12, fontWeight: 900, color: INK, cursor: 'pointer', textDecoration: 'underline' }}
+                onClick={() => setZoomMs(DEFAULT_WINDOW_MS)}
+                title="Reset to 1x zoom"
+              >
+                {hud.zoom}
+              </span>
             </div>
             <input
               type="range"
