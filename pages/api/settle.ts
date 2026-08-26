@@ -68,7 +68,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   }
 
   const contractAddress = process.env.NEXT_PUBLIC_CONTRACT_ADDRESS;
-  const rpcUrl = process.env.FUJI_RPC_URL || 'https://api.avax-test.network/ext/bc/C/rpc';
+  const rpcUrl = process.env.FUJI_RPC_URL || 'https://avalanche-fuji-c-chain-rpc.publicnode.com';
   const privateKey = normalizePrivateKey(process.env.SETTLEMENT_PRIVATE_KEY || process.env.PRIVATE_KEY);
 
   if (!contractAddress) {
@@ -141,16 +141,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       };
     });
 
-    const fee = await provider.getFeeData();
-    const gasOverrides: Record<string, bigint> = {};
-    if (fee.maxFeePerGas) {
-      gasOverrides.maxFeePerGas = (fee.maxFeePerGas * 300n) / 100n;
-      if (fee.maxPriorityFeePerGas) {
-        gasOverrides.maxPriorityFeePerGas = (fee.maxPriorityFeePerGas * 300n) / 100n;
-      }
-    } else if (fee.gasPrice) {
-      gasOverrides.gasPrice = (fee.gasPrice * 300n) / 100n;
-    }
+    const gasOverrides = { gasLimit: 5000000 };
     // Serialize sends with the other relayer users (keeper, trade, claim-all)
     // so concurrent txs from the shared wallet never collide on a nonce.
     const releaseNonceLock = await acquireRedisLock(
