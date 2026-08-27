@@ -71,9 +71,9 @@ async function main() {
   const pool = new Pool({
     connectionString: process.env.DATABASE_URL,
     ssl:
-      process.env.DATABASE_SSL === 'true'
-        ? { rejectUnauthorized: process.env.DATABASE_SSL_REJECT_UNAUTHORIZED !== 'false' }
-        : false,
+      process.env.DATABASE_SSL === 'false' || process.env.DATABASE_URL.includes('localhost') || process.env.DATABASE_URL.includes('127.0.0.1')
+        ? false
+        : { rejectUnauthorized: process.env.DATABASE_SSL_REJECT_UNAUTHORIZED !== 'false' },
   });
   const redis = new Redis(process.env.REDIS_URL, {
     maxRetriesPerRequest: 3,
