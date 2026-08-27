@@ -56,10 +56,16 @@ function canTradeSymbol(memory, symbol, now) {
   return now - last >= WATCH_GAP_SEC;
 }
 
-function isFreshMarket(round) {
+/** Market is considered low-activity when total pool is under this threshold (TUSDC). */
+const LOW_ACTIVITY_TUSDC = 100;
+const TUSDC_DECIMALS = 6;
+
+function isLowActivity(round) {
   const up = Number(round.upPool || 0);
   const down = Number(round.downPool || 0);
-  return up + down < 0.01;
+  // Pool values are raw BigInt units (6 decimals for TUSDC)
+  const totalTusdc = (up + down) / 10 ** TUSDC_DECIMALS;
+  return totalTusdc < LOW_ACTIVITY_TUSDC;
 }
 
 function scoreAsset(asset) {
@@ -68,8 +74,8 @@ function scoreAsset(asset) {
   const imbalance = Math.abs(skew.upPct - 0.5);
   const timeLeft = Number(asset.round.endTime || 0) - Math.floor(Date.now() / 1000);
   if (timeLeft < 35) return -1;
-  // Fresh markets (empty pools) are great entry opportunities — give them a base score
-  if (isFreshMarket(asset.round)) return 10 + drift * 2;
+  // Low-activity markets are entry opportunities — give them a base score
+  if (isLowActivity(asset.round)) return 10 + drift * 2;
   return drift * 2 + imbalance * 15;
 }
 
@@ -108,7 +114,7 @@ export function decideWithRules(enrollment, assets, openPositions) {
       pick = candidates[0];
       const stats = ensureSymbolStats(memory, pick.symbol);
       const drift = driftPct(pick.round);
-      const fresh = isFreshMarket(pick.round);
+      const fresh = isLowActivity(pick.round);
       const minDrift = stats.lastResult === 'loss' ? 0.35 : 0.12;
       if (!fresh && Math.abs(drift) < minDrift) {
         thought = `${agent.name}: ${pick.symbol} too flat after last miss — waiting for momentum.`;
@@ -129,7 +135,7 @@ export function decideWithRules(enrollment, assets, openPositions) {
     case 'peak-mind': {
       const ranked = candidates
         .map((a) => {
-          const fresh = isFreshMarket(a.round);
+          const fresh = isLowActivity(a.round);
           const absDrift = Math.abs(driftPct(a.round));
           // Fresh markets get a base confidence so they aren't always filtered out
           const conf = fresh
@@ -171,15 +177,15 @@ export function decideWithRules(enrollment, assets, openPositions) {
     case 'frost-logic': {
       const crowded = [...candidates].sort((a, b) => {
         // Prefer markets with actual crowd data; fresh markets sort last
-        const fa = isFreshMarket(a.round) ? 0 : 1;
-        const fb = isFreshMarket(b.round) ? 0 : 1;
+        const fa = isLowActivity(a.round) ? 0 : 1;
+        const fb = isLowActivity(b.round) ? 0 : 1;
         if (fa !== fb) return fb - fa;
         const ia = Math.abs(poolSkew(a.round).upPct - 0.5);
         const ib = Math.abs(poolSkew(b.round).upPct - 0.5);
         return ib - ia;
       })[0];
       pick = crowded;
-      const fresh = isFreshMarket(pick.round);
+      const fresh = isLowActivity(pick.round);
       const skew = poolSkew(pick.round);
       const stats = ensureSymbolStats(memory, pick.symbol);
       if (fresh) {
@@ -203,7 +209,7 @@ export function decideWithRules(enrollment, assets, openPositions) {
       pick = ordered[idx];
       memory.rotateIndex = idx + 1;
       const drift = driftPct(pick.round);
-      const fresh = isFreshMarket(pick.round);
+      const fresh = isLowActivity(pick.round);
       const stats = ensureSymbolStats(memory, pick.symbol);
       if (stats.lastResult === 'loss') {
         isUp = drift <= 0;
