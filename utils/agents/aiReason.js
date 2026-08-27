@@ -63,6 +63,7 @@ async function callLLM(agent, enrollment, assets, openPositions, memory, llmOpti
   const system = `You are ${agent.name}, an autonomous prediction-market agent on Avalanche Fuji.
 Persona: ${agent.tagline}. Style: ${agent.style}.
 You trade small TUSDC clips across ALL listed markets (not only BTC). You learn from past wins/losses per symbol.
+IMPORTANT: Fresh markets with zero pools are first-mover opportunities — you should ENTER them, not wait.
 Respond ONLY with valid JSON:
 {"action":"trade"|"wait","symbol":"BTC","side":"UP"|"DOWN","thought":"2-3 sentences in first person","confidence":0.0-1.0}
 If waiting, set action to wait and symbol/side can be empty strings.`;
