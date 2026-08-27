@@ -155,6 +155,19 @@ export function WalletProvider({ children }: WalletProviderProps) {
     }
 
     try {
+      // Force MetaMask to prompt for account selection instead of silently reusing the current one
+      try {
+        await eth.request({
+          method: 'wallet_requestPermissions',
+          params: [{ eth_accounts: {} }]
+        });
+      } catch (permissionError: any) {
+        if (permissionError.code === 4001) {
+          throw new Error('User rejected the connection request.');
+        }
+        // Fallback for wallets that don't support wallet_requestPermissions
+      }
+
       const accounts = await eth.request({ method: 'eth_requestAccounts' }) as string[];
       const forcedStr = typeof forcedAccount === 'string' ? forcedAccount : undefined;
       const chosen = (forcedStr && accounts.find(a => a.toLowerCase() === forcedStr.toLowerCase())) || accounts[0];
