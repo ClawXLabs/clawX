@@ -130,6 +130,17 @@ export default function AgentCreator() {
       const signer = await browserProvider.getSigner();
       const network = await browserProvider.getNetwork();
       const chainId = Number(network.chainId);
+      
+      const expectedChainId = Number(process.env.NEXT_PUBLIC_CHAIN_ID || 43113);
+      if (chainId !== expectedChainId) {
+        throw new Error(`Please switch MetaMask to the correct network (Chain ID: ${expectedChainId}) before starting an agent.`);
+      }
+
+      const signerAddr = await signer.getAddress();
+      if (signerAddr.toLowerCase() !== wallet.toLowerCase()) {
+        throw new Error('MetaMask active account does not match the connected wallet. Please switch to the correct account in MetaMask or reconnect.');
+      }
+
       const size =
         limits.agentTradeSizeTusdc != null && limits.agentTradeSizeTusdc > 0
           ? limits.agentTradeSizeTusdc
