@@ -89,8 +89,8 @@ const secretPayload = {
   ...localEnv,
   DATABASE_URL: dbUrl,
   REDIS_URL: redisUrl,
-  DATABASE_SSL: localEnv.DATABASE_SSL || 'true',
-  DATABASE_SSL_REJECT_UNAUTHORIZED: localEnv.DATABASE_SSL_REJECT_UNAUTHORIZED || 'false',
+  DATABASE_SSL: 'true',
+  DATABASE_SSL_REJECT_UNAUTHORIZED: 'false',
   REDIS_TLS: localEnv.REDIS_TLS || 'false',
   APP_URL: resolvedAppUrl,
   NEXT_PUBLIC_WS_URL:
