@@ -280,13 +280,13 @@ function AgentCard({ agent }: { agent: AgentStat }) {
                           ...mono,
                           fontSize: 9,
                           fontWeight: 700,
-                          color: t.outcome === 'WIN' ? '#22c55e' : '#ef4444',
-                          border: `1px solid ${t.outcome === 'WIN' ? '#22c55e55' : '#ef444455'}`,
+                          color: String(t.outcome).toUpperCase() === 'WIN' ? '#22c55e' : '#ef4444',
+                          border: `1px solid ${String(t.outcome).toUpperCase() === 'WIN' ? '#22c55e55' : '#ef444455'}`,
                           borderRadius: 4,
                           padding: '1px 5px',
                         }}
                       >
-                        {t.outcome}
+                        {String(t.outcome).toUpperCase()}
                       </span>
                     )}
                   </div>

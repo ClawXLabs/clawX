@@ -227,8 +227,9 @@ export function buildAgentBreakdown(enrollment, agentsConfig, opts = {}) {
     bucket.trades.push(entry);
     
     // Tally wins/losses from trade outcomes (critical for historical agents)
-    if (entry.outcome === 'WIN') bucket.wins += 1;
-    if (entry.outcome === 'LOSS') bucket.losses += 1;
+    const outcome = String(entry.outcome || '').toUpperCase();
+    if (outcome === 'WIN') bucket.wins += 1;
+    if (outcome === 'LOSS') bucket.losses += 1;
   }
 
   // Override wins/losses from symbolStats (current agent only) if it has more
