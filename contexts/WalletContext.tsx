@@ -142,7 +142,7 @@ export function WalletProvider({ children }: WalletProviderProps) {
   }, [applySession]);
 
   // Connect
-  const connectWallet = useCallback(async (forcedAccount?: string): Promise<string | null> => {
+  const connectWallet = useCallback(async (forcedAccount?: string | unknown): Promise<string | null> => {
     const eth = getMetaMaskEthereum();
     if (!eth) {
       const w = window as { ethereum?: EthProvider };
@@ -156,7 +156,8 @@ export function WalletProvider({ children }: WalletProviderProps) {
 
     try {
       const accounts = await eth.request({ method: 'eth_requestAccounts' }) as string[];
-      const chosen = (forcedAccount && accounts.find(a => a.toLowerCase() === forcedAccount.toLowerCase())) || accounts[0];
+      const forcedStr = typeof forcedAccount === 'string' ? forcedAccount : undefined;
+      const chosen = (forcedStr && accounts.find(a => a.toLowerCase() === forcedStr.toLowerCase())) || accounts[0];
       const nextProvider = new ethers.BrowserProvider(eth as unknown as ethers.Eip1193Provider);
       const signer = await nextProvider.getSigner(chosen);
       const address = await signer.getAddress();
