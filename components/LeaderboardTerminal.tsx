@@ -643,7 +643,7 @@ export default function LeaderboardTerminal() {
       )}
 
       {/* ── Main column (table) + right sidebar (board figures) ── */}
-      <div style={{ display: 'flex', gap: 24, alignItems: 'flex-start', flexWrap: 'wrap' }}>
+      <div style={{ display: 'flex', gap: 24, alignItems: 'flex-start', flexWrap: 'wrap-reverse' }}>
 
         {/* Main column — rankings get the width */}
         <div className="np-fade-up-1" style={{ flex: '1 1 100%', minWidth: 0, maxWidth: '100%' }}>
@@ -692,10 +692,10 @@ export default function LeaderboardTerminal() {
         </div>
 
         {/* Right sidebar — minimal board figures + references */}
-        <aside className="np-fade-up-2" style={{ flex: '1 1 240px', maxWidth: 320, width: '100%', minWidth: 0 }}>
+        <aside className="np-fade-up-2" style={{ flex: '1 1 240px', width: '100%', minWidth: 0, display: 'flex', gap: 14, flexWrap: 'wrap' }}>
 
           {/* Board figures */}
-          <div style={{ border: '1px solid #0D0B08', padding: '16px 18px', marginBottom: 14 }}>
+          <div style={{ flex: '1 1 300px', border: '1px solid #0D0B08', padding: '16px 18px' }}>
             <p style={{ ...S.label, borderBottom: '1px solid #0D0B08', paddingBottom: 8, marginBottom: 4 }}>
               Board Figures
             </p>
@@ -720,7 +720,7 @@ export default function LeaderboardTerminal() {
           </div>
 
           {/* Contracts */}
-          <div style={{ border: '1px solid rgba(13,11,8,0.2)', padding: '14px 16px', marginBottom: 14 }}>
+          <div style={{ flex: '1 1 300px', border: '1px solid rgba(13,11,8,0.2)', padding: '14px 16px' }}>
             <p style={{ ...S.label, marginBottom: 8 }}>Fuji References</p>
             <p style={{ ...S.mono, fontSize: 10, color: '#5A554E', margin: '0 0 6px' }}>
               Market{' '}
