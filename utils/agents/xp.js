@@ -225,15 +225,26 @@ export function buildAgentBreakdown(enrollment, agentsConfig, opts = {}) {
     const c = cfg(id);
     const bucket = ensure(id, entry.agentName || c.name || id, c.emoji, c.color);
     bucket.trades.push(entry);
+    
+    // Tally wins/losses from trade outcomes (critical for historical agents)
+    if (entry.outcome === 'WIN') bucket.wins += 1;
+    if (entry.outcome === 'LOSS') bucket.losses += 1;
   }
 
-  // Pull wins/losses from symbolStats (current agent only — historical agents lose this detail)
+  // Override wins/losses from symbolStats (current agent only) if it has more
+  // data, since tradeLog might be truncated past 2000 entries.
   const currentBucket = byAgent.get(fallbackId);
   if (currentBucket) {
     const stats = enrollment.agentMemory?.symbolStats || {};
+    let memoryWins = 0;
+    let memoryLosses = 0;
     for (const row of Object.values(stats)) {
-      currentBucket.wins   += Number(row.wins)   || 0;
-      currentBucket.losses += Number(row.losses) || 0;
+      memoryWins   += Number(row.wins)   || 0;
+      memoryLosses += Number(row.losses) || 0;
+    }
+    if (memoryWins + memoryLosses > currentBucket.wins + currentBucket.losses) {
+      currentBucket.wins = memoryWins;
+      currentBucket.losses = memoryLosses;
     }
   }
 
