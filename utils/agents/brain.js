@@ -56,12 +56,20 @@ function canTradeSymbol(memory, symbol, now) {
   return now - last >= WATCH_GAP_SEC;
 }
 
+function isFreshMarket(round) {
+  const up = Number(round.upPool || 0);
+  const down = Number(round.downPool || 0);
+  return up + down < 0.01;
+}
+
 function scoreAsset(asset) {
   const drift = Math.abs(driftPct(asset.round));
   const skew = poolSkew(asset.round);
   const imbalance = Math.abs(skew.upPct - 0.5);
   const timeLeft = Number(asset.round.endTime || 0) - Math.floor(Date.now() / 1000);
   if (timeLeft < 35) return -1;
+  // Fresh markets (empty pools) are great entry opportunities — give them a base score
+  if (isFreshMarket(asset.round)) return 10 + drift * 2;
   return drift * 2 + imbalance * 15;
 }
 
@@ -100,21 +108,35 @@ export function decideWithRules(enrollment, assets, openPositions) {
       pick = candidates[0];
       const stats = ensureSymbolStats(memory, pick.symbol);
       const drift = driftPct(pick.round);
+      const fresh = isFreshMarket(pick.round);
       const minDrift = stats.lastResult === 'loss' ? 0.35 : 0.12;
-      if (Math.abs(drift) < minDrift) {
+      if (!fresh && Math.abs(drift) < minDrift) {
         thought = `${agent.name}: ${pick.symbol} too flat after last miss — waiting for momentum.`;
+        pick = null;
         break;
       }
-      isUp = drift >= 0;
-      thought = `${agent.name}: ${pick.symbol} momentum ${drift.toFixed(2)}% — striking ${isUp ? 'UP' : 'DOWN'} with ${enrollment.tradeSizeTusdc} TUSDC.`;
+      if (fresh) {
+        // Fresh market — strike first, bias based on any available drift or alternate sides
+        isUp = drift !== 0 ? drift > 0 : (memory.rotateIndex || 0) % 2 === 0;
+        memory.rotateIndex = (memory.rotateIndex || 0) + 1;
+        thought = `${agent.name}: Fresh round on ${pick.symbol} — striking first with ${enrollment.tradeSizeTusdc} TUSDC ${isUp ? 'UP' : 'DOWN'}.`;
+      } else {
+        isUp = drift >= 0;
+        thought = `${agent.name}: ${pick.symbol} momentum ${drift.toFixed(2)}% — striking ${isUp ? 'UP' : 'DOWN'} with ${enrollment.tradeSizeTusdc} TUSDC.`;
+      }
       break;
     }
     case 'peak-mind': {
       const ranked = candidates
-        .map((a) => ({
-          ...a,
-          conf: Math.abs(driftPct(a.round)) * (1 - Math.abs(poolSkew(a.round).upPct - 0.5)),
-        }))
+        .map((a) => {
+          const fresh = isFreshMarket(a.round);
+          const absDrift = Math.abs(driftPct(a.round));
+          // Fresh markets get a base confidence so they aren't always filtered out
+          const conf = fresh
+            ? 0.15 + absDrift * 0.5
+            : absDrift * (1 - Math.abs(poolSkew(a.round).upPct - 0.5));
+          return { ...a, conf, fresh };
+        })
         .sort((a, b) => b.conf - a.conf);
       const floor = Object.values(memory.symbolStats || {}).some((s) => s.lastResult === 'loss') ? 0.12 : 0.06;
       const pool = ranked.filter((a) => a.conf >= floor);
@@ -127,32 +149,50 @@ export function decideWithRules(enrollment, assets, openPositions) {
       memory.rotateIndex = idx + 1;
       const drift = driftPct(pick.round);
       const skew = poolSkew(pick.round);
-      if (Math.abs(drift) >= 0.06) {
+      if (pick.fresh) {
+        // Fresh market — alternate sides since there's no crowd signal
+        isUp = idx % 2 === 0;
+        thought = `${agent.name}: Fresh round ${idx + 1}/${pool.length} — seeding ${pick.symbol} ${isUp ? 'UP' : 'DOWN'} (${enrollment.tradeSizeTusdc} TUSDC). First mover advantage.`;
+      } else if (Math.abs(drift) >= 0.06) {
         isUp = drift > 0;
+        thought = `${agent.name}: Clip ${idx + 1}/${pool.length} — ${pick.symbol} ${isUp ? 'UP' : 'DOWN'} (${enrollment.tradeSizeTusdc} TUSDC) while I keep scanning every market.`;
       } else if (skew.upPct >= 0.55) {
         isUp = false;
+        thought = `${agent.name}: Clip ${idx + 1}/${pool.length} — ${pick.symbol} DOWN (${enrollment.tradeSizeTusdc} TUSDC) — crowd is too heavy UP.`;
       } else if (skew.upPct <= 0.45) {
         isUp = true;
+        thought = `${agent.name}: Clip ${idx + 1}/${pool.length} — ${pick.symbol} UP (${enrollment.tradeSizeTusdc} TUSDC) — crowd is leaning DOWN.`;
       } else {
         isUp = (memory.rotateIndex + idx) % 2 === 0;
+        thought = `${agent.name}: Clip ${idx + 1}/${pool.length} — ${pick.symbol} ${isUp ? 'UP' : 'DOWN'} (${enrollment.tradeSizeTusdc} TUSDC) while I keep scanning every market.`;
       }
-      thought = `${agent.name}: Clip ${idx + 1}/${pool.length} — ${pick.symbol} ${isUp ? 'UP' : 'DOWN'} (${enrollment.tradeSizeTusdc} TUSDC) while I keep scanning every market.`;
       break;
     }
     case 'frost-logic': {
       const crowded = [...candidates].sort((a, b) => {
+        // Prefer markets with actual crowd data; fresh markets sort last
+        const fa = isFreshMarket(a.round) ? 0 : 1;
+        const fb = isFreshMarket(b.round) ? 0 : 1;
+        if (fa !== fb) return fb - fa;
         const ia = Math.abs(poolSkew(a.round).upPct - 0.5);
         const ib = Math.abs(poolSkew(b.round).upPct - 0.5);
         return ib - ia;
       })[0];
       pick = crowded;
+      const fresh = isFreshMarket(pick.round);
       const skew = poolSkew(pick.round);
-      isUp = skew.upPct < 0.5;
       const stats = ensureSymbolStats(memory, pick.symbol);
-      if (stats.lastResult === 'loss') {
-        isUp = !isUp;
+      if (fresh) {
+        // Fresh market — no crowd to fade yet; use drift or alternate
+        const drift = driftPct(pick.round);
+        isUp = drift !== 0 ? drift < 0 : (memory.rotateIndex || 0) % 2 === 0;
+        memory.rotateIndex = (memory.rotateIndex || 0) + 1;
+        thought = `${agent.name}: Empty pool on ${pick.symbol} — contrarian entry ${isUp ? 'UP' : 'DOWN'} with ${enrollment.tradeSizeTusdc} TUSDC before the crowd arrives.`;
+      } else if (stats.lastResult === 'loss') {
+        isUp = !(skew.upPct < 0.5);
         thought = `${agent.name}: Last fade on ${pick.symbol} failed — flipping to ${isUp ? 'UP' : 'DOWN'}.`;
       } else {
+        isUp = skew.upPct < 0.5;
         thought = `${agent.name}: Crowd heavy ${skew.upPct > 0.5 ? 'UP' : 'DOWN'} on ${pick.symbol} — fading.`;
       }
       break;
@@ -163,10 +203,15 @@ export function decideWithRules(enrollment, assets, openPositions) {
       pick = ordered[idx];
       memory.rotateIndex = idx + 1;
       const drift = driftPct(pick.round);
+      const fresh = isFreshMarket(pick.round);
       const stats = ensureSymbolStats(memory, pick.symbol);
       if (stats.lastResult === 'loss') {
         isUp = drift <= 0;
         thought = `${agent.name}: Lost last round on ${pick.symbol} — flipping bias, ${enrollment.tradeSizeTusdc} TUSDC ${isUp ? 'UP' : 'DOWN'}.`;
+      } else if (fresh) {
+        // Fresh market — always enter; alternate sides across rotation
+        isUp = idx % 2 === 0;
+        thought = `${agent.name}: Fresh round on ${pick.symbol} — seeding lane ${idx + 1}/${ordered.length} with ${enrollment.tradeSizeTusdc} TUSDC ${isUp ? 'UP' : 'DOWN'}.`;
       } else {
         isUp = drift >= 0;
         thought = `${agent.name}: Rotating clip ${idx + 1}/${ordered.length} on ${pick.symbol} — ${enrollment.tradeSizeTusdc} TUSDC ${isUp ? 'UP' : 'DOWN'}.`;

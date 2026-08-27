@@ -132,7 +132,7 @@ export function WalletProvider({ children }: WalletProviderProps) {
   }, [applySession]);
 
   // Connect
-  const connectWallet = useCallback(async (): Promise<string | null> => {
+  const connectWallet = useCallback(async (forcedAccount?: string): Promise<string | null> => {
     const eth = getMetaMaskEthereum();
     if (!eth) {
       const w = window as { ethereum?: EthProvider };
@@ -145,9 +145,10 @@ export function WalletProvider({ children }: WalletProviderProps) {
     }
 
     try {
-      await eth.request({ method: 'eth_requestAccounts' });
+      const accounts = await eth.request({ method: 'eth_requestAccounts' }) as string[];
+      const chosen = (forcedAccount && accounts.find(a => a.toLowerCase() === forcedAccount.toLowerCase())) || accounts[0];
       const nextProvider = new ethers.BrowserProvider(eth as unknown as ethers.Eip1193Provider);
-      const signer = await nextProvider.getSigner();
+      const signer = await nextProvider.getSigner(chosen);
       const address = await signer.getAddress();
       const applied = await applySession(address, eth);
       if (!applied) {
@@ -180,7 +181,7 @@ export function WalletProvider({ children }: WalletProviderProps) {
     const onAccounts = (accounts: unknown) => {
       const list = accounts as string[];
       if (list && list.length > 0) {
-        void connectWallet();
+        void connectWallet(list[0]);
       } else {
         clearSession();
         clearPersistedWallet();
