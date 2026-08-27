@@ -9,11 +9,9 @@ function createPool() {
   }
 
   const ssl =
-    process.env.DATABASE_SSL === 'false'
+    process.env.DATABASE_SSL === 'false' || connectionString.includes('localhost') || connectionString.includes('127.0.0.1')
       ? false
-      : process.env.NODE_ENV === 'production'
-        ? { rejectUnauthorized: process.env.DATABASE_SSL_REJECT_UNAUTHORIZED !== 'false' }
-        : false;
+      : { rejectUnauthorized: process.env.DATABASE_SSL_REJECT_UNAUTHORIZED !== 'false' };
 
   const pool = new Pool({
     connectionString,
