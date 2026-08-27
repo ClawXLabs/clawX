@@ -105,6 +105,12 @@ export function decideWithRules(enrollment, assets, openPositions) {
     return { memory, decision: null };
   }
 
+  function getHistoryBias(stats, fallbackIsUp) {
+    if (!stats.lastSide || !stats.lastResult) return fallbackIsUp;
+    const wasUp = stats.lastSide === 'UP';
+    return stats.lastResult === 'win' ? wasUp : !wasUp;
+  }
+
   let pick = null;
   let isUp = true;
   let thought = '';
@@ -122,10 +128,11 @@ export function decideWithRules(enrollment, assets, openPositions) {
         break;
       }
       if (fresh) {
-        // Fresh market — strike first, bias based on any available drift or alternate sides
-        isUp = drift !== 0 ? drift > 0 : (memory.rotateIndex || 0) % 2 === 0;
+        // Use historical win/loss to determine direction, fallback to drift or alternate
+        const fallback = drift !== 0 ? drift > 0 : (memory.rotateIndex || 0) % 2 === 0;
+        isUp = getHistoryBias(stats, fallback);
         memory.rotateIndex = (memory.rotateIndex || 0) + 1;
-        thought = `${agent.name}: Fresh round on ${pick.symbol} — striking first with ${enrollment.tradeSizeTusdc} TUSDC ${isUp ? 'UP' : 'DOWN'}.`;
+        thought = `${agent.name}: Fresh round on ${pick.symbol} — historical data marks ${isUp ? 'UP' : 'DOWN'}, striking first with ${enrollment.tradeSizeTusdc} TUSDC.`;
       } else {
         isUp = drift >= 0;
         thought = `${agent.name}: ${pick.symbol} momentum ${drift.toFixed(2)}% — striking ${isUp ? 'UP' : 'DOWN'} with ${enrollment.tradeSizeTusdc} TUSDC.`;
@@ -155,10 +162,11 @@ export function decideWithRules(enrollment, assets, openPositions) {
       memory.rotateIndex = idx + 1;
       const drift = driftPct(pick.round);
       const skew = poolSkew(pick.round);
+      const stats = ensureSymbolStats(memory, pick.symbol);
       if (pick.fresh) {
-        // Fresh market — alternate sides since there's no crowd signal
-        isUp = idx % 2 === 0;
-        thought = `${agent.name}: Fresh round ${idx + 1}/${pool.length} — seeding ${pick.symbol} ${isUp ? 'UP' : 'DOWN'} (${enrollment.tradeSizeTusdc} TUSDC). First mover advantage.`;
+        // Use historical win/loss, fallback to alternating index
+        isUp = getHistoryBias(stats, idx % 2 === 0);
+        thought = `${agent.name}: Fresh round ${idx + 1}/${pool.length} — using past results on ${pick.symbol} to test ${isUp ? 'UP' : 'DOWN'} (${enrollment.tradeSizeTusdc} TUSDC).`;
       } else if (Math.abs(drift) >= 0.06) {
         isUp = drift > 0;
         thought = `${agent.name}: Clip ${idx + 1}/${pool.length} — ${pick.symbol} ${isUp ? 'UP' : 'DOWN'} (${enrollment.tradeSizeTusdc} TUSDC) while I keep scanning every market.`;
@@ -189,11 +197,11 @@ export function decideWithRules(enrollment, assets, openPositions) {
       const skew = poolSkew(pick.round);
       const stats = ensureSymbolStats(memory, pick.symbol);
       if (fresh) {
-        // Fresh market — no crowd to fade yet; use drift or alternate
         const drift = driftPct(pick.round);
-        isUp = drift !== 0 ? drift < 0 : (memory.rotateIndex || 0) % 2 === 0;
+        const fallback = drift !== 0 ? drift < 0 : (memory.rotateIndex || 0) % 2 === 0;
+        isUp = getHistoryBias(stats, fallback);
         memory.rotateIndex = (memory.rotateIndex || 0) + 1;
-        thought = `${agent.name}: Empty pool on ${pick.symbol} — contrarian entry ${isUp ? 'UP' : 'DOWN'} with ${enrollment.tradeSizeTusdc} TUSDC before the crowd arrives.`;
+        thought = `${agent.name}: Empty pool on ${pick.symbol} — historical data says ${isUp ? 'UP' : 'DOWN'}, entering with ${enrollment.tradeSizeTusdc} TUSDC.`;
       } else if (stats.lastResult === 'loss') {
         isUp = !(skew.upPct < 0.5);
         thought = `${agent.name}: Last fade on ${pick.symbol} failed — flipping to ${isUp ? 'UP' : 'DOWN'}.`;
@@ -212,12 +220,11 @@ export function decideWithRules(enrollment, assets, openPositions) {
       const fresh = isLowActivity(pick.round);
       const stats = ensureSymbolStats(memory, pick.symbol);
       if (stats.lastResult === 'loss') {
-        isUp = drift <= 0;
-        thought = `${agent.name}: Lost last round on ${pick.symbol} — flipping bias, ${enrollment.tradeSizeTusdc} TUSDC ${isUp ? 'UP' : 'DOWN'}.`;
+        isUp = getHistoryBias(stats, drift <= 0);
+        thought = `${agent.name}: Lost last round on ${pick.symbol} — testing new position, ${enrollment.tradeSizeTusdc} TUSDC ${isUp ? 'UP' : 'DOWN'}.`;
       } else if (fresh) {
-        // Fresh market — always enter; alternate sides across rotation
-        isUp = idx % 2 === 0;
-        thought = `${agent.name}: Fresh round on ${pick.symbol} — seeding lane ${idx + 1}/${ordered.length} with ${enrollment.tradeSizeTusdc} TUSDC ${isUp ? 'UP' : 'DOWN'}.`;
+        isUp = getHistoryBias(stats, idx % 2 === 0);
+        thought = `${agent.name}: Fresh round on ${pick.symbol} — historical data marks ${isUp ? 'UP' : 'DOWN'} (${enrollment.tradeSizeTusdc} TUSDC).`;
       } else {
         isUp = drift >= 0;
         thought = `${agent.name}: Rotating clip ${idx + 1}/${ordered.length} on ${pick.symbol} — ${enrollment.tradeSizeTusdc} TUSDC ${isUp ? 'UP' : 'DOWN'}.`;
