@@ -256,6 +256,7 @@ build_and_push_admin() {
 
 db_init() {
   need_aws
+  export AWS_BIN
   node deploy/aws/ecs/run-db-init.js --region "$REGION" --stack "$STACK" --project "$PROJECT"
 }
 
