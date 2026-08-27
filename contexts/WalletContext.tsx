@@ -113,13 +113,23 @@ export function WalletProvider({ children }: WalletProviderProps) {
     const restore = async () => {
       try {
         const preferred = getPersistedWallet();
+        if (!preferred) {
+          setIsRestoring(false);
+          return;
+        }
+
         const accounts = await eth.request({ method: 'eth_accounts' }) as string[];
         if (cancelled) return;
-        const chosen = pickPreferredAccount(accounts || [], preferred);
-        if (!chosen) return;
+
+        const activeAccount = accounts && accounts.length > 0 ? accounts[0] : null;
+        if (!activeAccount) {
+          clearPersistedWallet();
+          return;
+        }
+
         await applySession(await (async () => {
           const nextProvider = new ethers.BrowserProvider(eth as unknown as ethers.Eip1193Provider);
-          const signer = await nextProvider.getSigner(chosen);
+          const signer = await nextProvider.getSigner(activeAccount);
           return signer.getAddress();
         })(), eth);
       } catch { /* ignore */ } finally {
@@ -181,16 +191,33 @@ export function WalletProvider({ children }: WalletProviderProps) {
     const onAccounts = (accounts: unknown) => {
       const list = accounts as string[];
       if (list && list.length > 0) {
-        void connectWallet(list[0]);
+        const activeAccount = list[0];
+        (async () => {
+          try {
+            const nextProvider = new ethers.BrowserProvider(eth as unknown as ethers.Eip1193Provider);
+            const signer = await nextProvider.getSigner(activeAccount);
+            const address = await signer.getAddress();
+            await applySession(address, eth);
+          } catch {
+            // ignore
+          }
+        })();
       } else {
         clearSession();
         clearPersistedWallet();
         setAccessDenied(false);
       }
     };
+    const onChainChanged = () => {
+      window.location.reload();
+    };
     eth.on?.('accountsChanged', onAccounts);
-    return () => eth.removeListener?.('accountsChanged', onAccounts);
-  }, [connectWallet, clearSession]);
+    eth.on?.('chainChanged', onChainChanged);
+    return () => {
+      eth.removeListener?.('accountsChanged', onAccounts);
+      eth.removeListener?.('chainChanged', onChainChanged);
+    };
+  }, [applySession, clearSession]);
 
   const value = useMemo<WalletContextValue>(
     () => ({
